@@ -1,0 +1,39 @@
+# Minimal example: a 2p (n=2, l=1, m=1) cloud around the primary of a
+# q = 0.1 binary on a fixed, co-rotating circular orbit. Runs in a few
+# minutes on a laptop. All quantities are in units of the primary mass M1.
+
+[grid]
+N = 1000            # radial nodes
+L = 1000.0          # outer radius
+
+[binary]
+q = 0.1             # mass ratio M2/M1
+R = 30.0            # separation
+counter = false     # true: counter-rotating orbit
+
+[atom]
+mu = 0.2            # boson mass (alpha = mu * M1)
+n = 2
+l = 1
+m = 1
+M_c = 0.01          # cloud mass
+
+[simulation]
+dt = 2.0                 # timestep during the startup ramp
+num_periods = 10         # run length in initial orbital periods
+save_every = 50          # snapshot interval in steps
+l_max = 4                # largest retained multipole
+r_ex = 800.0             # flux extraction radius
+ramp_periods = 2.0       # startup ramp of the orbital frequency and companion
+epsilon = 0.0
+evolve_orbit = false     # keep the orbit fixed
+absorption = true        # s-wave absorbers on the black holes
+epsilon_smear = 2.0      # absorber radius in units of each mass
+
+[parallel]
+threads = 0              # 0: use OMP_NUM_THREADS
+
+[mask]                   # damping layer in the outer 15% of the domain
+L_factor = 0.85
+W = 1
+n = 6

@@ -1,0 +1,38 @@
+# Only the solver, the initial-state scripts, the dashboard, the example and
+# the docs are part of the public release. Everything below stays local.
+
+# Build trees and generated documentation
+build*/
+docs/html/
+docs/latex/
+
+# Simulation runs and their outputs
+runs/
+Simulation_*/
+IsolatedBH_*/
+*.bin
+
+# Analysis, plots, notebooks, cluster scripts and audits
+visualization/
+diagnostics/
+slurm/
+cmake/
+ABSORPTION_AUDIT.md
+BENCHMARKS.md
+tests/test_flux_scan.py
+*.ipynb
+*.pdf
+*.png
+*.log
+
+# Python
+__pycache__/
+*.pyc
+env/
+.venv/
+venv/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

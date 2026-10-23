@@ -1,0 +1,1713 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulation Monitor</title>
+<script>
+// d3 and the chart module: the copies in assets/, d3 from the CDN as a fallback.
+window.chartsReady = new Promise((resolve, reject) => {
+  const load = (src, onload, onerror) => {
+    const el = document.createElement('script');
+    el.src = src; el.onload = onload; el.onerror = onerror;
+    document.head.appendChild(el);
+  };
+  const charts = () => load('/assets/charts.js',
+    () => (window.D3Charts ? resolve() : reject(new Error('assets/charts.js did not define D3Charts'))),
+    () => reject(new Error('assets/charts.js could not be loaded')));
+  const fail = () => reject(new Error('d3 could not be loaded: put d3.min.js in dashboard/assets'));
+  const loadD3 = (src, next) => load(src, () => (window.d3 ? charts() : next()), next);
+  loadD3('/assets/d3.min.js', () => loadD3('https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js', fail));
+});
+</script>
+<style>
+@font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('/assets/inter-latin-wght-normal.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-display: swap; font-weight: 100 800; src: url('/assets/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); }
+
+:root {
+  color-scheme: light;
+  --font: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --bg: #e8e8e7;
+  --surface-1: #f6f6f5;
+  --surface-2: #eeeeed;
+  --surface-3: #e1e1e0;
+  --raised: #fdfdfd;
+  --border: #dcdcdb;
+  --border-strong: #c8c8c6;
+  --grid: #e7e7e6;
+  --text-primary: #222222;
+  --text-secondary: #575757;
+  --text-muted: #929292;
+  --accent: #dd6128;
+  --accent-soft: rgba(221, 97, 40, .12);
+  --good: #5f8a4e;
+  --warn: #c98a1a;
+  --s1: #3f6f9e; --s2: #dd6128; --s3: #6b8f4a; --s4: #dd9f2c;
+  --s5: #c2475a; --s6: #8a6648; --s7: #7a68a8; --s8: #3f8f88;
+  --ref: #8b5e8a;
+  --tip-bg: #2a2a2a; --tip-text: #f5f5f5; --tip-muted: #b3b3b3;
+  --h0: #f7f7f6; --h1: #f2cf9f; --h2: #e98c45; --h3: #bd4e22; --h4: #5a2412;
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, .04);
+  --shadow-md: 0 2px 10px rgba(0, 0, 0, .08);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, .22);
+  --radius: 0px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #141414; --surface-1: #1e1e1e; --surface-2: #262626; --surface-3: #323232; --raised: #383838;
+    --border: #333333; --border-strong: #474747; --grid: #2a2a2a;
+    --text-primary: #ededed; --text-secondary: #bdbdbd; --text-muted: #888888;
+    --accent: #f07a3c; --accent-soft: rgba(240, 122, 60, .16);
+    --good: #8fb27a; --warn: #e0a640;
+    --s1: #6f9bc8; --s2: #f07a3c; --s3: #8fb06a; --s4: #e8b24a;
+    --s5: #e0697a; --s6: #b48a66; --s7: #a497d4; --s8: #5fb3ab;
+    --ref: #c491c0;
+    --tip-bg: #efefef; --tip-text: #222222; --tip-muted: #666666;
+    --h0: #1b1b1b; --h1: #5a2a16; --h2: #b4491f; --h3: #ee8a45; --h4: #fbe2bd;
+    --shadow-sm: 0 1px 0 rgba(0, 0, 0, .2);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141414; --surface-1: #1e1e1e; --surface-2: #262626; --surface-3: #323232; --raised: #383838;
+  --border: #333333; --border-strong: #474747; --grid: #2a2a2a;
+  --text-primary: #ededed; --text-secondary: #bdbdbd; --text-muted: #888888;
+  --accent: #f07a3c; --accent-soft: rgba(240, 122, 60, .16);
+  --good: #8fb27a; --warn: #e0a640;
+  --s1: #6f9bc8; --s2: #f07a3c; --s3: #8fb06a; --s4: #e8b24a;
+  --s5: #e0697a; --s6: #b48a66; --s7: #a497d4; --s8: #5fb3ab;
+  --ref: #c491c0;
+  --tip-bg: #efefef; --tip-text: #222222; --tip-muted: #666666;
+  --h0: #1b1b1b; --h1: #5a2a16; --h2: #b4491f; --h3: #ee8a45; --h4: #fbe2bd;
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, .2);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text-primary);
+  font: 14px/1.45 var(--font); font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .3s var(--ease), color .3s var(--ease);
+}
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- Shell ---------- */
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+aside {
+  position: sticky; top: 0; height: 100vh; padding: 18px 14px; border-right: 1px solid var(--border);
+  background: var(--surface-2); display: flex; flex-direction: column; gap: 22px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
+.logo { width: 32px; height: 32px; border-radius: 4px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(140deg, #ee8a3c, var(--accent) 55%, #b9461c); box-shadow: none; }
+.logo svg.i { width: 19px; height: 19px; }
+.brand b { font-size: 15px; font-weight: 650; letter-spacing: -.01em; display: block; }
+.brand span { font-size: 12px; color: var(--text-muted); }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav .label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 10px 6px; }
+nav a {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 4px; color: var(--text-secondary); border: 1px solid transparent;
+  text-decoration: none; font-weight: 500; position: relative; transition: background .18s var(--ease), color .18s var(--ease);
+}
+nav a svg.i { color: var(--text-muted); transition: color .18s; }
+nav a:hover { background: var(--surface-3); color: var(--text-primary); }
+nav a.active { background: var(--raised); color: var(--text-primary); font-weight: 600; border-color: var(--border); box-shadow: var(--shadow-sm); }
+nav a.active svg.i { color: var(--accent); }
+nav a.active::before { content: ''; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.runinfo { margin-top: auto; padding: 12px; border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); display: grid; gap: 6px; }
+.runinfo div { display: flex; justify-content: space-between; gap: 8px; }
+.runinfo span:last-child { color: var(--text-primary); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+  padding: 10px 24px; background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+.progress { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--accent); width: 0; opacity: .8; }
+.field { position: relative; display: inline-flex; align-items: center; }
+.field svg.i { position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; }
+select, input[type=number] {
+  appearance: none; -webkit-appearance: none; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-primary);
+  background-color: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 7px 30px 7px 32px; height: 32px;
+  transition: border-color .18s, box-shadow .18s, background-color .18s; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23929292' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+input[type=number] { background-image: none; padding-right: 10px; cursor: text; font-family: var(--mono); }
+select:hover, input[type=number]:hover { border-color: var(--border-strong); background-color: var(--surface-2); }
+select option, select optgroup { background: var(--surface-1); color: var(--text-primary); }
+select:focus-visible, input:focus-visible, button:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Run picker: a styled listbox mirroring the hidden #run select. */
+.runpick { position: relative; display: inline-flex; }
+.rp-btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; max-width: 380px; padding: 0 10px;
+  font: inherit; font-size: 13.5px; color: var(--text-primary); cursor: pointer; text-align: left;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 4px;
+  transition: border-color .18s, box-shadow .18s, background-color .18s;
+}
+.rp-btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.rp-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rp-btn > .i { flex: none; color: var(--accent); }
+.rp-btn .rp-chev { color: var(--text-muted); width: 13px; height: 13px; transition: transform .18s; }
+.rp-btn[aria-expanded="true"] .rp-chev { transform: rotate(180deg); }
+.rp-txt { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.rp-group { color: var(--text-muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; max-width: 45%; }
+.rp-group:empty { display: none; }
+.rp-group::after { content: "/"; margin-left: 6px; color: var(--border-strong); }
+.rp-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+.rp-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: max(100%, 470px); max-width: calc(100vw - 32px);
+  background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.06); overflow: hidden;
+  animation: rpIn .14s ease-out;
+}
+@keyframes rpIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.rp-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 38px; border-bottom: 1px solid var(--border); }
+.rp-search .i { color: var(--text-muted); flex: none; width: 14px; height: 14px; }
+.rp-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; color: var(--text-primary); padding: 0; height: 100%; box-shadow: none; }
+.rp-search input::placeholder { color: var(--text-muted); }
+.rp-count { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.rp-list { max-height: min(60vh, 420px); overflow-y: auto; padding-bottom: 4px; }
+.rp-gh {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px 6px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted);
+  background: var(--raised); border-bottom: 1px solid var(--border);
+}
+.rp-gh .i { width: 12px; height: 12px; }
+.rp-gh .n { margin-left: auto; font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+.rp-opt {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1px 10px;
+  padding: 9px 12px 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
+}
+.rp-opt:last-child { border-bottom: 0; }
+.rp-opt .nm { grid-column: 2; font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-opt .end { grid-column: 3; grid-row: 1 / span 2; display: inline-flex; align-items: center; gap: 8px; }
+.rp-opt .tag { font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; color: var(--accent); background: var(--accent-soft); }
+.rp-opt .ck { width: 14px; height: 14px; color: var(--accent); visibility: hidden; }
+.rp-opt.active { background: var(--surface-2); }
+.rp-opt[aria-selected="true"]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.rp-opt[aria-selected="true"] .nm { color: var(--accent); font-weight: 600; }
+.rp-opt[aria-selected="true"] .ck { visibility: visible; }
+.rp-pop[hidden], .rp-search[hidden] { display: none; }
+.rp-search input:focus-visible { box-shadow: none; border: 0; }
+.rp-list:focus { outline: none; }
+.rp-opt .params { grid-column: 2; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 3px; }
+.rp-opt .kv { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.rp-opt .kv .k { font-size: 13px; font-style: italic; color: var(--text-muted); font-family: Georgia, "Times New Roman", serif; }
+.rp-opt .kv .k sub { font-size: 75%; font-style: normal; }
+.rp-opt .kv .v { font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--text-primary); }
+.rp-opt .kv .u { margin-left: 2px; color: var(--text-muted); font-size: 11px; }
+.rp-opt .flags { display: inline-flex; gap: 4px; }
+.rp-opt .fl { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; color: var(--text-secondary); background: var(--surface-3); }
+.rp-opt .fl.ctr { color: var(--s1); background: color-mix(in srgb, var(--s1) 14%, transparent); }
+.rp-opt > .cb { grid-column: 1; grid-row: 1 / span 2; }
+.cb {
+  flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 3px; cursor: pointer;
+  border: 1.5px solid var(--border-strong); background: var(--surface-1); color: #fff; transition: background-color .12s, border-color .12s;
+}
+.cb:hover { border-color: var(--accent); }
+.cb svg { width: 11px; height: 11px; stroke-width: 3.2; opacity: 0; }
+.cb[aria-checked="true"], .cb[aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); }
+.cb[aria-checked="true"] svg { opacity: 1; }
+.cb[aria-checked="mixed"]::after { content: ""; width: 8px; height: 2px; background: #fff; border-radius: 1px; grid-area: 1 / 1; }
+.rp-gh .cb { width: 14px; height: 14px; }
+.rp-gh .cb svg { width: 10px; height: 10px; }
+.rp-opt.checked { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.rp-opt.checked.active { background: color-mix(in srgb, var(--accent) 9%, var(--surface-2)); }
+.rp-foot { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.rp-hint { flex: 1; min-width: 0; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-hint b { color: var(--text-primary); font-weight: 600; }
+.rp-clear { font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: none; border: 0; padding: 4px 6px; cursor: pointer; border-radius: 3px; }
+.rp-clear:hover { color: var(--text-primary); background: var(--surface-3); }
+.rp-clear[hidden] { display: none; }
+.rp-dl {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: #fff; background: var(--accent); border: 0; border-radius: 4px; cursor: pointer; transition: filter .15s, opacity .15s;
+}
+.rp-dl .i { width: 14px; height: 14px; }
+.rp-dl:hover:not(:disabled) { filter: brightness(1.08); }
+.rp-dl:disabled { opacity: .4; cursor: default; }
+.rp-dl.busy { cursor: progress; }
+.rp-dl.busy .i { animation: dlbob .9s ease-in-out infinite; }
+.rp-empty { padding: 18px 12px; font-size: 12.5px; color: var(--text-muted); text-align: center; }
+
+.seg { display: inline-flex; position: relative; padding: 3px; gap: 2px; background: var(--surface-3); border: 0; border-radius: 4px; height: 32px; }
+.seg button { position: relative; z-index: 1; border: 0; background: transparent; color: var(--text-secondary); font: 500 12.5px var(--font); padding: 0 11px; border-radius: 3px; cursor: pointer; transition: color .2s var(--ease); white-space: nowrap; }
+.seg button.on { color: var(--text-primary); font-weight: 600; }
+.seg .pill { position: absolute; z-index: 0; top: 3px; bottom: 3px; border-radius: 3px; background: var(--raised); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); transition: left .28s var(--ease), width .28s var(--ease); }
+
+.iconbtn {
+  width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 4px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+  transition: transform .12s var(--ease), color .18s, border-color .18s, background .18s;
+}
+.iconbtn:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-2); }
+.iconbtn:active { transform: scale(.92); }
+.iconbtn.spin svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#download { position: relative; }
+#download.busy { color: var(--accent); border-color: var(--accent); cursor: progress; }
+#download.busy svg { animation: dlbob .9s ease-in-out infinite; }
+@keyframes dlbob { 50% { transform: translateY(2px); } }
+.dlpct { position: absolute; top: -7px; right: -7px; min-width: 18px; padding: 1px 4px; border-radius: 3px; font: 600 9.5px/1.3 var(--mono); color: #fff; background: var(--accent); display: none; }
+#download.busy .dlpct:not(:empty) { display: block; }
+.spacer { flex: 1; }
+.status { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); position: relative; }
+.status.live .dot { background: var(--good); }
+.status.live .dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--good); animation: ping 1.8s var(--ease) infinite; }
+.status.stale .dot { background: var(--warn); }
+@keyframes ping { 0% { transform: scale(1); opacity: .7; } 80%, 100% { transform: scale(2.8); opacity: 0; } }
+
+main { padding: 0; width: 100%; min-width: 0; }
+.pagehead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.pagehead h1 { font-size: 21px; font-weight: 650; letter-spacing: -.015em; margin: 0; }
+.pagehead p { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; font-family: var(--mono); word-break: break-all; }
+
+/* ---------- Tiles ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.tiles:empty { display: none; }
+.tile {
+  background: var(--surface-1); padding: 13px 16px 12px; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border);
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; min-width: 0;
+  transition: background .2s var(--ease), opacity .5s var(--ease);
+}
+.tile:hover { background: var(--raised); }
+.tile .ic { grid-row: span 2; width: 22px; display: grid; place-items: center; color: var(--text-muted); align-self: start; margin-top: 2px; }
+.tile .ic svg.i { width: 20px; height: 20px; stroke-width: 1.6; }
+.tile .k { font-size: 12px; font-weight: 500; color: var(--text-secondary); min-width: 0; }
+.tile .v { font: 600 19px/1.25 var(--font); color: color-mix(in srgb, var(--c) 82%, var(--text-primary)); letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tile .s { grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 6px; padding-top: 7px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .v.bump { animation: bump .6s var(--ease); }
+@keyframes bump { 0% { color: var(--accent); transform: translateY(3px); } 100% { transform: none; } }
+.bar { height: 3px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 8px; grid-column: 1 / -1; }
+.bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--s4), var(--accent)); border-radius: 4px; transition: width .6s var(--ease); }
+
+/* ---------- Sections and cards ---------- */
+section { margin-top: 28px; }
+.sechead { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.sechead .ic { display: grid; place-items: center; color: var(--accent); }
+.sechead h2 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+.sechead span { color: var(--text-muted); font-size: 12.5px; }
+.sechead-actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* ---------- Run setup ---------- */
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.badge { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 4px; font: 500 12px var(--font); color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; animation: fadein .3s var(--ease) both; }
+.badge .i { width: 13px; height: 13px; }
+.badge.accent { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.badge.on { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); border-color: transparent; }
+.badge.off { color: var(--text-muted); background: transparent; border-style: dashed; }
+.badge.plain { font-variant-numeric: tabular-nums; }
+.setup { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.setup .group { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px 10px; transition: border-color .25s var(--ease); }
+.setup .group:hover { border-color: var(--border-strong); }
+.setup .group h3 { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; margin: 0 0 8px; }
+.setup .group h3 .ic { display: grid; place-items: center; color: var(--accent); }
+.setup .group h3 .ic .i { width: 14px; height: 14px; }
+.setup dl { margin: 0; }
+.setup dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
+.setup dt, .setup dd { font-size: 12.5px; min-width: 0; }
+.setup dt { color: var(--text-secondary); }
+.setup dd { margin: 0; text-align: right; font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-primary); white-space: nowrap; }
+.setup dd .u { color: var(--text-muted); margin-left: 3px; }
+.setup dd .tag { margin-left: 6px; font: 500 10px var(--font); color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; vertical-align: 1px; }
+.setup dt.derived, .setup dd.derived { color: var(--text-muted); }
+.setup dt.derived::before { content: '→ '; opacity: .6; }
+.setup dt[title] { cursor: help; text-decoration: underline dotted color-mix(in srgb, var(--text-muted) 50%, transparent); text-underline-offset: 3px; }
+.setup dd.v-on { color: var(--good); }
+.setup dd.v-off { color: var(--text-muted); }
+.toml { margin: 0 0 12px; padding: 12px 14px; max-height: 360px; overflow: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); font: 12px/1.55 var(--mono); color: var(--text-primary); white-space: pre; animation: fadein .2s var(--ease); }
+.toml .c { color: var(--text-muted); } .toml .s { color: var(--accent); font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; background: var(--surface-1); overflow: hidden; }
+.card {
+  background: var(--surface-1); border: 0; border-radius: 0; padding: 12px 16px 6px;
+  box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border);
+  min-width: 0; position: relative;
+  transition: background .25s var(--ease), box-shadow .25s var(--ease), border-color .25s var(--ease), opacity .5s var(--ease), transform .5s var(--ease);
+}
+.card:hover { background: color-mix(in srgb, var(--raised) 45%, var(--surface-1)); }
+.card .head { display: flex; align-items: center; gap: 10px; padding: 0 2px 8px; }
+.card .head .ic { width: 18px; height: 20px; display: grid; place-items: center; color: var(--text-muted); flex: none; }
+.card h3 { font-size: 14px; font-weight: 650; margin: 0; letter-spacing: -.005em; }
+.card .sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+.card .actions { margin-left: auto; display: flex; gap: 6px; opacity: .6; transition: opacity .2s; }
+.card:hover .actions, .card:focus-within .actions { opacity: 1; }
+.chip { height: 28px; padding: 0 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font); color: var(--text-secondary); background: transparent; border: 1px solid var(--border); cursor: pointer; transition: color .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease); }
+.chip:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-2); }
+.chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.chip:active { transform: scale(.94); }
+.chip.sq { width: 28px; padding: 0; justify-content: center; }
+.plot { width: 100%; height: 330px; }
+.plot.tall { height: 470px; }
+.reveal { opacity: 0; transform: translateY(10px); }
+.reveal.in { opacity: 1; transform: none; }
+.skeleton { position: absolute; inset: 58px 14px 14px; border-radius: 4px; overflow: hidden; background: var(--surface-2); transition: opacity .4s; }
+.skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface-1) 70%, transparent), transparent); animation: shimmer 1.4s infinite; }
+.loaded .skeleton { opacity: 0; pointer-events: none; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.hidden { display: none !important; }
+
+/* ---------- Snapshot controls ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; padding: 4px 2px 14px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.slider { display: flex; align-items: center; gap: 12px; flex: 1 1 320px; min-width: 0; }
+input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; min-width: 80px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent) var(--p, 100%), var(--surface-3) var(--p, 100%)); cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--raised); border: 4px solid var(--text-secondary); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .15s var(--ease); }
+input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.18); }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--raised); border: 4px solid var(--text-secondary); }
+.steplabel { font: 500 12.5px var(--mono); color: var(--text-secondary); white-space: nowrap; }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch i { width: 34px; height: 20px; border-radius: 20px; background: var(--surface-3); position: relative; transition: background .2s var(--ease); }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .22s var(--ease); }
+.switch input:checked + i { background: var(--accent); }
+.switch input:checked + i::after { transform: translateX(14px); }
+.switch input:focus-visible + i { box-shadow: 0 0 0 3px var(--accent-soft); }
+.ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.ctl input[type=number] { padding-left: 10px; width: 92px; }
+.subcard { min-width: 0; }
+.subcard h4 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.subcard p { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+
+/* ---------- Toast, modal, footer ---------- */
+.toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 50; max-width: min(440px, calc(100vw - 32px));
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius); cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border); border-left: 3px solid var(--warn); box-shadow: var(--shadow-lg);
+  transform: translateY(20px); opacity: 0; pointer-events: none; transition: transform .3s var(--ease), opacity .3s var(--ease);
+}
+.toast.show { transform: none; opacity: 1; pointer-events: auto; }
+.toast svg.i { color: var(--warn); margin-top: 1px; }
+.toast b { display: block; font-size: 13px; }
+.toast span { font-size: 12.5px; color: var(--text-secondary); word-break: break-word; }
+.modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; background: rgba(15, 15, 15, .45); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease); }
+.modal.open { opacity: 1; pointer-events: auto; }
+.modal .box { width: min(1300px, 100%); height: min(820px, calc(100vh - 48px)); background: var(--surface-1); border: 1px solid var(--border); border-radius: 4px; box-shadow: var(--shadow-lg); padding: 16px; display: flex; flex-direction: column; transform: scale(.96) translateY(8px); transition: transform .3s var(--ease); }
+.modal.open .box { transform: none; }
+.modal .bar2 { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.modal .bar2 h3 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+.modal .slot { flex: 1; min-height: 0; }
+.modal .slot .plot { height: 100% !important; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: flex; gap: 8px; align-items: flex-start; }
+
+
+/* ---------- d3 charts ---------- */
+.d3chart { display: flex; flex-direction: column; }
+.d3area { position: relative; flex: 1 1 auto; min-height: 0; }
+.d3area > canvas, .d3area > svg { position: absolute; inset: 0; }
+.d3area > svg { overflow: visible; }
+.d3area .axis text { font: 11px var(--font); font-variant-numeric: tabular-nums; }
+.d3area .axis-title, .d3area .chart-title { font: 500 12px var(--font); }
+.d3area .chart-title { font-weight: 600; }
+.d3area .overlay { fill: transparent; cursor: crosshair; touch-action: pan-y; }
+.d3area .brush { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+.d3tip {
+  position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; opacity: 0;
+  background: var(--tip-bg); border: 0; border-radius: 4px; box-shadow: var(--shadow-md);
+  padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--tip-text); white-space: nowrap; max-width: 320px;
+  transition: opacity .12s var(--ease), transform .08s linear;
+}
+.d3tip.show { opacity: 1; }
+.d3tip b { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.d3tip div { display: flex; align-items: center; gap: 6px; color: var(--tip-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.d3tip div span { margin-left: auto; padding-left: 14px; color: var(--tip-text); }
+.d3tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+.d3tools { position: absolute; top: 4px; right: 14px; z-index: 2; display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .15s var(--ease); }
+.d3chart:hover .d3tools, .d3tools:focus-within, .d3tools:has(.d3reset[style*="block"]) { opacity: 1; }
+@media (hover: none) { .d3tools { opacity: 1; } }
+.d3tools button { font: 500 11.5px var(--font); color: var(--text-secondary); background: var(--raised); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+.d3tools button:hover { border-color: var(--accent); color: var(--accent); }
+.d3tools .mode { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; }
+.d3tools .mode svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.d3tools .mode.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.d3reset { display: none; color: var(--accent) !important; padding: 4px 9px; height: 26px; animation: fadein .2s var(--ease); }
+.d3area .overlay.panmode { cursor: grab; }
+@keyframes fadein { from { opacity: 0; transform: translateY(-3px); } }
+.d3legend { display: flex; flex-wrap: wrap; gap: 2px 4px; padding: 4px 0 6px 56px; max-height: 96px; overflow-y: auto; flex: none; }
+.d3legend .li { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text-secondary); font: 500 11.5px var(--font); font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: background .15s, opacity .15s; }
+.d3legend .li:hover { background: var(--surface-2); color: var(--text-primary); }
+.d3legend .li.off { opacity: .35; }
+/* An odd card out fills the whole row instead of leaving an empty cell. */
+@media (min-width: 901px) { section > .grid > .card:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+/* Mode legends: one column per l, each scrolling on its own. */
+.d3legend.grouped { display: flex; flex-wrap: nowrap; gap: 0; padding: 2px 0 4px 12px; max-height: none; overflow-x: auto; overflow-y: hidden; }
+.d3legend .lcol { flex: none; min-width: 68px; max-width: 150px; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.d3legend .lcol:first-child { border-left: 0; }
+.d3legend .lhead { display: flex; align-items: baseline; gap: 5px; border: 0; background: none; cursor: pointer; padding: 2px 8px 3px; text-align: left; white-space: nowrap;
+  font: 600 11px var(--font); color: var(--text-primary); }
+.d3legend .lhead span { font: 500 10px var(--mono); color: var(--text-muted); }
+.d3legend .lhead i, .d3legend .li i { font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 400; }
+.d3legend .lhead:hover { color: var(--accent); }
+.d3legend .lhead.off { opacity: .4; }
+.d3legend .llist { display: flex; flex-direction: column; max-height: 70px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.d3legend.grouped .li { padding: 1px 8px 1px 6px; gap: 5px; white-space: nowrap; border-radius: 3px; max-width: 100%; }
+.d3legend.grouped .li span { overflow: hidden; text-overflow: ellipsis; }
+.d3legend.grouped .li svg { flex: none; }
+/* Charts: dragging to zoom or pan never selects text. */
+.plot, .d3legend, .d3tools { -webkit-user-select: none; user-select: none; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  aside { position: static; height: auto; flex-direction: row; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--border); gap: 12px; overflow-x: auto; }
+  aside .brand span, nav .label, .runinfo { display: none; }
+  nav { flex-direction: row; }
+  nav a { white-space: nowrap; padding: 7px 10px; }
+  nav a.active::before { display: none; }
+}
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .topbar { padding-left: 16px; padding-right: 16px; }
+  .topbar { position: relative; }
+  .runfield { flex: 1 1 100%; }
+  .runpick, .rp-btn { width: 100%; max-width: none; }
+  .rp-pop { width: 100%; }
+  .rp-txt { flex: 1; }
+  .spacer { display: none; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tile { padding: 12px; gap: 4px 10px; }
+  .tile .ic { width: 20px; }
+  .tile .v { font-size: 15px; }
+  .plot { height: 290px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/* ---------- Flush panel layout: square panels separated by hairlines ---------- */
+.pagehead { margin: 0; padding: 16px 20px 14px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.tiles { border: 0; border-bottom: 1px solid var(--border); }
+section { margin: 0; border-bottom: 1px solid var(--border); }
+.sechead { margin: 0; padding: 9px 20px; background: var(--surface-2); border-bottom: 1px solid var(--border); gap: 9px; min-height: 44px; }
+.sechead h2 { font-size: 14.5px; }
+.sechead .ic svg.i { width: 15px; height: 15px; }
+.reveal { transform: none; }
+#snapshot > .card { padding: 0; box-shadow: none; }
+#snapshot > .card:hover { background: var(--surface-1); }
+#snapshot .grid .subcard { padding: 14px 20px 12px; box-shadow: 1px 0 0 var(--border); }
+.setup { gap: 0; background: var(--surface-1); overflow: hidden; }
+.setup .group { border: 0; border-radius: 0; padding: 12px 18px 10px; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
+.setup .group:hover { border: 0; }
+.toml { margin: 0; border: 0; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+/* Overview and Setup share the top of the page as two tabs. */
+.toptabs { display: flex; align-items: stretch; gap: 2px; padding: 0 20px 0 14px; background: var(--surface-1); border-bottom: 1px solid var(--border); min-height: 42px; }
+.toptabs [role=tab] {
+  position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border: 0; background: none; cursor: pointer;
+  font: 600 13px var(--font); color: var(--text-muted); transition: color .15s;
+}
+.toptabs [role=tab] .i { width: 14px; height: 14px; }
+.toptabs [role=tab]:hover { color: var(--text-primary); }
+.toptabs [role=tab][aria-selected="true"] { color: var(--text-primary); }
+.toptabs [role=tab][aria-selected="true"] .i { color: var(--accent); }
+.toptabs [role=tab][aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--accent); }
+.toptabs [role=tab]:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.toptabs-hint { align-self: center; margin-left: 10px; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.toptabs-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.toptabs-hint[hidden], .toptabs-actions[hidden], .setuppanel[hidden], .tiles[hidden] { display: none !important; }
+.setuppanel { border-bottom: 1px solid var(--border); background: var(--surface-1); }
+@media (max-width: 640px) { .toptabs { padding: 0 8px; } .toptabs-hint { display: none; } }
+footer { margin: 0; padding: 14px 20px 22px; }
+.skeleton { inset: 56px 16px 12px; border-radius: 0; }
+.runinfo { margin: auto -14px -18px; border: 0; border-top: 1px solid var(--border); background: var(--surface-1); padding: 12px 20px 16px; }
+aside { padding-bottom: 18px; }
+.topbar { padding: 8px 20px; }
+html { scroll-padding-top: 52px; }
+@media (max-width: 1100px) { .runinfo { display: none; } }
+@media (max-width: 640px) {
+  .pagehead, .sechead, footer { padding-left: 16px; padding-right: 16px; }
+  .tiles { gap: 0; }
+  .card { padding: 12px 12px 6px; }
+}
+
+/* ---------- Snapshot panel: slice controls and timeline ---------- */
+#snapshot > .card { overflow: hidden; }
+.subhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 32px; margin-bottom: 12px; }
+@media (min-width: 901px) { #snapshot .subhead { min-height: 74px; align-content: flex-start; } }  /* keeps both plots top-aligned */
+.slicectl { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.inpgroup { display: inline-flex; align-items: center; height: 30px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-1); overflow: hidden; transition: border-color .18s, box-shadow .18s; }
+.inpgroup:hover { border-color: var(--border-strong); }
+.inpgroup:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inpgroup .lbl { align-self: stretch; display: grid; place-items: center; padding: 0 10px; font-size: 12px; font-weight: 500; color: var(--text-muted); background: var(--surface-2); border-right: 1px solid var(--border); }
+.inpgroup input[type=number] { width: 64px; height: 100%; border: 0; border-radius: 0; padding: 0 4px 0 10px; font-size: 12.5px; background: transparent; box-shadow: none !important; }
+.inpgroup input[type=number]:hover { background: transparent; }
+.inpgroup .unit { padding-right: 10px; font-size: 12px; color: var(--text-muted); }
+.slicectl .ctl { gap: 6px; font-size: 12px; color: var(--text-muted); }
+.slicectl .ctl sub { font-size: 75%; }
+.slicectl .ctl input[type=number] { width: 70px; height: 28px; padding: 4px 8px; font-size: 12px; }
+.slicectl .ctl .unit { font-size: 11.5px; }
+.seg.sm { height: 30px; padding: 3px; }
+.seg.sm button { font-size: 12px; padding: 0 8px; }
+.seg.sm .pill { top: 3px; bottom: 3px; }
+.field.sm select { height: 30px; font-size: 12px; padding: 4px 26px 4px 28px; background-position: right 8px center; }
+.field.sm svg.i { left: 9px; width: 13px; height: 13px; }
+
+.timeline {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px 22px;
+  padding: 14px 20px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
+}
+.tl-transport { display: flex; align-items: center; gap: 6px; }
+.tl-btn {
+  width: 34px; height: 34px; display: inline-grid; place-items: center; cursor: pointer; border-radius: 4px;
+  color: var(--text-secondary); background: var(--surface-1); border: 1px solid var(--border);
+  transition: color .15s, border-color .15s, background-color .15s, transform .1s;
+}
+.tl-btn .i { width: 15px; height: 15px; fill: currentColor; stroke-width: 1.6; }
+.tl-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.tl-btn:active { transform: scale(.94); }
+.tl-btn:disabled { opacity: .4; cursor: default; transform: none; }
+.tl-btn.tl-play { width: 44px; height: 44px; border-radius: 50%; color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent); }
+.tl-btn.tl-play .i { width: 17px; height: 17px; }
+.tl-btn.tl-play:hover { color: #fff; filter: brightness(1.07); }
+.tl-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tl-main .tl-axis { margin-top: -6px; }
+.tl-readout { display: flex; align-items: baseline; gap: 14px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; }
+.tl-readout .tl-step { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.tl-readout .tl-idx { margin-left: auto; }
+.tl-readout .tl-meta { color: var(--text-secondary); }
+.tl-track { position: relative; height: 40px; cursor: pointer; touch-action: none; outline: none; border-radius: 3px; background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--border); }
+.tl-track:focus-visible { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
+.tl-ticks { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tl-tick { stroke: var(--text-muted); stroke-opacity: .45; stroke-width: 1; vector-effect: non-scaling-stroke; fill: none; }
+.tl-tick.done { stroke: var(--text-secondary); stroke-opacity: .8; }
+.tl-head, .tl-hover { position: absolute; top: -4px; bottom: -4px; width: 0; pointer-events: none; }
+.tl-head::before { content: ""; position: absolute; left: -1px; top: 0; bottom: 0; width: 2px; background: var(--accent); border-radius: 1px; }
+.tl-head::after { content: ""; position: absolute; left: -6px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--surface-2); }
+.tl-head span, .tl-hover span {
+  position: absolute; top: calc(100% + 2px); left: 0; transform: translateX(-50%); padding: 1px 6px; border-radius: 3px; z-index: 2;
+  font: 600 11px/1.4 var(--mono); white-space: nowrap; color: #fff; background: var(--accent);
+}
+.tl-head span { display: none; }
+.tl-track.dragging .tl-head span { display: block; }
+.tl-hover { display: none; }
+.tl-hover::before { content: ""; position: absolute; left: -.5px; top: 4px; bottom: 4px; width: 1px; background: var(--text-primary); opacity: .5; }
+.tl-hover span { color: var(--tip-text); background: var(--tip-bg); }
+.tl-track:hover .tl-hover.on { display: block; }
+.tl-track.dragging .tl-hover { display: none !important; }
+.tl-axis { position: relative; height: 14px; font: 500 10.5px var(--mono); color: var(--text-muted); }
+.tl-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.tl-axis span:first-child { transform: none; }
+.tl-axis span:last-child { transform: translateX(-100%); }
+.tl-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+@media (max-width: 900px) {
+  .timeline { grid-template-columns: auto minmax(0, 1fr); }
+  .tl-side { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; }
+}
+@media (max-width: 640px) {
+  .timeline { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; }
+  .tl-transport { justify-content: center; }
+}
+
+.tl-btn.tl-lock .i { fill: none; stroke-width: 2; }
+.tl-btn.tl-lock.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.tl-lockline { position: absolute; top: -3px; bottom: -3px; width: 0; pointer-events: none; z-index: 1; }
+.tl-lockline::before { content: ""; position: absolute; left: -2px; top: 0; bottom: 0; width: 4px; background: var(--accent); opacity: .85; border-radius: 1px; }
+.tl-lockline span { position: absolute; left: 50%; bottom: calc(100% + 1px); transform: translateX(-50%); color: var(--accent); line-height: 0; }
+.tl-lockline .i { width: 11px; height: 11px; stroke-width: 2.4; }
+.tl-readout .tl-locktag { color: var(--accent); font-family: var(--font); font-size: 12px; font-weight: 500; }
+.tl-readout .tl-buf { display: none; color: var(--text-muted); font-family: var(--font); font-size: 12px; font-style: italic; }
+.timeline.buffering .tl-buf { display: inline; }
+
+/* ---------- Captions as hover popovers on titles ---------- */
+.caption-src { display: none !important; }
+.has-info { cursor: help; outline: none; display: inline-flex; align-items: center; gap: 6px; }
+.has-info .info-i { width: 13px; height: 13px; color: var(--text-muted); opacity: .55; flex: none; transition: opacity .15s, color .15s; }
+.has-info:hover .info-i, .has-info:focus-visible .info-i { opacity: 1; color: var(--accent); }
+.has-info:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft); border-radius: 3px; }
+.infotip {
+  position: fixed; z-index: 100; max-width: 340px; padding: 8px 11px; border-radius: 4px; pointer-events: none;
+  font-size: 12.5px; line-height: 1.45; font-weight: 400; color: var(--tip-text); background: var(--tip-bg);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(-3px); transition: opacity .12s, transform .12s;
+}
+.infotip.show { opacity: 1; transform: none; }
+.infotip::before { content: ""; position: absolute; top: -5px; left: var(--ax, 16px); width: 10px; height: 10px; background: var(--tip-bg); transform: rotate(45deg); }
+.infotip.above::before { top: auto; bottom: -5px; }
+.infotip sub, .infotip sup { font-size: 75%; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-atom" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="10" ry="4.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-orbit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><path d="M20.2 9.8A9 9 0 1 1 14.2 3.8"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+    <symbol id="i-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m14.3 8 5.7 9.9M9.7 8h11.4M7.4 12l5.7-9.9M9.7 16 4 6.1M14.3 16H2.9M16.6 12l-5.7 9.9"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5v14L8 12z"/><path d="M6 5v14"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5v14l10-7z"/><path d="M18 5v14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-window" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M10 2h4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4v16l14-8z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-steps" viewBox="0 0 24 24"><path d="M4 20h4v-4h4v-4h4V8h4V4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M21.3 15.3 8.7 2.7a1 1 0 0 0-1.4 0L2.7 7.3a1 1 0 0 0 0 1.4l12.6 12.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4z"/><path d="m7.5 10.5 2-2M10.5 13.5l2-2M13.5 16.5l2-2"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.8A6 6 0 1 0 6 17.7"/><path d="M6 19h11.5"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3v18M5 21h14M3 7h18"/><path d="m6 7-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.4 1.6 1.4 2.8 2.5 2.8z"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M2 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" opacity=".45"/></symbol>
+    <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
+    <symbol id="i-bars" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7" rx="1"/><rect x="12" y="6" width="3" height="11" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16c3 0 3-9 6-9s3 4 7 4"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+    <symbol id="i-radial" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 6c2 0 3 8 6 10s5 1 9 1"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="logo"><svg class="i"><use href="#i-atom"/></svg></div>
+      <div><b>Simulation Monitor</b><span>Gravitational molecule</span></div>
+    </div>
+    <nav id="nav">
+      <div class="label">Sections</div>
+      <a href="#overview" class="active"><svg class="i"><use href="#i-grid"/></svg>Overview</a>
+      <a href="#ionization"><svg class="i"><use href="#i-zap"/></svg>Ionization</a>
+      <a href="#orbit"><svg class="i"><use href="#i-orbit"/></svg>Orbit &amp; masses</a>
+      <a href="#modes"><svg class="i"><use href="#i-layers"/></svg>Modes &amp; energies</a>
+      <a href="#snapshot"><svg class="i"><use href="#i-aperture"/></svg>Snapshot</a>
+      <a href="#setup"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
+    </nav>
+    <div class="runinfo" id="runinfo"></div>
+  </aside>
+
+  <div style="min-width: 0">
+    <div class="topbar">
+      <div class="runfield runpick" id="runpick">
+        <select id="run" aria-label="Run" hidden tabindex="-1"></select>
+        <button type="button" class="rp-btn" id="rpBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="rpList">
+          <svg class="i"><use href="#i-folder"/></svg>
+          <span class="rp-txt"><span class="rp-group" id="rpGroup"></span><span class="rp-name" id="rpName">Loading…</span></span>
+          <svg class="i rp-chev"><use href="#i-chev"/></svg>
+        </button>
+        <div class="rp-pop" id="rpPop" hidden>
+          <div class="rp-search" id="rpSearch"><svg class="i"><use href="#i-search"/></svg><input id="rpFilter" type="text" placeholder="Filter simulations" autocomplete="off" spellcheck="false" aria-label="Filter simulations"><span class="rp-count" id="rpCount"></span></div>
+          <div class="rp-list" id="rpList" role="listbox" aria-label="Simulations"></div>
+          <div class="rp-foot" id="rpFoot">
+            <span class="rp-hint" id="rpHint">Tick simulations to download several at once</span>
+            <button type="button" class="rp-clear" id="rpClear" hidden>Clear</button>
+            <button type="button" class="rp-dl" id="rpDl" disabled><svg class="i"><use href="#i-download"/></svg><span id="rpDlTxt">Download</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="seg" id="xaxis" data-value="t" role="group" aria-label="x-axis">
+        <button data-v="t">t</button><button data-v="tP">t / T</button><button data-v="R">R</button>
+      </div>
+      <div class="field"><svg class="i"><use href="#i-window"/></svg>
+        <select id="window" aria-label="Window">
+          <option value="0">Whole run</option><option value="200">Last 200 orbits</option>
+          <option value="50">Last 50 orbits</option><option value="10">Last 10 orbits</option>
+        </select></div>
+      <div class="field"><svg class="i"><use href="#i-timer"/></svg>
+        <select id="refresh" aria-label="Refresh interval">
+          <option value="5">Every 5 s</option><option value="15" selected>Every 15 s</option><option value="60">Every 60 s</option>
+        </select></div>
+      <button class="iconbtn" id="pause" title="Pause auto-refresh" aria-label="Pause auto-refresh"><svg class="i"><use href="#i-pause"/></svg></button>
+      <button class="iconbtn" id="download" title="Download diagnostics (.zip)" aria-label="Download diagnostics"><svg class="i"><use href="#i-download"/></svg><span class="dlpct" id="dlPct"></span></button>
+      <button class="iconbtn" id="refreshNow" title="Refresh now" aria-label="Refresh now"><svg class="i"><use href="#i-refresh"/></svg></button>
+      <div class="spacer"></div>
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+      <button class="iconbtn" id="theme" title="Switch light / dark" aria-label="Switch theme"><svg class="i"><use href="#i-moon"/></svg></button>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <main>
+      <div class="pagehead" id="overview">
+        <div><h1 id="runTitle">Live run</h1><p id="runPath">Waiting for data…</p><div class="badges" id="badges"></div></div>
+      </div>
+      <div class="toptabs" role="tablist" aria-label="Run overview">
+        <button role="tab" id="tabOverview" data-tab="overview" aria-selected="true" aria-controls="tiles"><svg class="i"><use href="#i-grid"/></svg>Overview</button>
+        <button role="tab" id="tabSetup" data-tab="setup" aria-selected="false" aria-controls="setup"><svg class="i"><use href="#i-sliders"/></svg>Setup</button>
+        <span class="toptabs-hint" id="setupHint" hidden>every solver parameter, with defaults for keys config.toml leaves out</span>
+        <div class="toptabs-actions" id="setupActions" hidden>
+          <button class="chip" id="tomlToggle" aria-expanded="false"><svg class="i"><use href="#i-file"/></svg>config.toml</button>
+          <button class="chip" id="tomlCopy" title="Copy config.toml"><svg class="i"><use href="#i-copy"/></svg>Copy</button>
+        </div>
+      </div>
+      <div class="tiles" id="tiles" role="tabpanel" aria-labelledby="tabOverview"></div>
+      <div class="setuppanel" id="setup" role="tabpanel" aria-labelledby="tabSetup" hidden>
+        <pre class="toml" id="toml" hidden></pre>
+        <div class="setup" id="setupGrid"></div>
+      </div>
+
+      <section id="ionization">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-zap"/></svg></div><h2>Ionization</h2><span>per mode, normalized by q² and M_c</span></div>
+        <div class="grid">
+          <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-trend"/></svg></div><div><h3>Ionization rate</h3><p class="sub">−q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub> per mode, total, and Tomaselli et al. (2023)</p></div><div class="actions"><button class="chip sq" data-expand="pMass" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMass"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-flame"/></svg></div><div><h3>Ionization power</h3><p class="sub">q⁻² (M/M<sub>c</sub>) P<sub>ion</sub> per mode and total, initial mode excluded. Log scale shows |P<sub>ion</sub>| for every mode, so small contributions separate; pick R as the x-axis for P<sub>ion</sub> against R.</p></div><div class="actions"><button class="chip" data-log="pPower" title="Log scale of |P_ion|, all modes">log</button><button class="chip sq" data-expand="pPower" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pPower"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s7)"><div class="head"><div class="ic"><svg class="i"><use href="#i-wave"/></svg></div><div><h3>Binary power</h3><p class="sub">P<sub>bin</sub> instantaneous, rolling average, and the ionization power −Σ(T + ε j/μ)</p></div><div class="actions"><button class="chip sq" data-expand="pBin" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pBin"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
+
+      <section id="orbit">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-orbit"/></svg></div><h2>Orbit &amp; masses</h2><span>binary separation and mass budget</span></div>
+        <div class="grid">
+          <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-ruler"/></svg></div><div><h3>Orbital separation</h3><p class="sub">R (M)</p></div><div class="actions"><button class="chip sq" data-expand="pR" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pR"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div><h3>Cloud mass</h3><p class="sub">M<sub>c</sub> inside r<sub>ex</sub></p></div><div class="actions"><button class="chip sq" data-expand="pMc" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMc"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s3)"><div class="head"><div class="ic"><svg class="i"><use href="#i-scale"/></svg></div><div><h3>Binary masses</h3><p class="sub">M<sub>1</sub>, M<sub>2</sub> and q, log scale</p></div><div class="actions"><button class="chip sq" data-expand="pMasses" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMasses"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
+
+      <section id="modes">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><h2>Modes &amp; energies</h2><span>hover a curve to identify its mode</span></div>
+        <div class="grid">
+          <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-bars"/></svg></div><div><h3>Mass per mode</h3><p class="sub">M<sub>c</sub><sup>LM</sup></p></div><div class="actions"><button class="chip on" data-log="pNorms">log</button><button class="chip sq" data-expand="pNorms" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pNorms"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s5)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mode fractions</h3><p class="sub">|c<sub>LM</sub>|² = M<sub>c</sub><sup>LM</sup> / M<sub>c</sub></p></div><div class="actions"><button class="chip" data-log="pFrac">log</button><button class="chip sq" data-expand="pFrac" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pFrac"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s8)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Cloud energy</h3><p class="sub">E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6</p></div><div class="actions"><button class="chip sq" data-expand="pEs" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEs"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Energy per mode</h3><p class="sub">E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup>, dashed: levels; fixed orbit adds ε<sub>b</sub> + gΩ</p></div><div class="actions"><button class="chip sq" data-expand="pEmodes" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEmodes"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
+
+      <section id="snapshot">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-aperture"/></svg></div><h2>Snapshot</h2><span>radial profiles and a slice (xy, zx or zy) of a saved state</span></div>
+        <div class="card reveal">
+          <div class="grid">
+            <div class="subcard"><div class="subhead"><div><h4><svg class="i" style="color: var(--s1)"><use href="#i-radial"/></svg>Radial profiles</h4><p>|U<sub>LM</sub>|², dashed: initial bound state</p></div></div><div class="plot tall" id="pRadial"></div></div>
+            <div class="subcard"><div class="subhead"><div><h4><svg class="i" style="color: var(--s2)"><use href="#i-target"/></svg>Slice through the COM</h4><p>|ψ|² in the chosen plane through the centre of mass: xy is the orbital (equatorial) plane, zx and zy contain the z axis, normal to the orbit. Filled marker: primary, open marker: companion, both projected onto the plane.</p></div>
+                <div class="seg sm planeseg" id="slicePlane" data-value="xy" role="group" aria-label="Slice plane"><button data-v="xy" title="Orbital plane, z = 0">xy</button><button data-v="zx" title="y = 0">zx</button><button data-v="zy" title="x = 0">zy</button></div>
+
+              <div class="slicectl">
+                <label class="inpgroup" title="Half-width of the slice"><span class="lbl">Radius</span><input type="number" id="rplot" value="200" min="1" step="10"><span class="unit">M</span></label>
+                <div class="seg sm" id="modeSet" data-value="all" role="group" aria-label="Modes in slice"><button data-v="all">All</button><button data-v="bound">Bound</button><button data-v="radiative">Radiative</button></div>
+                <div class="seg sm" id="sliceScale" data-value="lin" role="group" aria-label="Slice scale"><button data-v="lin">Lin</button><button data-v="log">Log</button></div>
+                <div class="field sm" title="Slice resolution"><svg class="i"><use href="#i-grid"/></svg><select id="grid" aria-label="Grid"><option value="200">200²</option><option value="300" selected>300²</option><option value="450">450²</option></select></div>
+              </div></div>
+              <div class="plot tall" id="pSlice"></div></div>
+          </div>
+          <div class="timeline" id="timeline">
+            <div class="tl-transport">
+              <button class="tl-btn" id="tlPrev" title="Previous snapshot (←)" aria-label="Previous snapshot"><svg class="i"><use href="#i-prev"/></svg></button>
+              <button class="tl-btn tl-play" id="tlPlay" title="Play (Space)" aria-label="Play"><svg class="i"><use href="#i-play"/></svg></button>
+              <button class="tl-btn" id="tlNext" title="Next snapshot (→)" aria-label="Next snapshot"><svg class="i"><use href="#i-next"/></svg></button>
+              <button class="tl-btn tl-lock" id="tlLock" title="Lock the slice colours to this snapshot (L)" aria-label="Lock colours to this snapshot" aria-pressed="false"><svg class="i"><use href="#i-unlock"/></svg></button>
+            </div>
+            <div class="tl-main">
+              <div class="tl-readout"><span class="tl-step" id="snapLabel">no snapshots yet</span><span class="tl-meta" id="tlMeta"></span><span class="tl-locktag" id="tlLockTag" hidden></span><span class="tl-buf">buffering…</span><span class="tl-idx" id="tlIdx"></span></div>
+              <div class="tl-track" id="tlTrack" tabindex="0" role="slider" aria-label="Snapshot" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+                <svg class="tl-ticks" id="tlTicks" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true"><path class="tl-tick" id="tlTickPath" d=""/><path class="tl-tick done" id="tlTickDone" d=""/></svg>
+                <div class="tl-lockline" id="tlLockLine" hidden><span><svg class="i"><use href="#i-lock"/></svg></span></div>
+                <div class="tl-hover" id="tlHover"><span></span></div>
+                <div class="tl-head" id="tlHead"><span></span></div>
+              </div>
+              <div class="tl-axis" id="tlAxis"></div>
+            </div>
+            <div class="tl-side">
+              <div class="seg sm" id="tlSpeed" data-value="1" role="group" aria-label="Playback speed"><button data-v="0.5">½×</button><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div>
+              <label class="switch"><input type="checkbox" id="follow" checked><i></i>Follow latest</label>
+            </div>
+            <input type="range" id="snapStep" min="0" max="0" step="1" value="0" hidden aria-hidden="true" tabindex="-1">
+          </div>
+        </div>
+      </section>
+
+      <footer><svg class="i"><use href="#i-info"/></svg><span>Curves are decimated to a few thousand evenly spaced samples; narrow the window for full time resolution. Drag a box to zoom (a horizontal or vertical drag zooms one axis), use the pan button (or Shift-drag) to pan, Ctrl/⌘ + scroll or pinch to zoom at the cursor, double-click to reset. Click legend entries to hide modes, double-click to isolate one; with many modes the legend has one scrollable column per l, and clicking an l header toggles the whole column. Expand any chart with its corner button.</span></footer>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"><svg class="i"><use href="#i-alert"/></svg><div><b id="toastTitle">Problem</b><span id="toastText"></span></div></div>
+<div class="modal" id="modal"><div class="box"><div class="bar2"><h3 id="modalTitle"></h3><button class="iconbtn" id="modalClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div><div class="slot" id="modalSlot"></div></div></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
+const DASHES = ['solid', 'dot', 'dash', 'longdash', 'dashdot', 'longdashdot'];
+let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false }, prevTiles: {} };
+
+// Segmented controls keep their value in data-value, like a select.
+const val = (id) => { const el = $(id); return el.dataset.value !== undefined ? el.dataset.value : el.value; };
+function initSeg(id, onChange) {
+  const el = $(id);
+  const pill = document.createElement('span'); pill.className = 'pill'; el.prepend(pill);
+  const place = () => {
+    const on = el.querySelector(`button[data-v="${el.dataset.value}"]`);
+    el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === on));
+    if (on) { pill.style.left = on.offsetLeft + 'px'; pill.style.width = on.offsetWidth + 'px'; }
+  };
+  el.querySelectorAll('button').forEach(b => b.onclick = () => { if (el.dataset.value === b.dataset.v) return; el.dataset.value = b.dataset.v; place(); onChange && onChange(); });
+  el.setValue = (v) => { el.dataset.value = v; place(); };
+  new ResizeObserver(place).observe(el);
+  if (document.fonts) document.fonts.ready.then(place);
+  place();
+}
+
+// Mode identity: hue by L (fixed slot order), dash by position of M within L.
+function modeStyle(mode) {
+  const [l, m] = mode;
+  const color = css(SLOTS[l % SLOTS.length]);
+  const k = Math.round((m + l) / 2);
+  return { color, width: 1.4, dash: DASHES[k % DASHES.length] };
+}
+const modeName = (m) => `(${m[0]}, ${m[1]})`;
+
+function xValues(s) {
+  const mode = val('xaxis');
+  if (mode === 'tP' && s.t_over_P) return { x: s.t_over_P, title: 't / T' };
+  if (mode === 'R') return { x: s.R, title: 'R (M)', reversed: true };
+  return { x: s.t, title: 't (M)' };
+}
+
+// Plots of individual modes: hovering a curve names that curve and thickens it.
+const MODE_PLOTS = new Set(['pMass', 'pPower', 'pNorms', 'pFrac', 'pEmodes', 'pRadial']);
+const charts = {};
+
+// Traces and layout keep a Plotly-like shape; this maps them onto the d3 charts.
+function draw(id, traces, layout = {}) {
+  const el = $(id);
+  if (!charts[id]) charts[id] = new D3Charts.LineChart(el, { hover: MODE_PLOTS.has(id) ? 'closest' : 'x', legend: traces.some(t => t.showlegend !== false) });
+  const xa = layout.xaxis || {}, ya = layout.yaxis || {};
+  const yLog = ya.type === 'log';
+  const labels = {};
+  (layout.annotations || []).forEach(a => (labels[a.y] = a.text));
+  const series = traces.map(t => ({
+    name: t.name, x: t.x, y: t.y, color: t.line.color, width: t.line.width, dash: t.line.dash,
+    legend: t.showlegend !== false,
+  }));
+  const hlines = (layout.shapes || []).map(sh => ({ y: sh.y0, color: sh.line.color, dash: sh.line.dash, width: sh.line.width, label: labels[sh.y0] }));
+  let yRange = ya.range ? ya.range.slice() : null;
+  if (yRange && yLog && ya.rangeIsLog) yRange = yRange.map(v => Math.pow(10, v));
+  charts[id].update({
+    series, hlines, yLog, yRange,
+    xLabel: xa.title ? xa.title.text : '', yLabel: ya.title ? ya.title.text : '',
+    xReversed: xa.autorange === 'reversed',
+    uirev: layout.uirevision !== undefined ? layout.uirevision : (state.run || '') + val('xaxis'),
+  });
+  const card = el.closest('.card'); if (card) card.classList.add('loaded');
+}
+
+function hline(y, color, dash = 'dot', width = 1) {
+  return { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, dash, width } };
+}
+
+function render() {
+  const d = state.data;
+  if (!d || !d.ready) return;
+  const s = d.series, X = xValues(s);
+  const xaxis = { title: { text: X.title }, autorange: X.reversed ? 'reversed' : true };
+  const ink = css('--text-primary'), muted = css('--text-muted'), ref = css('--ref');
+  const modes = d.info.modes;
+  const line = (y, name, style, extra = {}) => Object.assign({ x: X.x, y, name, type: 'scatter', mode: 'lines', line: style, hovertemplate: '%{y:.4g}' }, extra);
+
+  // Ionization rate
+  const tm = d.selected.map(i => line(s.mass_flux[i], modeName(modes[i]), modeStyle(modes[i])));
+  tm.push(line(s.total_mass_flux, 'Total', { color: ink, width: 1.8 }));
+  const shapesM = [hline(0, muted, 'dash', 0.8)];
+  if (d.theory) { shapesM.push(hline(d.theory.mass, ref, 'dot', 1.5)); tm.push({ x: [null], y: [null], name: 'Tomaselli et al. (2023)', mode: 'lines', line: { color: ref, dash: 'dot' } }); }
+  draw('pMass', tm, { xaxis, yaxis: { title: { text: 'q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub>' } }, shapes: shapesM });
+
+  // Ionization power. Linear: the selected modes, signed. Log: |P_ion| of
+  // every mode but the initial one, over 14 decades below the peak.
+  const pLog = state.logs.pPower;
+  const pAbs = (y) => (pLog ? y.map(v => (v === null ? null : Math.abs(v))) : y);
+  const tp = (pLog ? d.others : d.selected).map(i => line(pAbs(s.energy_flux[i]), modeName(modes[i]), modeStyle(modes[i])));
+  tp.push(line(pAbs(s.total_energy_flux), 'Total', { color: ink, width: 1.8 }));
+  const shapesP = pLog ? [] : [hline(0, muted, 'dash', 0.8)];
+  if (d.theory) { shapesP.push(hline(pLog ? Math.abs(d.theory.power) : d.theory.power, ref, 'dot', 1.5)); tp.push({ x: [null], y: [null], name: 'Tomaselli et al. (2023)', mode: 'lines', line: { color: ref, dash: 'dot' } }); }
+  let yP = { title: { text: pLog ? 'q⁻² (M/M<sub>c</sub>) |P<sub>ion</sub>|' : 'q⁻² (M/M<sub>c</sub>) P<sub>ion</sub>' } };
+  if (pLog) {
+    let peak = 0;
+    tp.forEach(t => t.y.forEach(v => { if (v > peak) peak = v; }));
+    yP = Object.assign(yP, { type: 'log' }, peak > 0 ? { range: [Math.log10(peak) - 14, Math.log10(peak) + 0.5], rangeIsLog: true } : {});
+  }
+  draw('pPower', tp, { xaxis, yaxis: yP, shapes: shapesP });
+
+  // Binary power
+  draw('pBin', [
+    line(s.p_bin_inst, 'instantaneous', { color: muted, width: 1, dash: 'dot' }),
+    line(s.p_bin, 'rolling average', { color: css('--s1'), width: 1.8 }),
+    line(s.p_out, 'outgoing flux + binding energy', { color: css('--s7'), width: 1.4 }),
+  ], { xaxis, yaxis: { title: { text: 'P<sub>bin</sub>' } } });
+
+  // Orbit and masses
+  draw('pR', [line(s.R, 'R', { color: css('--s1'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'R (M)' } } });
+  draw('pMc', [line(s.M_c, 'M_c', { color: css('--s2'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'M<sub>c</sub>' } } });
+  draw('pMasses', [
+    line(s.M_1, 'M₁', { color: css('--s1'), width: 1.6 }),
+    line(s.M_2, 'M₂', { color: css('--s2'), width: 1.6 }),
+    line(s.q, 'q', { color: css('--s3'), width: 1.6, dash: 'dash' }),
+  ], { xaxis, yaxis: { title: { text: 'mass' }, type: 'log' } });
+
+  // Modes
+  draw('pNorms', modes.map((m, i) => line(s.norms[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: 'M<sub>c</sub><sup>LM</sup>' }, type: state.logs.pNorms ? 'log' : 'linear' } });
+  draw('pFrac', modes.map((m, i) => line(s.fractions[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: '|c<sub>LM</sub>|²' }, type: state.logs.pFrac ? 'log' : 'linear' } });
+
+  const levelShapes = d.levels.map(lv => hline(lv.E, lv.n < 4 ? muted : css('--grid'), 'dash', lv.n < 4 ? 1 : 0.8));
+  levelShapes.push(hline(0, muted, 'dot', 1));
+  const levelAnn = d.levels.filter(lv => lv.n < 4).map(lv => ({ xref: 'paper', x: 0.005, y: lv.E, yanchor: 'bottom', xanchor: 'left', text: `n = ${lv.n}`, showarrow: false, font: { size: 10, color: muted } }));
+  draw('pEs', [line(s.E_s, 'E_s / M_c', { color: css('--s8'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'E<sub>s</sub> / M<sub>c</sub>' } }, shapes: levelShapes, annotations: levelAnn });
+
+  const eShapes = levelShapes.slice();
+  const E1 = d.levels[0].E;
+  let yrange = [1.3 * E1, -0.6 * E1];
+  if (!d.info.evolving && isFinite(d.latest.Omega)) {
+    for (let g = -5; g < 5; g++) eShapes.push(hline(d.eps_b + g * d.latest.Omega, css('--s8'), 'dash', 0.6));
+    yrange = [1.1 * (d.eps_b - 4 * d.latest.Omega), 1.1 * (d.eps_b + 4 * d.latest.Omega)].sort((a, b) => a - b);
+  }
+  draw('pEmodes', modes.map((m, i) => line(s.E_modes[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: 'E<sup>LM</sup> / M<sup>LM</sup>' }, range: yrange }, shapes: eShapes, annotations: levelAnn });
+}
+
+const fmt = (v, d = 4) => (v === null || v === undefined || !isFinite(v)) ? '–' : (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0) ? v.toExponential(d - 1) : (+v.toPrecision(d)).toString());
+
+function renderTiles() {
+  const d = state.data; if (!d) return;
+  const info = d.info, L = d.latest || {};
+  const snaps = info.snapshots || [];
+  const total = info.num_steps || null;
+  let stepSub = (total ? `of ${total - 1} · ` : '') + (info.steps_per_min ? `${fmt(info.steps_per_min, 3)} steps/min` : 'measuring rate…');
+  if (total && info.steps_per_min > 0) {
+    const mins = (total - 1 - info.rows) / info.steps_per_min;
+    stepSub = `of ${total - 1} · ${mins > 90 ? fmt(mins / 60, 2) + ' h' : Math.max(0, Math.round(mins)) + ' min'} left`;
+  }
+  const frac = total ? Math.min(1, info.rows / (total - 1)) : null;
+  const tiles = [
+    ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
+    ['t', 'Time t', fmt(L.t, 6), isFinite(L.P) ? `${fmt(L.t / L.P, 4)} orbits` : '', 'i-clock', '--s7'],
+    ['R', 'Separation R', fmt(L.R, 6), info.evolving ? 'evolving orbit' : 'fixed orbit', 'i-ruler', '--s1'],
+    ['P', 'Period T', fmt(L.P, 5), `Ω = ${fmt(L.Omega, 4)}`, 'i-repeat', '--s3'],
+    ['Mc', 'Cloud mass M_c', fmt(L.M_c, 5), L.M_c0 ? `${fmt(100 * L.M_c / L.M_c0, 4)}% of initial` : '', 'i-cloud', '--s2'],
+    ['q', 'Mass ratio q', fmt(L.q, 4), `M₁ = ${fmt(L.M_1, 6)}`, 'i-scale', '--s3'],
+    ['rate', 'Ionization rate', fmt(L.total_mass_flux, 3), d.theory ? `theory ${fmt(d.theory.mass, 3)}` : 'q⁻²(M/M_c)Ṁ_c', 'i-trend', '--s8'],
+    ['power', 'Ionization power', fmt(L.total_energy_flux, 3), d.theory ? `theory ${fmt(d.theory.power, 3)}` : 'q⁻²(M/M_c)P_ion', 'i-flame', '--s2'],
+    ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
+  ];
+  const wrap = $('tiles');
+  if (!wrap.children.length) {
+    wrap.innerHTML = tiles.map(([key, k, , , ic, c], n) => `<div class="tile reveal" data-k="${key}" style="--c: var(${c}); transition-delay: ${n * 35}ms"><div class="ic"><svg class="i"><use href="#${ic}"/></svg></div><div class="k">${k}</div><div class="v"></div><div class="s"></div></div>`).join('');
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.querySelectorAll('.reveal').forEach(e => e.classList.add('in'))));
+    setTimeout(() => wrap.querySelectorAll('.tile').forEach(e => (e.style.transitionDelay = '0ms')), 900);
+  }
+  tiles.forEach(([key, , v, s, , , frac]) => {
+    const t = wrap.querySelector(`[data-k="${key}"]`);
+    const ve = t.querySelector('.v');
+    if (ve.textContent !== String(v)) {
+      ve.textContent = v;
+      if (state.prevTiles[key] !== undefined) { ve.classList.remove('bump'); void ve.offsetWidth; ve.classList.add('bump'); }
+      state.prevTiles[key] = v;
+    }
+    t.querySelector('.s').textContent = s;
+    if (frac !== undefined && frac !== null) {
+      let bar = t.querySelector('.bar');
+      if (!bar) { bar = document.createElement('div'); bar.className = 'bar'; bar.innerHTML = '<i></i>'; t.insertBefore(bar, t.querySelector('.s')); }
+      requestAnimationFrame(() => (bar.firstChild.style.width = (100 * frac).toFixed(1) + '%'));
+    }
+  });
+
+  $('runTitle').textContent = info.name;
+  $('runPath').textContent = info.folder;
+  renderSetup(info);
+}
+
+// ---------- Run setup: badges, sidebar summary and the Setup section ----------
+function renderSetup(info) {
+  const su = info.setup; if (!su) return;
+  const sig = info.folder + '\u0000' + su.toml;
+  if (state.setupSig === sig) return;
+  state.setupSig = sig;
+  const icon = (n) => n ? `<svg class="i"><use href="#i-${n}"/></svg>` : '';
+  $('badges').innerHTML = su.badges.map((b, i) => `<span class="badge ${b.tone}" style="animation-delay:${i * 30}ms">${icon(b.icon)}${esc(b.text)}</span>`).join('');
+  $('runinfo').innerHTML = su.summary.map(([a, b]) => `<div><span>${esc(a)}</span><span>${esc(b)}</span></div>`).join('');
+  const row = (r) => {
+    const tip = [r.hint, r.key ? `config: ${r.key}` : ''].filter(Boolean).join(' · ');
+    const cls = r.derived ? 'derived' : r.value === 'on' ? 'v-on' : r.value === 'off' ? 'v-off' : '';
+    return `<div><dt class="${r.derived ? 'derived' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(r.label)}</dt>`
+      + `<dd class="${cls}">${esc(r.value)}${r.unit ? `<span class="u">${esc(r.unit)}</span>` : ''}${r.default ? '<span class="tag" title="not in config.toml: solver default">default</span>' : ''}</dd></div>`;
+  };
+  $('setupGrid').innerHTML = su.groups.map(g => `<div class="group"><h3><span class="ic">${icon(g.icon)}</span>${esc(g.title)}</h3><dl>${g.rows.map(row).join('')}</dl></div>`).join('');
+  // config.toml with comments and [sections] picked out
+  $('toml').innerHTML = esc(su.toml).split('\n').map(l => /^\s*#/.test(l) ? `<span class="c">${l}</span>` : /^\s*\[/.test(l) ? `<span class="s">${l}</span>` : l).join('\n');
+}
+$('tomlToggle').onclick = () => {
+  const pre = $('toml'), open = pre.hidden;
+  pre.hidden = !open; $('tomlToggle').classList.toggle('on', open); $('tomlToggle').setAttribute('aria-expanded', String(open));
+};
+$('tomlCopy').onclick = async () => {
+  const su = state.data && state.data.info.setup; if (!su) return;
+  const b = $('tomlCopy'), label = b.lastChild;
+  try { await navigator.clipboard.writeText(su.toml); label.textContent = 'Copied'; }
+  catch (e) { label.textContent = 'Copy failed'; }
+  setTimeout(() => (label.textContent = 'Copy'), 1400);
+};
+
+function renderStatus() {
+  const d = state.data; if (!d) return;
+  const age = d.info.now - d.info.last_modified;
+  const live = age < 600; // rows reach disk in bursts, at the latest at each snapshot
+  $('status').className = 'status ' + (live ? 'live' : 'stale');
+  const ago = age < 90 ? `${Math.round(age)} s` : age < 5400 ? `${Math.round(age / 60)} min` : `${fmt(age / 3600, 2)} h`;
+  $('statusText').textContent = `${live ? 'Running' : 'Idle'} · updated ${ago} ago`;
+  $('status').title = `Last checked ${new Date().toLocaleTimeString()}`;
+}
+
+let toastTimer = null;
+function showError(msg, title = 'Problem') {
+  const t = $('toast');
+  if (!msg) { t.classList.remove('show'); return; }
+  $('toastTitle').textContent = title; $('toastText').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 8000);
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+async function refresh() {
+  if (!state.run) return;
+  const btn = $('refreshNow'); btn.classList.add('spin');
+  try {
+    const d = await fetchJSON(`/api/data?run=${encodeURIComponent(state.run)}&window=${val('window')}`);
+    state.data = d;
+    if (!d.ready) showError('Waiting for the first diagnostic rows…', 'Starting');
+    renderTiles(); renderStatus(); render();
+    updateSnapshotControls();
+  } catch (e) { showError(e.message, 'Could not read the run'); }
+  setTimeout(() => btn.classList.remove('spin'), 300);
+  restartProgress();
+}
+
+function updateSnapshotControls() {
+  const snaps = (state.data && state.data.info.snapshots) || [];
+  const slider = $('snapStep');
+  slider.max = Math.max(0, snaps.length - 1);
+  if ($('follow').checked) slider.value = slider.max;
+  renderTimeline();
+  const step = snaps[+slider.value];
+  if (step !== undefined) loadSnapshot(step);
+}
+
+// ---- Snapshot timeline: one grey tick per saved snapshot over the computed
+// range, a draggable playhead, step and play controls.
+const tl = { sig: '', lo: 0, hi: 1, playing: false, token: 0, doneIdx: -1 };
+const tlSnaps = () => (state.data && state.data.info.snapshots) || [];
+const tlFrac = (step) => Math.min(1, Math.max(0, (step - tl.lo) / ((tl.hi - tl.lo) || 1)));
+function niceTicks(lo, hi, n) {
+  if (window.d3 && d3.ticks) return d3.ticks(lo, hi, n);
+  const out = []; for (let i = 0; i <= n; i++) out.push(Math.round(lo + (hi - lo) * i / n)); return out;
+}
+const fmtStepK = (v) => v >= 1e6 ? +(v / 1e6).toPrecision(3) + 'M' : v >= 1e4 ? +(v / 1e3).toPrecision(3) + 'k' : String(v);
+function renderTimeline() {
+  const info = state.data && state.data.info, snaps = tlSnaps();
+  const idx = Math.min(+$('snapStep').value, snaps.length - 1), step = snaps[idx];
+  const last = snaps.length ? snaps[snaps.length - 1] : 0;
+  const planned = info && info.num_steps ? +info.num_steps : 0;
+  const lo = snaps.length ? Math.min(0, snaps[0]) : 0, hi = Math.max(last, lo + 1);
+  const width = $('tlTrack').clientWidth || 800;
+  const sig = [snaps.length, snaps[0], last, lo, hi, width].join('|');
+  if (sig !== tl.sig) {
+    tl.sig = sig; tl.lo = lo; tl.hi = hi; tl.doneIdx = -2;
+    // Keep ticks at least ~3 px apart: with more snapshots than that, every k-th is drawn.
+    tl.every = Math.max(1, Math.ceil(snaps.length * 3 / width));
+    $('tlAxis').innerHTML = (snaps.length ? niceTicks(lo, hi, 6) : []).filter(v => v >= lo && v <= hi)
+      .map(v => `<span style="left:${100 * tlFrac(v)}%">${fmtStepK(v)}</span>`).join('');
+  }
+  if (tl.doneIdx !== idx) {   // ticks up to the playhead are drawn darker
+    tl.doneIdx = idx;
+    const k = tl.every || 1;
+    const path = (from, to) => { let d = ''; for (let i = from; i < to; i++) if (i % k === 0 || i === snaps.length - 1) d += `M${(1000 * tlFrac(snaps[i])).toFixed(2)} 9V31`; return d; };
+    $('tlTickDone').setAttribute('d', path(0, idx + 1));
+    $('tlTickPath').setAttribute('d', path(idx + 1, snaps.length));
+  }
+  const head = $('tlHead');
+  head.style.display = step === undefined ? 'none' : '';
+  if (step !== undefined) { head.style.left = 100 * tlFrac(step) + '%'; head.firstChild.textContent = `step ${step}`; }
+  $('snapLabel').textContent = step === undefined ? 'no snapshots yet' : `step ${step}`;
+  if (step === undefined) $('tlMeta').textContent = '';
+  $('tlIdx').textContent = snaps.length ? `${idx + 1} / ${snaps.length}` + (planned > last ? ` · ${Math.round(100 * last / planned)}% computed` : '') : '';
+  const tr = $('tlTrack');
+  tr.setAttribute('aria-valuemax', Math.max(0, snaps.length - 1)); tr.setAttribute('aria-valuenow', Math.max(0, idx));
+  tr.setAttribute('aria-valuetext', step === undefined ? 'no snapshots' : `step ${step}`);
+  $('tlPrev').disabled = !(idx > 0); $('tlNext').disabled = !(idx < snaps.length - 1);
+  $('tlPlay').disabled = snaps.length < 2;
+  const lk = state.lock, ll = $('tlLockLine'), lb = $('tlLock');
+  ll.hidden = !lk; $('tlLockTag').hidden = !lk;
+  if (lk) { ll.style.left = 100 * tlFrac(lk.step) + '%'; $('tlLockTag').textContent = `colours locked to step ${lk.step}`; }
+  lb.classList.toggle('on', !!lk); lb.setAttribute('aria-pressed', !!lk);
+  lb.querySelector('use').setAttribute('href', lk ? '#i-lock' : '#i-unlock');
+  lb.title = lk ? `Colours locked to step ${lk.step}: click to unlock (L)` : 'Lock the slice colours to this snapshot (L)';
+  lb.disabled = !lk && step === undefined;
+}
+// Nearest snapshot index to a fraction of the track.
+function tlNearest(frac) {
+  const snaps = tlSnaps(), target = tl.lo + frac * (tl.hi - tl.lo);
+  let a = 0, b = snaps.length - 1;
+  while (b - a > 1) { const m = (a + b) >> 1; if (snaps[m] < target) a = m; else b = m; }
+  return Math.abs(snaps[a] - target) <= Math.abs(snaps[b] - target) ? a : b;
+}
+function tlSetIdx(i, fromUser = true) {
+  const n = tlSnaps().length;
+  if (!n) return;
+  i = Math.max(0, Math.min(n - 1, i));
+  if (fromUser) { $('follow').checked = false; stopPlay(); }
+  if (+$('snapStep').value === i && !fromUser) return;
+  $('snapStep').value = i; updateSnapshotControls();
+  prefetchSnaps(i - 2, 5);
+}
+function setPlayIcon() {
+  const b = $('tlPlay');
+  b.querySelector('use').setAttribute('href', tl.playing ? '#i-pause' : '#i-play');
+  b.title = tl.playing ? 'Pause (Space)' : 'Play (Space)'; b.setAttribute('aria-label', tl.playing ? 'Pause' : 'Play');
+}
+function stopPlay() { $('timeline').classList.remove('buffering'); if (!tl.playing) return; tl.playing = false; tl.token++; setPlayIcon(); }
+// Playback runs on animation frames at a fixed rate (1× = 4 snapshots/s) and
+// keeps ~24 snapshots prefetched; it only advances to a frame that is already
+// loaded, so a slow connection pauses briefly instead of stuttering.
+const BASE_FPS = 4;
+function togglePlay() {
+  if (tl.playing) { stopPlay(); return; }
+  const snaps = tlSnaps();
+  if (snaps.length < 2) return;
+  $('follow').checked = false;
+  if (+$('snapStep').value >= snaps.length - 1) tlSetIdx(0, false);
+  tl.playing = true; const token = ++tl.token; setPlayIcon();
+  let last = 0;
+  const tick = (now) => {
+    if (!tl.playing || token !== tl.token) return;
+    const list = tlSnaps(), i = +$('snapStep').value;
+    prefetchSnaps(i + 1, 24);
+    if (i + 1 >= list.length) { stopPlay(); return; }
+    const period = 1000 / (BASE_FPS * (+$('tlSpeed').dataset.value || 1));
+    if (now - last >= period && hasSnap(list[i + 1]) && getSnap(list[i + 1]).ready) {
+      last = now - last > 2 * period ? now : last + period;   // even cadence; restart it after a stall
+      $('snapStep').value = i + 1; updateSnapshotControls();
+    }
+    $('timeline').classList.toggle('buffering', now - last > 2 * period + 150);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function toggleLock() {
+  const step = tlSnaps()[+$('snapStep').value];
+  state.lock = state.lock || step === undefined ? null : { step };
+  renderTimeline(); updateSnapshotControls();
+}
+// Muted captions under card, sub-panel and section titles become a popover
+// shown on hovering (or focusing) the title, marked by a small info icon.
+function initInfoTips() {
+  const tip = document.createElement('div'); tip.className = 'infotip'; tip.setAttribute('role', 'tooltip'); tip.id = 'infotip';
+  document.body.appendChild(tip);
+  let timer = null;
+  const show = (title) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      tip.innerHTML = title._caption.innerHTML;
+      tip.classList.remove('above'); tip.style.left = '0px'; tip.style.top = '0px'; tip.classList.add('show');
+      const r = title.getBoundingClientRect(), t = tip.getBoundingClientRect();
+      const left = Math.max(8, Math.min(r.left - 4, innerWidth - t.width - 8));
+      let top = r.bottom + 9;
+      if (top + t.height > innerHeight - 8) { top = r.top - t.height - 9; tip.classList.add('above'); }
+      tip.style.left = left + 'px'; tip.style.top = top + 'px';
+      tip.style.setProperty('--ax', Math.max(8, Math.min(t.width - 18, r.left + 10 - left)) + 'px');
+    }, 120);
+  };
+  const hide = () => { clearTimeout(timer); tip.classList.remove('show'); };
+  const pairs = [
+    ...[...document.querySelectorAll('.card .head p.sub')].map(c => [c.parentElement.querySelector('h3'), c]),
+    ...[...document.querySelectorAll('.subhead p')].map(c => [c.parentElement.querySelector('h4'), c]),
+    ...[...document.querySelectorAll('.sechead > span')].map(c => [c.parentElement.querySelector('h2'), c]),
+  ];
+  pairs.forEach(([title, cap], i) => {
+    if (!title || !cap.textContent.trim()) return;
+    cap.classList.add('caption-src'); cap.id = cap.id || `cap${i}`;
+    title._caption = cap;
+    title.classList.add('has-info'); title.tabIndex = 0; title.setAttribute('aria-describedby', cap.id);
+    title.insertAdjacentHTML('beforeend', '<svg class="i info-i" aria-hidden="true"><use href="#i-info"/></svg>');
+    title.addEventListener('mouseenter', () => show(title)); title.addEventListener('mouseleave', hide);
+    title.addEventListener('focus', () => show(title)); title.addEventListener('blur', hide);
+  });
+  addEventListener('scroll', hide, { passive: true, capture: true });
+}
+function initTimeline() {
+  initSeg('tlSpeed');
+  const tr = $('tlTrack'), hover = $('tlHover');
+  const frac = (e) => { const r = tr.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); };
+  let dragging = false;
+  tr.addEventListener('pointerdown', (e) => {
+    if (!tlSnaps().length || e.button > 0) return;
+    dragging = true; tr.setPointerCapture(e.pointerId); tr.classList.add('dragging'); tr.focus({ preventScroll: true });
+    tlSetIdx(tlNearest(frac(e)));
+  });
+  tr.addEventListener('pointermove', (e) => {
+    const snaps = tlSnaps();
+    if (!snaps.length) return;
+    const i = tlNearest(frac(e));
+    if (dragging) { if (i !== +$('snapStep').value) tlSetIdx(i); return; }
+    hover.classList.add('on'); hover.style.left = 100 * tlFrac(snaps[i]) + '%'; hover.firstChild.textContent = `step ${snaps[i]}`;
+  });
+  const end = () => { dragging = false; tr.classList.remove('dragging'); };
+  tr.addEventListener('pointerup', end); tr.addEventListener('pointercancel', end);
+  tr.addEventListener('pointerleave', () => hover.classList.remove('on'));
+  const keys = (e) => {
+    if (e.target.closest('input, select')) return;
+    const i = +$('snapStep').value;
+    if (e.key === 'ArrowLeft') tlSetIdx(i - 1);
+    else if (e.key === 'ArrowRight') tlSetIdx(i + 1);
+    else if (e.key === 'Home') tlSetIdx(0);
+    else if (e.key === 'End') tlSetIdx(tlSnaps().length - 1);
+    else if (e.key === ' ') togglePlay();
+    else if (e.key === 'l' || e.key === 'L') toggleLock();
+    else return;
+    e.preventDefault();
+  };
+  $('timeline').addEventListener('keydown', keys);
+  $('tlPrev').onclick = () => tlSetIdx(+$('snapStep').value - 1);
+  $('tlNext').onclick = () => tlSetIdx(+$('snapStep').value + 1);
+  $('tlPlay').onclick = togglePlay;
+  $('tlLock').onclick = toggleLock;
+  new ResizeObserver(() => renderTimeline()).observe(tr);
+}
+
+// ---- Snapshot data. Decoded payloads are cached per (run, slice settings,
+// step) so replaying, stepping back and the colour lock reuse them, and
+// playback can prefetch frames ahead of the playhead.
+const snapCache = new Map();   // key -> promise of the decoded snapshot (LRU)
+const SNAP_CACHE_MAX = 90;
+const snapParams = () => [state.run, val('slicePlane'), $('rplot').value, $('grid').value, val('modeSet'), JSON.stringify((state.data && state.data.radiative) || [])].join('|');
+function decodeF32(b64) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Float32Array(u8.buffer);
+}
+function decodeSnap(sn) {
+  const n = sn.n, d = decodeF32(sn.density_f32), m = sn.r.length, rad = decodeF32(sn.radial_f32);
+  sn.density = Array.from({ length: n }, (_, j) => d.subarray(j * n, (j + 1) * n));
+  sn.radial = Array.from({ length: rad.length / m }, (_, i) => Array.from(rad.subarray(i * m, (i + 1) * m), v => (isFinite(v) ? v : null)));
+  delete sn.density_f32; delete sn.radial_f32;
+  return sn;
+}
+const hasSnap = (step) => snapCache.has(snapParams() + '|' + step);
+function getSnap(step) {
+  const key = snapParams() + '|' + step;
+  let p = snapCache.get(key);
+  if (p) { snapCache.delete(key); snapCache.set(key, p); return p; }
+  const rad = encodeURIComponent(JSON.stringify((state.data && state.data.radiative) || []));
+  p = fetchJSON(`/api/snapshot?run=${encodeURIComponent(state.run)}&step=${step}&rplot=${$('rplot').value}&grid=${$('grid').value}&set=${val('modeSet')}&plane=${val('slicePlane')}&radiative=${rad}`).then(decodeSnap);
+  p.ready = false;
+  p.then(() => { p.ready = true; }, () => snapCache.delete(key));
+  snapCache.set(key, p);
+  while (snapCache.size > SNAP_CACHE_MAX) snapCache.delete(snapCache.keys().next().value);
+  return p;
+}
+// Request up to `count` snapshots from index `from` on, at most 6 in flight.
+function prefetchSnaps(from, count) {
+  const snaps = tlSnaps();
+  let inflight = 0;
+  for (const p of snapCache.values()) if (!p.ready) inflight++;
+  for (let i = Math.max(0, from); i < Math.min(snaps.length, from + count) && inflight < 6; i++)
+    if (!hasSnap(snaps[i])) { getSnap(snaps[i]).catch(() => {}); inflight++; }
+}
+// Slice values on the current scale (log10 cached per snapshot) and their range.
+function sliceZ(sn, log) {
+  if (!log) return sn.density;
+  if (!sn.zLog) sn.zLog = sn.density.map(row => row.map(v => (v > 0 ? Math.log10(v) : NaN)));
+  return sn.zLog;
+}
+function sliceRange(sn, log) {
+  const k = log ? 'rLog' : 'rLin';
+  if (!sn[k]) {
+    let lo = Infinity, hi = -Infinity;
+    for (const row of sliceZ(sn, log)) for (let i = 0; i < row.length; i++) { const v = row[i]; if (isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+    sn[k] = isFinite(lo) ? [lo, hi] : null;
+  }
+  return sn[k];
+}
+// Colour lock: the slice colour scale is taken from one snapshot (with the
+// current slice settings) and kept for every other snapshot.
+async function lockDomain() {
+  if (!state.lock) return null;
+  return sliceRange(await getSnap(state.lock.step), val('sliceScale') === 'log');
+}
+
+async function loadSnapshot(step, force = false) {
+  const key = [snapParams(), step, val('sliceScale'), document.documentElement.dataset.theme, state.lock ? state.lock.step : ''].join('|');
+  if (!force && key === state.snapLoaded) return;
+  state.snapWant = key;
+  try {
+    const [sn, dom] = await Promise.all([getSnap(step), lockDomain()]);
+    if (state.snapWant !== key) return;   // a newer request superseded this one
+    state.snapLoaded = key;
+    drawSnapshot(sn, dom);
+  } catch (e) { if (state.snapWant === key) showError(e.message, 'Snapshot'); }
+}
+
+function drawSnapshot(sn, lockRange) {
+  const modes = state.data.info.modes;
+  const tr = modes.map((m, i) => ({ x: sn.r, y: sn.radial[i], name: modeName(m), type: 'scatter', mode: 'lines', line: modeStyle(m), hovertemplate: '%{y:.3e}' }));
+  if (sn.reference) tr.push({ x: sn.r, y: sn.reference, name: sn.reference_label, type: 'scatter', mode: 'lines', line: { color: css('--text-primary'), dash: 'dash', width: 1 } });
+  $('tlMeta').textContent = `t = ${fmt(sn.t, 6)} M · R = ${fmt(sn.R, 5)} M`;
+  draw('pRadial', tr, { xaxis: { title: { text: 'r (M)' } }, yaxis: { title: { text: '|U<sub>LM</sub>|²' }, type: 'log', exponentformat: 'power' }, uirevision: state.run + 'radial' });
+
+  const log = val('sliceScale') === 'log';
+  const q = sn.q, R = sn.R, th = sn.theta;
+  // Binary positions (in the z = 0 plane) projected onto the slice plane.
+  const plane = sn.plane || 'xy', proj = (x, y) => plane === 'xy' ? [x, y] : plane === 'zx' ? [x, 0] : [y, 0];
+  const p1 = proj(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th));
+  const p2 = proj(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI));
+  const [hAx, vAx] = { xy: ['x', 'y'], zx: ['x', 'z'], zy: ['y', 'z'] }[plane];
+  const ramp = ['--h0', '--h1', '--h2', '--h3', '--h4'].map((v, i) => [i / 4, css(v)]);
+  if (!charts.pSlice) charts.pSlice = new D3Charts.HeatmapChart($('pSlice'));
+  charts.pSlice.update({
+    z: sliceZ(sn, log), zDomain: lockRange || null, ramp, extent: [sn.x[0], sn.x[sn.x.length - 1]],
+    xLabel: `${hAx} (M)`, yLabel: `${vAx} (M)`, zLabel: (log ? 'log₁₀|ψ|²' : '|ψ|²') + (lockRange ? ` · locked to step ${state.lock.step}` : ''),
+    markers: [
+      { x: p1[0], y: p1[1], color: css('--s1'), filled: true, name: 'primary' },
+      { x: p2[0], y: p2[1], color: css('--s1'), filled: false, name: 'companion' },
+    ],
+  });
+}
+
+// ---------- Auto-refresh with a progress line ----------
+function restartProgress() {
+  const p = $('progress');
+  const s = +$('refresh').value;
+  p.style.transition = 'none'; p.style.width = '0';
+  if (state.paused || !s) return;
+  void p.offsetWidth;
+  p.style.transition = `width ${s}s linear`; p.style.width = '100%';
+}
+function schedule() {
+  clearInterval(state.timer);
+  const s = +$('refresh').value;
+  if (!state.paused && s > 0) state.timer = setInterval(refresh, s * 1000);
+  restartProgress();
+}
+
+// ---------- Section nav and reveal-on-scroll ----------
+// Overview (tiles) and Setup share the top of the page as tabs; the Setup
+// link in the sidebar opens that tab and scrolls to the top.
+function setTopTab(tab, scroll = false) {
+  state.topTab = tab;
+  const setup = tab === 'setup';
+  $('tabOverview').setAttribute('aria-selected', String(!setup)); $('tabSetup').setAttribute('aria-selected', String(setup));
+  $('tiles').hidden = setup; $('setup').hidden = !setup;
+  $('setupActions').hidden = !setup; $('setupHint').hidden = !setup;
+  if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('#nav a').forEach(a => {
+    const h = a.getAttribute('href');
+    if (h === '#overview' || h === '#setup') a.classList.toggle('active', window.scrollY < 120 && h === '#' + tab);
+  });
+}
+function initNav() {
+  state.topTab = 'overview';
+  $('tabOverview').onclick = () => setTopTab('overview');
+  $('tabSetup').onclick = () => setTopTab('setup');
+  document.querySelector('.toptabs').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const next = state.topTab === 'setup' ? 'overview' : 'setup';
+    setTopTab(next); $(next === 'setup' ? 'tabSetup' : 'tabOverview').focus();
+  });
+  document.querySelectorAll('#nav a[href="#overview"], #nav a[href="#setup"]').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault(); setTopTab(a.getAttribute('href').slice(1), true);
+  }));
+  const links = [...document.querySelectorAll('#nav a')];
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const id = e.target.id === 'overview' ? state.topTab : e.target.id;
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  ['overview', 'ionization', 'orbit', 'modes', 'snapshot'].forEach(id => obs.observe($(id)));
+  // The overview is short, so it owns the top of the page explicitly.
+  const top = () => { if (window.scrollY < 120) links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + state.topTab)); };
+  window.addEventListener('scroll', top, { passive: true }); setTimeout(top, 50);
+  const rev = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); rev.unobserve(e.target); } }), { rootMargin: '0px 0px -5% 0px' });
+  document.querySelectorAll('.card.reveal').forEach(c => rev.observe(c));
+}
+
+// ---------- Expand a chart into a modal ----------
+let expanded = null;
+function openModal(id) {
+  const el = $(id); const card = el.closest('.card');
+  expanded = { el, parent: el.parentElement, next: el.nextSibling };
+  $('modalTitle').textContent = card.querySelector('h3').textContent;
+  $('modalSlot').appendChild(el);
+  $('modal').classList.add('open');
+}
+function closeModal() {
+  if (!expanded) return;
+  const { el, parent, next } = expanded; expanded = null;
+  $('modal').classList.remove('open');
+  parent.insertBefore(el, next);
+}
+
+function setThemeIcon() {
+  const dark = (document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark';
+  $('theme').querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+}
+
+// Run picker: runs grouped by their task folder (relative to the watched
+// folder), groups ordered by their newest run.
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// The native <select id="run"> stays the source of truth (hidden); the
+// styled picker below mirrors it and dispatches 'change' on it.
+const rp = { runs: [], open: false, active: -1, items: [], checked: new Set() };
+// Key parameters of a run (from its config.toml) as a row under its name.
+const pnum = (v) => String(+(+v).toPrecision(4));
+function runParams(p) {
+  if (!p || p.q === undefined) return '';
+  const kv = (k, v, u = '') => `<span class="kv"><span class="k">${k}</span><span class="v">${pnum(v)}${u ? `<span class="u">${u}</span>` : ''}</span></span>`;
+  return `<span class="params">${kv('q', p.q)}${kv('μ', p.mu)}${kv('M<sub>c</sub>', p.M_c)}${kv('R<sub>0</sub>', p.R0, 'M')}
+    <span class="flags"><span class="fl${p.counter ? ' ctr' : ''}">${p.counter ? 'counter' : 'co'}</span>${p.absorption ? '<span class="fl">abs</span>' : ''}${p.evolving ? '' : '<span class="fl">fixed</span>'}</span></span>`;
+}
+function fillRuns(runs) {
+  const groups = new Map();
+  runs.forEach(r => { const g = r.group || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
+  const opts = (list) => list.map(r => `<option value="${esc(r.folder)}" title="${esc(r.folder)}">${esc(r.name)}</option>`).join('');
+  const html = groups.size === 1 && groups.has('') ? opts(runs)
+    : [...groups].map(([g, list]) => g ? `<optgroup label="${esc(g)}">${opts(list)}</optgroup>` : opts(list)).join('');
+  const sel = $('run');
+  if (sel.dataset.sig === html) return;
+  sel.innerHTML = html; sel.dataset.sig = html;
+  if (state.run) sel.value = state.run;
+  rp.runs = runs;
+  rp.checked = new Set([...rp.checked].filter(f => runs.some(r => r.folder === f)));
+  updatePickerFoot();
+  $('rpSearch').hidden = runs.length < 6;
+  syncPicker();
+  if (rp.open) { const top = $('rpList').scrollTop; renderPicker(); $('rpList').scrollTop = top; }  // a background refresh keeps the scroll position
+}
+function syncPicker() {
+  const r = rp.runs.find(x => x.folder === $('run').value);
+  $('rpGroup').textContent = r ? r.group || '' : '';
+  $('rpName').textContent = r ? r.name : '—';
+  $('rpBtn').title = r ? r.folder : '';
+}
+function groupBox(list) {
+  const n = list.filter(r => rp.checked.has(r.folder)).length;
+  return `<span class="cb" role="checkbox" aria-checked="${n === 0 ? 'false' : n === list.length ? 'true' : 'mixed'}" aria-label="Select the whole folder"><svg class="i"><use href="#i-check"/></svg></span>`;
+}
+function toggleChecked(folders, on) {
+  folders.forEach(f => on ? rp.checked.add(f) : rp.checked.delete(f));
+  const top = $('rpList').scrollTop, act = rp.active;
+  renderPicker(); $('rpList').scrollTop = top; setActive(act, 'none');
+  updatePickerFoot();
+}
+function updatePickerFoot() {
+  const n = rp.checked.size;
+  $('rpHint').innerHTML = n ? `<b>${n}</b> selected` : 'Tick simulations to download several at once';
+  $('rpClear').hidden = !n;
+  $('rpDl').disabled = !n;
+  if (!$('rpDl').classList.contains('busy')) $('rpDlTxt').textContent = n ? `Download ${n} as zip` : 'Download';
+}
+function renderPicker() {
+  const q = $('rpFilter').value.trim().toLowerCase();
+  const runs = rp.runs.filter(r => !q || `${r.group}/${r.name}`.toLowerCase().includes(q));
+  const groups = new Map();
+  runs.forEach(r => { const g = r.group || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
+  const cur = $('run').value, newest = rp.runs.length > 1 ? rp.runs[0].folder : null;
+  const opt = (r) => {
+    const on = rp.checked.has(r.folder);
+    return `<div class="rp-opt${on ? ' checked' : ''}" role="option" data-v="${esc(r.folder)}" aria-selected="${r.folder === cur}" title="${esc(r.folder)}">
+      <span class="cb" role="checkbox" aria-checked="${on}" aria-label="Select for download"><svg class="i"><use href="#i-check"/></svg></span>
+      <span class="nm">${esc(r.name)}</span>
+      ${runParams(r.params)}
+      <span class="end">${r.folder === newest ? '<span class="tag">Newest</span>' : ''}<svg class="i ck"><use href="#i-check"/></svg></span></div>`;
+  };
+  const showHeads = !(groups.size === 1 && groups.has(''));
+  $('rpList').innerHTML = runs.length ? [...groups].map(([g, list]) =>
+    (showHeads ? `<div class="rp-gh" data-g="${esc(g)}">${groupBox(list)}<svg class="i"><use href="#i-folder"/></svg>${esc(g || 'Top level')}<span class="n">${list.length}</span></div>` : '') + list.map(opt).join('')
+  ).join('') : '<div class="rp-empty">No simulations match.</div>';
+  $('rpCount').textContent = q ? `${runs.length}/${rp.runs.length}` : rp.runs.length;
+  rp.items = [...$('rpList').querySelectorAll('.rp-opt')];
+  setActive(Math.max(0, rp.items.findIndex(e => e.dataset.v === cur)), 'center');
+}
+// scroll: 'nearest' (keyboard), 'center' (on open) or 'none' (mouse hover).
+function setActive(i, scroll = 'nearest') {
+  rp.items.forEach(e => e.classList.remove('active'));
+  rp.active = rp.items.length ? (i + rp.items.length) % rp.items.length : -1;
+  const el = rp.items[rp.active];
+  if (!el) return;
+  el.classList.add('active');
+  if (scroll === 'nearest') el.scrollIntoView({ block: 'nearest' });
+  else if (scroll === 'center') { const l = $('rpList'); l.scrollTop = Math.max(0, el.offsetTop - l.clientHeight / 2); }
+}
+function openPicker() {
+  if (rp.open) return;
+  rp.open = true; $('rpFilter').value = '';
+  $('rpPop').hidden = false; $('rpBtn').setAttribute('aria-expanded', 'true');
+  renderPicker();
+  (!$('rpSearch').hidden ? $('rpFilter') : $('rpList')).focus({ preventScroll: true });
+}
+function closePicker(focusBtn = true) {
+  if (!rp.open) return;
+  rp.open = false; $('rpPop').hidden = true; $('rpBtn').setAttribute('aria-expanded', 'false');
+  if (focusBtn) $('rpBtn').focus({ preventScroll: true });
+}
+function pickRun(v) {
+  closePicker();
+  const sel = $('run');
+  if (!v || v === sel.value) return;
+  sel.value = v; syncPicker();
+  sel.dispatchEvent(new Event('change'));
+}
+function initPicker() {
+  $('rpList').tabIndex = -1;
+  $('rpBtn').onclick = () => rp.open ? closePicker() : openPicker();
+  $('rpBtn').addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openPicker(); } });
+  $('rpFilter').oninput = renderPicker;
+  $('rpList').addEventListener('mousemove', (e) => { const o = e.target.closest('.rp-opt'); if (o && !o.classList.contains('active')) setActive(rp.items.indexOf(o), 'none'); });
+  $('rpList').addEventListener('click', (e) => {
+    const cb = e.target.closest('.cb'), gh = e.target.closest('.rp-gh'), o = e.target.closest('.rp-opt');
+    if (cb && o) toggleChecked([o.dataset.v], !rp.checked.has(o.dataset.v));
+    else if (gh) {   // the folder header ticks or clears every (visible) run in it
+      const list = rp.items.filter(e => (rp.runs.find(r => r.folder === e.dataset.v) || {}).group === gh.dataset.g).map(e => e.dataset.v);
+      toggleChecked(list, !list.every(f => rp.checked.has(f)));
+    } else if (o) pickRun(o.dataset.v);
+  });
+  $('rpClear').onclick = () => toggleChecked([...rp.checked], false);
+  $('rpDl').onclick = downloadSelected;
+  $('rpPop').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(rp.active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(rp.active - 1); }
+    else if (e.key === 'Home' && e.target !== $('rpFilter')) { e.preventDefault(); setActive(0); }
+    else if (e.key === 'End' && e.target !== $('rpFilter')) { e.preventDefault(); setActive(-1); }
+    else if (e.key === ' ' && e.target !== $('rpFilter')) { e.preventDefault(); const o = rp.items[rp.active]; if (o) toggleChecked([o.dataset.v], !rp.checked.has(o.dataset.v)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = rp.items[rp.active]; if (o) pickRun(o.dataset.v); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+    else if (e.key === 'Tab') closePicker(false);
+  });
+  document.addEventListener('pointerdown', (e) => { if (rp.open && !$('runpick').contains(e.target)) closePicker(false); });
+}
+// New runs (a freshly submitted task, say) show up without reloading the page.
+async function pollRuns() {
+  try { fillRuns(await fetchJSON('/api/runs')); } catch (e) { /* keep the current list */ }
+}
+
+async function init() {
+  initSeg('xaxis', render);
+  initSeg('modeSet', updateSnapshotControls);
+  initSeg('sliceScale', updateSnapshotControls);
+  initSeg('slicePlane', updateSnapshotControls);
+  initTimeline();
+  initInfoTips();
+  initNav(); setThemeIcon(); initPicker();
+  try { await window.chartsReady; } catch (e) { showError(e.message, 'Charts unavailable'); return; }
+  try {
+    const runs = await fetchJSON('/api/runs');
+    if (!runs.length) { showError('No simulation folders found.', 'Nothing to show'); return; }
+    state.run = runs[0].folder;
+    fillRuns(runs);
+    setInterval(pollRuns, 30000);
+  } catch (e) { showError(e.message); return; }
+  await refresh();
+  if (state.data && state.data.ready) {
+    $('xaxis').setValue(state.data.info.evolving ? 't' : 'tP');
+    const R = state.data.latest.R || 50;
+    $('rplot').value = Math.round(Math.min(2.5 * R, 16 / (state.data.info.mu ** 2)) / 10) * 10 || 200;
+    render(); state.snapLoaded = null; updateSnapshotControls();
+  }
+  schedule();
+}
+
+// Diagnostics zip: the run's top-level files (no checkpoint.bin) plus the
+// psi snapshot currently on screen. Fetched as a blob so the button can show progress.
+// Fetch a zip as a blob (so a button can show progress) and save it.
+async function fetchZip(url, init, onProgress) {
+  const res = await fetch(url, init);
+  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error || m; } catch (e) {} throw new Error(m); }
+  const total = +res.headers.get('Content-Length') || 0, parts = [];
+  let got = 0;
+  for (const reader = res.body.getReader(); ;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    if (total) onProgress(Math.floor(100 * got / total));
+  }
+  const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || 'diagnostics.zip';
+  const href = URL.createObjectURL(new Blob(parts, { type: 'application/zip' }));
+  const a = Object.assign(document.createElement('a'), { href, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+}
+const shownStep = () => ((state.data && state.data.info.snapshots) || [])[+$('snapStep').value];
+// Diagnostics zip of the run on screen: its top-level files (no checkpoint.bin)
+// plus the psi snapshot currently shown.
+async function downloadDiagnostics() {
+  const btn = $('download');
+  if (!state.run || btn.classList.contains('busy')) return;
+  const step = shownStep();
+  btn.classList.add('busy'); $('dlPct').textContent = '';
+  try {
+    await fetchZip(`/api/download?run=${encodeURIComponent(state.run)}&step=${step === undefined ? '' : step}`, {}, (p) => { $('dlPct').textContent = p + '%'; });
+  } catch (e) { showError(e.message, 'Download failed'); }
+  btn.classList.remove('busy'); $('dlPct').textContent = '';
+}
+// One zip of the runs ticked in the picker, each in a folder named by q, R0,
+// M_c and co/counter. The run on screen brings the snapshot shown; the others
+// their latest snapshot.
+async function downloadSelected() {
+  const btn = $('rpDl');
+  if (!rp.checked.size || btn.classList.contains('busy')) return;
+  const order = rp.runs.map(r => r.folder).filter(f => rp.checked.has(f));
+  const runs = order.map(f => ({ run: f, step: f === state.run && shownStep() !== undefined ? shownStep() : null }));
+  btn.classList.add('busy'); $('rpDlTxt').textContent = 'Packing…';
+  try {
+    await fetchZip('/api/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runs }) },
+      (p) => { $('rpDlTxt').textContent = `Downloading ${p}%`; });
+  } catch (e) { showError(e.message, 'Download failed'); }
+  btn.classList.remove('busy'); updatePickerFoot();
+}
+$('download').onclick = downloadDiagnostics;
+$('run').onchange = () => { stopPlay(); state.lock = null; state.run = $('run').value; state.snapLoaded = null; state.prevTiles = {}; $('tiles').innerHTML = ''; refresh(); };
+$('window').onchange = refresh;
+$('refresh').onchange = schedule;
+$('refreshNow').onclick = () => { refresh(); schedule(); };
+$('pause').onclick = () => {
+  state.paused = !state.paused;
+  $('pause').querySelector('use').setAttribute('href', state.paused ? '#i-play' : '#i-pause');
+  $('pause').title = state.paused ? 'Resume auto-refresh' : 'Pause auto-refresh';
+  schedule();
+};
+$('follow').onchange = () => { if ($('follow').checked) stopPlay(); updateSnapshotControls(); };
+['rplot', 'grid'].forEach(id => $(id).onchange = () => updateSnapshotControls());
+document.querySelectorAll('[data-log]').forEach(b => b.onclick = () => { const k = b.dataset.log; state.logs[k] = !state.logs[k]; b.classList.toggle('on', state.logs[k]); render(); });
+document.querySelectorAll('[data-expand]').forEach(b => b.onclick = () => openModal(b.dataset.expand));
+$('modalClose').onclick = closeModal;
+$('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+$('toast').onclick = () => showError(null);
+$('theme').onclick = () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+  setThemeIcon();
+  render(); state.snapLoaded = null; updateSnapshotControls();
+};
+init();
+</script>
+</body>
+</html>
