@@ -2,7 +2,7 @@
  * @file isolated_bh_main.cpp
  * @brief Command-line driver for one stationary black hole with a displaced 1s cloud.
  *
- * Run @c IsolatedBH --help for the options; see ISOLATED_BH.md.
+ * Run @c IsolatedBH --help for the options.
  */
 #include "CrankNicolsonModes.hpp"
 #include "InitialData.hpp"

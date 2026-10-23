@@ -76,7 +76,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 This produces `build/GravitationalMolecule` (binary simulations) and
-`build/IsolatedBH` (a single black hole, see [ISOLATED_BH.md](ISOLATED_BH.md)).
+`build/IsolatedBH` (a single black hole; run it with `--help` for its options).
 On macOS, CMake looks for `libomp` in the standard Homebrew locations; pass
 `-DLIBOMP_ROOT=/path/to/libomp` for another installation.
 
@@ -233,6 +233,10 @@ The C++ classes and functions are documented with Doxygen:
 cmake --build build --target docs   # or: doxygen docs/Doxyfile
 open docs/html/index.html
 ```
+
+They are rebuilt and published at
+<https://rdellamonica.github.io/boson-cloud-binary/> on every push to `main`
+by [`.github/workflows/docs.yml`](.github/workflows/docs.yml).
 
 ## Dashboard
 
