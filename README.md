@@ -264,7 +264,9 @@ python dashboard/live_dashboard.py path/to/runs [--port 8050] [--depth 4]
 
 The dashboard finds every run folder below the given path and serves a page at
 `http://127.0.0.1:8050` with the orbit, fluxes, energies, norms and binary power,
-a snapshot viewer for the radial profiles and the equatorial density, and
-downloads of the data. It re-reads the files as they grow, so it can follow
-runs in progress. Its fonts and d3 are bundled in `dashboard/assets` with their
-licences.
+a snapshot viewer for the radial profiles and density slices (with a choice of
+colormaps), and downloads of the data. Every plot can be saved as SVG or PDF
+from the download button in its corner. It re-reads the files as they grow, so
+it can follow runs in progress, and it remembers its settings (theme, axes,
+slice options, colormap, last run) in a browser cookie. Its fonts, d3, jsPDF
+and svg2pdf.js are bundled in `dashboard/assets` with their licences.

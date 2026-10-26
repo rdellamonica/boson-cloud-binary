@@ -13,6 +13,7 @@ IsolatedBH_*/
 *.bin
 
 # Analysis, plots, notebooks, cluster scripts and audits
+runs/
 visualization/
 diagnostics/
 slurm/

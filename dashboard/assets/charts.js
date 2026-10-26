@@ -69,6 +69,135 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Export: every chart can be saved as SVG or PDF, as it looks on screen
+  // (theme colours, zoom, hidden series). Curves drawn on the canvas are
+  // rebuilt as SVG paths; the heatmap is embedded as an image.
+  // ---------------------------------------------------------------------------
+  const NS = 'http://www.w3.org/2000/svg';
+  const EXPORT_FONT = "Inter, 'DejaVu Sans', Helvetica, Arial, sans-serif";
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const xmlEsc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const plain = (v) => String(v == null ? '' : v).replace(/<[^>]+>/g, '');
+  let measureCtx = null;
+  const textWidth = (str, size = 11, weight = 400) => {
+    measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+    measureCtx.font = `${weight} ${size}px ${EXPORT_FONT}`;
+    return measureCtx.measureText(plain(str)).width;
+  };
+  // Clone a live SVG layer with the styles the stylesheet gives it written
+  // inline (fonts, fills, strokes), em units resolved, interaction layers dropped.
+  function cloneLayer(svg) {
+    const g = document.createElementNS(NS, 'g');
+    const src = [...svg.childNodes].filter((n) => n.nodeType === 1 && !/(^| )(overlay|brush|hover)( |$)/.test(n.getAttribute('class') || ''));
+    for (const n of src) {
+      const c = n.cloneNode(true);
+      const a = [n, ...n.querySelectorAll('*')], b = [c, ...c.querySelectorAll('*')];
+      a.forEach((el, i) => {
+        const t = b[i], cs = getComputedStyle(el), tag = el.tagName.toLowerCase();
+        if (tag === 'text') {
+          t.setAttribute('font-size', cs.fontSize); t.setAttribute('font-weight', +cs.fontWeight >= 600 ? 'bold' : 'normal');
+          if (!t.getAttribute('fill')) t.setAttribute('fill', cs.fill);
+          const dy = el.getAttribute('dy');
+          if (dy && dy.endsWith('em')) t.setAttribute('dy', r2(parseFloat(dy) * parseFloat(cs.fontSize)) + '');
+        } else if (tag === 'tspan') {
+          const px = parseFloat(cs.fontSize);
+          if (el.getAttribute('font-size')) t.setAttribute('font-size', px + 'px');
+          const dy = el.getAttribute('dy');
+          if (dy && dy.endsWith('em')) t.setAttribute('dy', r2(parseFloat(dy) * parseFloat(getComputedStyle(el.parentNode).fontSize)) + '');
+        } else if (tag === 'line' || tag === 'path') {
+          if (!t.getAttribute('stroke') && cs.stroke !== 'none') t.setAttribute('stroke', cs.stroke);
+          if (!t.getAttribute('fill')) t.setAttribute('fill', cs.fill === 'rgb(0, 0, 0)' && tag === 'path' ? 'none' : cs.fill);
+        }
+        t.removeAttribute('class');
+        if (t.getAttribute('font-family') === 'sans-serif') t.removeAttribute('font-family');   // d3's axis default
+      });
+      g.appendChild(c);
+    }
+    return new XMLSerializer().serializeToString(g).replace(/ xmlns="[^"]*"/g, '');
+  }
+  function svgDoc(w, h, body) {
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${NS}" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r2(w)}" height="${r2(h)}" viewBox="0 0 ${r2(w)} ${r2(h)}" font-family="${xmlEsc(EXPORT_FONT)}">` +
+      `<rect width="${r2(w)}" height="${r2(h)}" fill="${cssVar('--surface-1') || '#fff'}"/>${body}</svg>`;
+  }
+  function save(blob, name) {
+    const href = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 10000);
+  }
+  // jsPDF, svg2pdf.js and the DejaVu Sans subsets (which carry ψ, μ, ², ₁₀, …)
+  // load the first time a PDF is asked for.
+  let pdfReady = null;
+  function loadPdf() {
+    if (pdfReady) return pdfReady;
+    const script = (src) => new Promise((ok, ko) => {
+      const el = document.createElement('script'); el.src = src; el.onload = ok;
+      el.onerror = () => ko(new Error(src + ' could not be loaded'));
+      document.head.appendChild(el);
+    });
+    const font = (f) => fetch('/assets/' + f).then((r) => { if (!r.ok) throw new Error(f + ' not found'); return r.arrayBuffer(); })
+      .then((buf) => { let s = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); });
+    // svg2pdf measures text in the browser: give it the same font the PDF embeds.
+    const face = document.createElement('style');
+    face.textContent = [['', 'normal', 'normal'], ['-bold', 'bold', 'normal'], ['-oblique', 'normal', 'italic']]
+      .map(([f, wt, st]) => `@font-face { font-family: 'DejaVuSans'; font-weight: ${wt}; font-style: ${st}; src: url('/assets/dejavu-sans${f}-subset.ttf') format('truetype'); }`).join('\n');
+    document.head.appendChild(face);
+    const faces = () => Promise.all(['normal 11px', 'bold 11px', 'italic 11px'].map((f) => document.fonts.load(f + ' DejaVuSans')));
+    pdfReady = script('/assets/jspdf.umd.min.js').then(() => script('/assets/svg2pdf.umd.min.js'))
+      .then(() => Promise.all(['dejavu-sans-subset.ttf', 'dejavu-sans-bold-subset.ttf', 'dejavu-sans-oblique-subset.ttf'].map(font)))
+      .then(async (f) => { await faces(); return f; })
+      .catch((e) => { pdfReady = null; throw e; });
+    return pdfReady;
+  }
+  async function savePdf(svgText, w, h, name) {
+    const fonts = await loadPdf();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: w > h ? 'landscape' : 'portrait', unit: 'pt', format: [w, h], compress: true });
+    [['normal', 0], ['bold', 1], ['italic', 2], ['bolditalic', 2]].forEach(([style, i]) => {
+      const f = `DejaVuSans-${style}.ttf`;
+      doc.addFileToVFS(f, fonts[i]); doc.addFont(f, 'DejaVuSans', style);
+    });
+    doc.setFont('DejaVuSans', 'normal');
+    const el = new DOMParser().parseFromString(svgText.replace(/font-family="[^"]*"/g, 'font-family="DejaVuSans"'), 'image/svg+xml').documentElement;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;visibility:hidden';
+    host.appendChild(el); document.body.appendChild(host);
+    try { await doc.svg(el, { x: 0, y: 0, width: w, height: h }); } finally { host.remove(); }
+    save(doc.output('blob'), name + '.pdf');
+  }
+  async function exportChart(chart, fmt) {
+    const { svg, w, h } = chart.toSVG();
+    const base = (D3Charts.exportName && D3Charts.exportName(chart.el)) || 'plot';
+    if (fmt === 'svg') save(new Blob([svg], { type: 'image/svg+xml' }), base + '.svg');
+    else await savePdf(svg, w, h, base);
+  }
+  // A download button in the chart's tool strip, with an SVG / PDF menu.
+  function addExport(tools, chart) {
+    const wrap = tools.append('div').attr('class', 'd3export');
+    const btn = wrap.append('button').attr('class', 'mode').attr('type', 'button').attr('title', 'Download as SVG or PDF').attr('aria-label', 'Download plot')
+      .attr('aria-haspopup', 'menu').attr('aria-expanded', 'false')
+      .html('<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>');
+    const menu = wrap.append('div').attr('class', 'd3menu').attr('role', 'menu').attr('hidden', '');
+    const close = () => { menu.attr('hidden', ''); btn.attr('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
+    const outside = (ev) => { if (!wrap.node().contains(ev.target)) close(); };
+    btn.on('click', () => {
+      if (menu.attr('hidden') === null) { close(); return; }
+      menu.attr('hidden', null); btn.attr('aria-expanded', 'true');
+      document.addEventListener('pointerdown', outside, true);
+    });
+    menu.selectAll('button').data([['svg', 'SVG', 'vector, editable'], ['pdf', 'PDF', 'vector, for papers']]).join('button')
+      .attr('type', 'button').attr('role', 'menuitem')
+      .html((d) => `<b>${d[1]}</b><span>${d[2]}</span>`)
+      .on('click', async (ev, d) => {
+        close(); wrap.classed('busy', true);
+        try { await exportChart(chart, d[0]); }
+        catch (e) { (D3Charts.onError || console.error)(e); }
+        wrap.classed('busy', false);
+      });
+    wrap.on('keydown', (ev) => { if (ev.key === 'Escape') { close(); btn.node().focus(); } });
+  }
+
+  // ---------------------------------------------------------------------------
   // Line chart
   // ---------------------------------------------------------------------------
   class LineChart {
@@ -118,6 +247,7 @@
           this.modeBtns.classed('on', (k) => k === d);
           this.overlay.classed('panmode', d === 'pan');
         });
+      addExport(tools, this);
       this.legend = this.opts.legend ? d3.select(el).append('div').attr('class', 'd3legend') : null;
 
       this._bindPointer();
@@ -350,6 +480,88 @@
       this.legend.selectAll('button.lhead').classed('off', (list) => list.every((s) => this.hidden.has(s.name)));
     }
 
+    // -- export ---------------------------------------------------------------------
+    // The plot as a standalone SVG: grid, curves as paths (points closer than
+    // a third of a pixel are merged), axes, and the legend of the visible
+    // series to the right, one column per l when the modes are grouped.
+    toSVG() {
+      const { w, h } = this, m = this.margin;
+      const pw = w - m.left - m.right, ph = h - m.top - m.bottom;
+      const id = 'c' + Math.random().toString(36).slice(2);
+      let body = cloneLayer(this.bg.node());
+      body += `<defs><clipPath id="${id}"><rect x="${r2(m.left)}" y="${r2(m.top)}" width="${r2(pw)}" height="${r2(ph)}"/></clipPath></defs><g clip-path="url(#${id})" fill="none" stroke-linejoin="round" stroke-linecap="round">`;
+      for (const { s, px, py } of this.proj) {
+        let d = '', pen = false, lx = 0, ly = 0;
+        for (let i = 0; i < px.length; i++) {
+          const X = px[i], Y = py[i];
+          if (X !== X) { pen = false; continue; }
+          const last = i === px.length - 1 || px[i + 1] !== px[i + 1];
+          if (!pen) { d += `M${r2(X)} ${r2(Y)}`; pen = true; lx = X; ly = Y; }
+          else if (last || Math.abs(X - lx) > 0.33 || Math.abs(Y - ly) > 0.33) { d += `L${r2(X)} ${r2(Y)}`; lx = X; ly = Y; }
+        }
+        if (!d) continue;
+        const dash = (DASH[s.dash || 'solid'] || []).join(' ');
+        body += `<path d="${d}" stroke="${s.color}" stroke-width="${s.width || 1.4}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+      }
+      body += '</g>' + cloneLayer(this.svg.node());
+      const leg = this._legendSVG(w + 4, m.top, ph);
+      return { svg: svgDoc(w + leg.width, h, body + leg.body), w: w + leg.width, h };
+    }
+
+    _legendSVG(x0, y0, maxH) {
+      if (!this.legend) return { body: '', width: 0 };
+      const items = (this.spec.series || []).filter((s) => s.legend !== false && !this.hidden.has(s.name) && s.y && s.y.length);
+      if (!items.length) return { body: '', width: 0 };
+      const lm = (s) => { const k = /^\((-?\d+),\s*(-?\d+)\)$/.exec(plain(s.name)); return k ? [+k[1], +k[2]] : null; };
+      const grouped = (this.spec.series || []).filter((s) => s.legend !== false && lm(s)).length >= 8;
+      const ink = cssVar('--text-secondary');
+      const ROW = 14, rows = Math.max(3, Math.floor(maxH / ROW));
+      // Columns of {head, entries}; a long group continues in the next column.
+      const cols = [];
+      const push = (head, list, label) => {
+        for (let i = 0; i < list.length; i += rows - (head ? 1 : 0)) {
+          const part = list.slice(i, i + rows - (head ? 1 : 0));
+          cols.push({ head: i === 0 ? head : head && '', entries: part.map((s) => ({ s, label: label(s) })) });
+        }
+      };
+      if (grouped) {
+        const groups = new Map();
+        items.forEach((s) => { const k = lm(s); const key = k ? k[0] : 'other'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(s); });
+        [...groups.keys()].sort((a, b) => (a === 'other' ? -1 : b === 'other' ? 1 : a - b)).forEach((key) =>
+          push(key === 'other' ? '' : { l: key }, groups.get(key), (s) => { const k = lm(s); return k ? { m: k[1] } : { text: s.name }; }));
+      } else push('', items, (s) => ({ text: s.name }));
+      let body = '', x = x0 + 8;
+      for (const col of cols) {
+        let y = y0 + 10, cw = 0;
+        if (col.head !== '') {
+          if (col.head) body += `<text x="${r2(x)}" y="${r2(y)}" font-size="11px" font-weight="bold" fill="${ink}"><tspan font-style="italic">l</tspan>\u00a0=\u00a0${col.head.l}</text>`;
+          cw = Math.max(cw, textWidth('l = ' + (col.head ? col.head.l : ''), 11, 600));
+          y += ROW;
+        }
+        for (const { s, label } of col.entries) {
+          const dash = (DASH[s.dash || 'solid'] || []).join(' ');
+          body += `<line x1="${r2(x)}" x2="${r2(x + 18)}" y1="${r2(y - 4)}" y2="${r2(y - 4)}" stroke="${s.color}" stroke-width="${Math.max(1.6, s.width || 1.4)}" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+          const tx = x + 24;
+          if (label.m !== undefined) {
+            body += `<text x="${r2(tx)}" y="${r2(y)}" font-size="11px" fill="${ink}"><tspan font-style="italic">m</tspan>\u00a0=\u00a0${label.m < 0 ? '−' + -label.m : label.m}</text>`;
+            cw = Math.max(cw, 24 + textWidth('m = −0', 11));
+          } else {
+            const t = document.createElementNS(NS, 'text');
+            rich(d3.select(t), label.text);
+            t.querySelectorAll('tspan').forEach((ts) => {
+              if (ts.getAttribute('font-size')) ts.setAttribute('font-size', '8.25px');
+              const dy = ts.getAttribute('dy'); if (dy) ts.setAttribute('dy', r2(parseFloat(dy) * 11) + '');
+            });
+            body += `<text x="${r2(tx)}" y="${r2(y)}" font-size="11px" fill="${ink}">${t.innerHTML.replace(/ xmlns="[^"]*"/g, '')}</text>`;
+            cw = Math.max(cw, 24 + textWidth(label.text, 11));
+          }
+          y += ROW;
+        }
+        x += cw + 16;
+      }
+      return { body, width: x - x0 + 4 };
+    }
+
     // -- pointer: hover tooltip and brush zoom -------------------------------------
     resetZoom() {
       if (!this.view && !this.yView) return;
@@ -520,6 +732,7 @@
       this.gMarks = this.svg.append('g');
       this.overlay = this.svg.append('rect').attr('class', 'overlay');
       this.tip = this.area.append('div').attr('class', 'd3tip');
+      addExport(this.area.append('div').attr('class', 'd3tools'), this);
       this.gradId = 'g' + Math.random().toString(36).slice(2);
       this._ro = new ResizeObserver(() => this.draw());
       this._ro.observe(el);
@@ -601,8 +814,10 @@
       this.gBar.selectAll('g.ax').data([0]).join('g').attr('class', 'ax').attr('transform', `translate(${bx + 10},0)`)
         .call(d3.axisRight(bar).ticks(5).tickFormat((v) => fmtNum(v, 2)).tickSize(3));
       richAll(this.svg.selectAll('.tick text'));
+      // The bar's label sits clear of its widest tick label.
+      const lx = Math.max(w - 6, bx + 10 + Math.ceil(this.gBar.select('g.ax').node().getBBox().width) + 16);
       this.gBar.selectAll('text.lbl').data([0]).join('text').attr('class', 'lbl axis-title')
-        .attr('transform', `translate(${w - 6},${oy + side / 2}) rotate(-90)`).attr('text-anchor', 'middle').attr('fill', ink).call((t) => rich(t, sp.zLabel || ''));
+        .attr('transform', `translate(${lx},${oy + side / 2}) rotate(-90)`).attr('text-anchor', 'middle').attr('fill', ink).call((t) => rich(t, sp.zLabel || ''));
       this.svg.selectAll('.axis path, .axis line').attr('stroke', border);
       this.svg.selectAll('.axis text').attr('fill', ink);
 
@@ -625,6 +840,19 @@
       this.overlay.attr('x', ox).attr('y', oy).attr('width', side).attr('height', side);
     }
 
+    // The slice as a standalone SVG: the field as an embedded image (resampled
+    // smoothly, as on screen), with the axes, colour bar and markers as vectors.
+    toSVG() {
+      const { w, h } = this, [ox, oy, side] = this.box;
+      const k = Math.min(1600, Math.max(this.off.width, Math.round(2 * side)));
+      const up = document.createElement('canvas'); up.width = k; up.height = k;
+      const ctx = up.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(this.off, 0, 0, k, k);
+      const img = `<image x="${r2(ox)}" y="${r2(oy)}" width="${r2(side)}" height="${r2(side)}" preserveAspectRatio="none" xlink:href="${up.toDataURL('image/png')}"/>`;
+      const bb = this.svg.node().getBBox(), W = Math.max(w, Math.ceil(bb.x + bb.width) + 6);
+      return { svg: svgDoc(W, h, img + cloneLayer(this.svg.node())), w: W, h };
+    }
+
     _hover(ev) {
       const [mx, my] = d3.pointer(ev, this.svg.node());
       const sp = this.spec, xv = this.x.invert(mx), yv = this.y.invert(my);
@@ -640,5 +868,5 @@
     }
   }
 
-  window.D3Charts = { LineChart, HeatmapChart, fmtNum };
+  const D3Charts = window.D3Charts = { LineChart, HeatmapChart, fmtNum, exportName: null, onError: null };
 })();

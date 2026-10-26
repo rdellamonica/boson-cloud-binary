@@ -885,7 +885,7 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path.startswith("/assets/"):
                 name = os.path.basename(url.path)
                 path = os.path.join(SCRIPT_DIR, "assets", name)
-                types = {".woff2": "font/woff2", ".svg": "image/svg+xml", ".css": "text/css", ".js": "application/javascript"}
+                types = {".woff2": "font/woff2", ".ttf": "font/ttf", ".svg": "image/svg+xml", ".css": "text/css", ".js": "application/javascript"}
                 if not name or not os.path.isfile(path):
                     self.send(404, "not found", "text/plain")
                 else:

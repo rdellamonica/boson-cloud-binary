@@ -431,6 +431,18 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: f
 .d3tools .mode.on { color: #fff; background: var(--accent); border-color: var(--accent); }
 .d3reset { display: none; color: var(--accent) !important; padding: 4px 9px; height: 26px; animation: fadein .2s var(--ease); }
 .d3area .overlay.panmode { cursor: grab; }
+/* Plot download: a button in the tool strip with an SVG / PDF menu. */
+.d3export { position: relative; }
+.d3export.busy .mode { color: var(--accent); border-color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.d3menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 5; min-width: 168px; padding: 4px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.06); animation: rpIn .12s ease-out; }
+.d3menu[hidden] { display: none; }
+.d3tools .d3menu button { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 7px 9px; border: 0; background: transparent; text-align: left; color: var(--text-primary); }
+.d3tools .d3menu button:hover, .d3tools .d3menu button:focus-visible { background: var(--surface-2); color: var(--accent); box-shadow: none; }
+.d3menu b { font-weight: 600; font-size: 12px; min-width: 28px; }
+.d3menu span { font-size: 11.5px; color: var(--text-muted); }
+.d3chart:has(.d3menu:not([hidden])) .d3tools { opacity: 1; }
 @keyframes fadein { from { opacity: 0; transform: translateY(-3px); } }
 .d3legend { display: flex; flex-wrap: wrap; gap: 2px 4px; padding: 4px 0 6px 56px; max-height: 96px; overflow-y: auto; flex: none; }
 .d3legend .li { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text-secondary); font: 500 11.5px var(--font); font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: background .15s, opacity .15s; }
@@ -543,6 +555,31 @@ html { scroll-padding-top: 52px; }
 .inpgroup .unit { padding-right: 10px; font-size: 12px; color: var(--text-muted); }
 .slicectl .ctl { gap: 6px; font-size: 12px; color: var(--text-muted); }
 .slicectl .ctl sub { font-size: 75%; }
+/* Colormap picker for the slice: a swatch button and a listbox of ramps. */
+.cmpick { position: relative; display: inline-flex; }
+.cm-btn { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 9px 0 6px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text-primary); cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 4px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
+.cm-btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.cm-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cm-btn .cm-chev { width: 12px; height: 12px; color: var(--text-muted); transition: transform .18s; }
+.cm-btn[aria-expanded="true"] .cm-chev { transform: rotate(180deg); }
+.cm-sw { display: block; width: 44px; height: 14px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); flex: none; }
+.cm-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: 236px; max-width: calc(100vw - 32px);
+  background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.06);
+  overflow: hidden; animation: rpIn .14s ease-out; }
+.cm-pop[hidden] { display: none; }
+.cm-list { max-height: min(52vh, 360px); overflow-y: auto; padding: 4px 0; }
+.cm-list:focus { outline: none; }
+.cm-gh { padding: 8px 12px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); }
+.cm-opt { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 12px; cursor: pointer; font-size: 12.5px; color: var(--text-primary); }
+.cm-opt .cm-sw { width: 64px; height: 12px; }
+.cm-opt .ck { width: 13px; height: 13px; color: var(--accent); visibility: hidden; }
+.cm-opt.active { background: var(--surface-2); }
+.cm-opt[aria-selected="true"]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.cm-opt[aria-selected="true"] .nm { color: var(--accent); font-weight: 600; }
+.cm-opt[aria-selected="true"] .ck { visibility: visible; }
+.cm-foot { display: flex; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); }
+.cm-foot .switch { font-size: 12.5px; }
 .slicectl .ctl input[type=number] { width: 70px; height: 28px; padding: 4px 8px; font-size: 12px; }
 .slicectl .ctl .unit { font-size: 11.5px; }
 .seg.sm { height: 30px; padding: 3px; }
@@ -802,6 +839,13 @@ html { scroll-padding-top: 52px; }
                 <div class="seg sm" id="modeSet" data-value="all" role="group" aria-label="Modes in slice"><button data-v="all">All</button><button data-v="bound">Bound</button><button data-v="radiative">Radiative</button></div>
                 <div class="seg sm" id="sliceScale" data-value="lin" role="group" aria-label="Slice scale"><button data-v="lin">Lin</button><button data-v="log">Log</button></div>
                 <div class="field sm" title="Slice resolution"><svg class="i"><use href="#i-grid"/></svg><select id="grid" aria-label="Grid"><option value="200">200²</option><option value="300" selected>300²</option><option value="450">450²</option></select></div>
+                <div class="cmpick" id="cmpick">
+                  <button type="button" class="cm-btn" id="cmBtn" aria-haspopup="listbox" aria-expanded="false" title="Colormap"><span class="cm-sw" id="cmSw"></span><span id="cmName">Ember</span><svg class="i cm-chev"><use href="#i-chev"/></svg></button>
+                  <div class="cm-pop" id="cmPop" hidden>
+                    <div class="cm-list" id="cmList" role="listbox" aria-label="Colormap" tabindex="-1"></div>
+                    <div class="cm-foot"><label class="switch"><input type="checkbox" id="cmRev"><i></i>Reverse</label></div>
+                  </div>
+                </div>
               </div></div>
               <div class="plot tall" id="pSlice"></div></div>
           </div>
@@ -844,7 +888,7 @@ const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
 const DASHES = ['solid', 'dot', 'dash', 'longdash', 'dashdot', 'longdashdot'];
-let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false }, prevTiles: {} };
+let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false }, prevTiles: {}, cmap: 'ember', cmapRev: false };
 
 // Segmented controls keep their value in data-value, like a select.
 const val = (id) => { const el = $(id); return el.dataset.value !== undefined ? el.dataset.value : el.value; };
@@ -1353,7 +1397,7 @@ async function lockDomain() {
 }
 
 async function loadSnapshot(step, force = false) {
-  const key = [snapParams(), step, val('sliceScale'), document.documentElement.dataset.theme, state.lock ? state.lock.step : ''].join('|');
+  const key = [snapParams(), step, val('sliceScale'), document.documentElement.dataset.theme, state.cmap, state.cmapRev, state.lock ? state.lock.step : ''].join('|');
   if (!force && key === state.snapLoaded) return;
   state.snapWant = key;
   try {
@@ -1378,7 +1422,7 @@ function drawSnapshot(sn, lockRange) {
   const p1 = proj(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th));
   const p2 = proj(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI));
   const [hAx, vAx] = { xy: ['x', 'y'], zx: ['x', 'z'], zy: ['y', 'z'] }[plane];
-  const ramp = ['--h0', '--h1', '--h2', '--h3', '--h4'].map((v, i) => [i / 4, css(v)]);
+  const ramp = cmapRamp(state.cmap, state.cmapRev);
   if (!charts.pSlice) charts.pSlice = new D3Charts.HeatmapChart($('pSlice'));
   charts.pSlice.update({
     z: sliceZ(sn, log), zDomain: lockRange || null, ramp, extent: [sn.x[0], sn.x[sn.x.length - 1]],
@@ -1463,6 +1507,141 @@ function closeModal() {
   const { el, parent, next } = expanded; expanded = null;
   $('modal').classList.remove('open');
   parent.insertBefore(el, next);
+}
+
+// ---------- Slice colormap ----------
+// 'ember' follows the theme (the --h0..--h4 tokens); the others are d3's
+// perceptual and diverging ramps, sampled into stops for the heatmap.
+const CMAPS = [
+  { group: 'Theme', items: [['ember', 'Ember']] },
+  { group: 'Perceptual', items: [['viridis', 'Viridis', 'Viridis'], ['magma', 'Magma', 'Magma'], ['inferno', 'Inferno', 'Inferno'], ['plasma', 'Plasma', 'Plasma'], ['cividis', 'Cividis', 'Cividis'], ['cubehelix', 'Cubehelix', 'CubehelixDefault'], ['turbo', 'Turbo', 'Turbo']] },
+  { group: 'Sequential', items: [['blues', 'Blues', 'Blues'], ['ylgnbu', 'YlGnBu', 'YlGnBu'], ['greys', 'Greys', 'Greys', true]] },
+  { group: 'Diverging', items: [['coolwarm', 'Cool–warm', 'RdBu', true], ['spectral', 'Spectral', 'Spectral', true]] },
+];
+const CMAP_LIST = CMAPS.flatMap(g => g.items);
+function cmapRamp(name, rev = false) {
+  const item = CMAP_LIST.find(c => c[0] === name) || CMAP_LIST[0];
+  let ramp;
+  const f = item[2] && window.d3 && d3['interpolate' + item[2]];
+  if (!f) ramp = ['--h0', '--h1', '--h2', '--h3', '--h4'].map((v, i) => [i / 4, css(v)]);
+  else {
+    const n = 16, flip = !!item[3];   // d3's Greys, RdBu and Spectral run dark/red to light/blue
+    ramp = d3.range(n + 1).map(i => [i / n, d3.color(f(flip ? 1 - i / n : i / n)).formatHex()]);
+  }
+  return rev ? ramp.map(([t, c]) => [1 - t, c]).reverse() : ramp;
+}
+const cmapCss = (name, rev) => `linear-gradient(90deg, ${cmapRamp(name, rev).map(([t, c]) => `${c} ${(100 * t).toFixed(1)}%`).join(', ')})`;
+const cp = { open: false, active: -1 };
+function renderCmap() {
+  const item = CMAP_LIST.find(c => c[0] === state.cmap) || CMAP_LIST[0];
+  $('cmName').textContent = item[1];
+  $('cmSw').style.background = cmapCss(item[0], state.cmapRev);
+  $('cmRev').checked = state.cmapRev;
+  if (!cp.open) return;
+  $('cmList').innerHTML = CMAPS.map(g => `<div class="cm-gh">${g.group}</div>` + g.items.map(c =>
+    `<div class="cm-opt" role="option" data-v="${c[0]}" aria-selected="${c[0] === item[0]}"><span class="cm-sw" style="background:${cmapCss(c[0], state.cmapRev)}"></span><span class="nm">${c[1]}</span><svg class="i ck"><use href="#i-check"/></svg></div>`).join('')).join('');
+  cp.items = [...$('cmList').querySelectorAll('.cm-opt')];
+  cmActive(cp.items.findIndex(o => o.dataset.v === item[0]), 'nearest');
+}
+function cmActive(i, scroll = 'nearest') {
+  if (!cp.items || !cp.items.length) return;
+  cp.active = (i + cp.items.length) % cp.items.length;
+  cp.items.forEach((o, k) => o.classList.toggle('active', k === cp.active));
+  if (scroll !== 'none') cp.items[cp.active].scrollIntoView({ block: scroll });
+}
+function setCmap(name, rev = state.cmapRev) {
+  if (name === state.cmap && rev === state.cmapRev) return;
+  state.cmap = name; state.cmapRev = rev;
+  renderCmap(); saveSettings();
+  state.snapLoaded = null; updateSnapshotControls();
+}
+function openCmap() {
+  cp.open = true; $('cmPop').hidden = false; $('cmBtn').setAttribute('aria-expanded', 'true');
+  // Open towards whichever side has room (the button can sit at either end of its row).
+  const pop = $('cmPop'); pop.style.left = '0'; pop.style.right = 'auto';
+  if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { pop.style.left = 'auto'; pop.style.right = '0'; }
+  renderCmap(); $('cmList').focus({ preventScroll: true });
+}
+function closeCmap(focusBtn = true) {
+  if (!cp.open) return;
+  cp.open = false; $('cmPop').hidden = true; $('cmBtn').setAttribute('aria-expanded', 'false');
+  if (focusBtn) $('cmBtn').focus({ preventScroll: true });
+}
+function initCmap() {
+  $('cmBtn').onclick = () => cp.open ? closeCmap() : openCmap();
+  $('cmBtn').addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openCmap(); } });
+  $('cmList').addEventListener('mousemove', (e) => { const o = e.target.closest('.cm-opt'); if (o && !o.classList.contains('active')) cmActive(cp.items.indexOf(o), 'none'); });
+  $('cmList').addEventListener('click', (e) => { const o = e.target.closest('.cm-opt'); if (o) { setCmap(o.dataset.v); closeCmap(); } });
+  $('cmRev').onchange = () => setCmap(state.cmap, $('cmRev').checked);
+  $('cmPop').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); cmActive(cp.active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); cmActive(cp.active - 1); }
+    else if (e.key === 'Enter' && e.target !== $('cmRev')) { e.preventDefault(); const o = cp.items[cp.active]; if (o) { setCmap(o.dataset.v); closeCmap(); } }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCmap(); }
+    else if (e.key === 'Tab' && e.target !== $('cmList')) closeCmap(false);
+  });
+  document.addEventListener('pointerdown', (e) => { if (cp.open && !$('cmpick').contains(e.target)) closeCmap(false); });
+  renderCmap();
+}
+
+// ---------- Remembered settings ----------
+// The controls' choices live in one cookie (a year, this host only), so a
+// reload or the next session opens the dashboard as it was left.
+const COOKIE = 'bcb_dashboard';
+const SEGS = ['xaxis', 'modeSet', 'sliceScale', 'slicePlane', 'tlSpeed'];
+const SELECTS = ['window', 'refresh', 'grid'];
+function loadSettings() {
+  try {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + COOKIE + '=([^;]*)'));
+    return m ? JSON.parse(decodeURIComponent(m[1])) || {} : {};
+  } catch (e) { return {}; }
+}
+let saveTimer = null;
+function saveSettings() {
+  if (!state.restored) return;   // nothing is saved before the stored choices are applied
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const s = { theme: document.documentElement.dataset.theme || '', logs: state.logs, cmap: state.cmap, cmapRev: state.cmapRev,
+      follow: $('follow').checked, tab: state.topTab, run: state.run };
+    SEGS.forEach(id => s[id] = val(id));
+    SELECTS.forEach(id => s[id] = $(id).value);
+    if (state.rplotSet) s.rplot = $('rplot').value;
+    try { document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify(s))}; max-age=31536000; path=/; SameSite=Lax`; } catch (e) { /* cookies blocked */ }
+  }, 150);
+}
+// Controls that need no data: applied before the first fetch. The x-axis and
+// the slice radius wait for the run (their defaults depend on it).
+function applySettings(s) {
+  if (s.theme === 'light' || s.theme === 'dark') document.documentElement.dataset.theme = s.theme;
+  if (s.logs) for (const k of Object.keys(state.logs)) if (typeof s.logs[k] === 'boolean') state.logs[k] = s.logs[k];
+  document.querySelectorAll('[data-log]').forEach(b => b.classList.toggle('on', !!state.logs[b.dataset.log]));
+  if (CMAP_LIST.some(c => c[0] === s.cmap)) state.cmap = s.cmap;
+  if (typeof s.cmapRev === 'boolean') state.cmapRev = s.cmapRev;
+  SEGS.forEach(id => { if (id !== 'xaxis' && s[id] !== undefined && $(id).querySelector(`button[data-v="${s[id]}"]`)) $(id).setValue(s[id]); });
+  SELECTS.forEach(id => { if (s[id] !== undefined && [...$(id).options].some(o => o.value === s[id])) $(id).value = s[id]; });
+  if (typeof s.follow === 'boolean') $('follow').checked = s.follow;
+  if (s.tab === 'setup') setTopTab('setup');
+}
+// Any change to a control is saved; the handlers that act on it run as before.
+function watchSettings() {
+  SEGS.forEach(id => $(id).addEventListener('click', (e) => { if (e.target.closest('button')) saveSettings(); }));
+  [...SELECTS, 'follow', 'run'].forEach(id => $(id).addEventListener('change', saveSettings));
+  $('rplot').addEventListener('change', () => { state.rplotSet = true; saveSettings(); });
+  document.querySelectorAll('[data-log], #theme, #tabOverview, #tabSetup, #nav a').forEach(b => b.addEventListener('click', saveSettings));
+}
+
+// ---------- Plot downloads ----------
+// File names say which run and plot: q, R0, M_c, co/counter, then the card
+// title (and the snapshot step and plane for the snapshot plots).
+function exportName(el) {
+  const slug = (v) => String(v).normalize('NFKD').replace(/[^\w.+-]+/g, '_').replace(/^_+|_+$/g, '');
+  const run = (rp.runs || []).find(r => r.folder === state.run) || {}, p = run.params;
+  const tag = p && p.q !== undefined ? `q${pnum(p.q)}_R${pnum(p.R0)}_Mc${pnum(p.M_c)}_${p.counter ? 'counter' : 'co'}` : (run.name || 'run');
+  const card = el.closest('.subcard, .card');
+  const title = el.closest('#modal') ? $('modalTitle').textContent : card ? (card.querySelector('h4, h3') || {}).textContent || el.id : el.id;
+  let extra = '';
+  if (el.closest('#snapshot')) { const st = shownStep(); extra = (st !== undefined ? `_step${st}` : '') + (el.id === 'pSlice' ? `_${val('slicePlane')}` : ''); }
+  return slug(`${tag}_${title}${extra}`);
 }
 
 function setThemeIcon() {
@@ -1615,20 +1794,26 @@ async function init() {
   initSeg('slicePlane', updateSnapshotControls);
   initTimeline();
   initInfoTips();
-  initNav(); setThemeIcon(); initPicker();
+  initNav(); initPicker();
+  const saved = loadSettings();
+  applySettings(saved); setThemeIcon(); watchSettings(); state.restored = true;
   try { await window.chartsReady; } catch (e) { showError(e.message, 'Charts unavailable'); return; }
+  initCmap();
+  D3Charts.exportName = exportName;
+  D3Charts.onError = (e) => showError(e.message, 'Download failed');
   try {
     const runs = await fetchJSON('/api/runs');
     if (!runs.length) { showError('No simulation folders found.', 'Nothing to show'); return; }
-    state.run = runs[0].folder;
+    state.run = (runs.find(r => r.folder === saved.run) || runs[0]).folder;
     fillRuns(runs);
     setInterval(pollRuns, 30000);
   } catch (e) { showError(e.message); return; }
   await refresh();
   if (state.data && state.data.ready) {
-    $('xaxis').setValue(state.data.info.evolving ? 't' : 'tP');
+    $('xaxis').setValue(['t', 'tP', 'R'].includes(saved.xaxis) ? saved.xaxis : state.data.info.evolving ? 't' : 'tP');
     const R = state.data.latest.R || 50;
-    $('rplot').value = Math.round(Math.min(2.5 * R, 16 / (state.data.info.mu ** 2)) / 10) * 10 || 200;
+    if (+saved.rplot > 0) { $('rplot').value = saved.rplot; state.rplotSet = true; }
+    else $('rplot').value = Math.round(Math.min(2.5 * R, 16 / (state.data.info.mu ** 2)) / 10) * 10 || 200;
     render(); state.snapLoaded = null; updateSnapshotControls();
   }
   schedule();
@@ -1704,7 +1889,7 @@ $('toast').onclick = () => showError(null);
 $('theme').onclick = () => {
   const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
-  setThemeIcon();
+  setThemeIcon(); if (window.d3) renderCmap();
   render(); state.snapLoaded = null; updateSnapshotControls();
 };
 init();
