@@ -21,8 +21,10 @@ void close(double actual, double expected, const char* message)
 double flux_at(const CrankNicolsonModes& cn, const Eigen::VectorXcd& state,
                const Eigen::VectorXcd& derivative, int mode)
 {
-    const int k = mode*cn.Nr + static_cast<int>(std::floor(42.5/cn.dr));
-    return (std::conj(derivative[k])*(state[k+1]-state[k-1])/(2*cn.dr)).real()/cn.mu;
+    // Radial energy flux of psi = U/r Y through r_ex: Re(dU/dt^* (dU/dr - U/r)) / mu.
+    const int i = static_cast<int>(std::floor(42.5/cn.dr)), k = mode*cn.Nr + i;
+    const dcomplex dU_dr = (state[k+1]-state[k-1])/(2*cn.dr) - state[k]/cn.r[i];
+    return (std::conj(derivative[k])*dU_dr).real()/cn.mu;
 }
 
 void check_endpoints(int threads, bool mask)
@@ -75,9 +77,10 @@ void check_endpoints(int threads, bool mask)
     for (int step=1; step<=4; ++step) {
         // Endpoint pairing must not depend on a constant diagnostic timestep.
         cn.dt = step%2 == 0 ? 3.1 : 2.0;
-        const Eigen::VectorXcd previous_derivative = -I*(cn.H*cn.psi);
+        const Eigen::VectorXcd previous_derivative = cn.schrodinger_rhs(cn.psi);
         cn.step(step);
-        const Eigen::VectorXcd derivative = -I*(cn.H*cn.psi);
+        // The full generator H - i Gamma/2, including the absorbers.
+        const Eigen::VectorXcd derivative = cn.schrodinger_rhs(cn.psi);
         const Eigen::VectorXcd potential_state = cn.V*cn.psi;
         dcomplex expected_dv = 0, stale_dv = 0;
         for (int m=0; m<cn.n_modes; ++m)
@@ -106,7 +109,7 @@ void check_endpoints(int threads, bool mask)
             for (int m=0; m<cn.n_modes; ++m)
                 for (int i=static_cast<int>(std::floor(0.3*cn.L/cn.dr)); i<cn.Nr; ++i)
                     before_mask[m*cn.Nr+i] /= std::exp(-3*std::pow((cn.r[i]-0.3*cn.L)/(0.7*cn.L),2));
-            const Eigen::VectorXcd bad_derivative = -I*(cn.H*before_mask);
+            const Eigen::VectorXcd bad_derivative = cn.schrodinger_rhs(before_mask);
             detects_pre_mask_derivative |= std::abs(flux_at(cn,cn.psi,bad_derivative,0)-flux[0]) > 1e-8;
         }
     }

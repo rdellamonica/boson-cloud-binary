@@ -57,7 +57,6 @@ Reference reference(const CrankNicolsonModes& cn, double time, double ramp_perio
     Reference result;
     result.h0 = result.v1 = result.v2 = result.dvdt = result.absorption =
         Eigen::MatrixXcd::Zero(size, size);
-    const auto absorption_moments = primary_absorption_moments(cn, smear);
     const double ramp_x = ramp_periods > 0 ? time / (ramp_periods * cn.P) : 0.0;
     const double ramp = time < ramp_periods * cn.P ? 3*ramp_x*ramp_x - 2*ramp_x*ramp_x*ramp_x : 1.0;
     double abs_ramp = 1.0;
@@ -66,6 +65,9 @@ Reference reference(const CrankNicolsonModes& cn, double time, double ramp_perio
         const double x = (time-ramp_periods*cn.P)/cn.P;
         abs_ramp = 3*x*x-2*x*x*x;
     }
+    // Rank-one s-wave sinks of both bodies, from the addition theorem.
+    if (absorb)
+        result.absorption = sink_reference(cn, smear, abs_ramp);
     for (int j = 0; j < cn.n_modes; ++j) {
         const auto [l,m] = cn.modes[j];
         for (int i = 1; i < cn.Nr-1; ++i) {
@@ -97,11 +99,6 @@ Reference reference(const CrankNicolsonModes& cn, double time, double ramp_perio
                     result.v1(row,col) += v1;
                     result.v2(row,col) += v2;
                     result.dvdt(row,col) += (v1+ramp*v2)*(cn.counter ? -1.0 : 1.0)*I*double(ms)*cn.Omega;
-                    if (absorb && (l+l1+ls)%2 == 0) {
-                        // Preserve the user's area/10 and disabled secondary.
-                        const double a1 = 16*M_PI*cn.M1*cn.M1*abs_ramp/10.0 * absorption_moments[ls*cn.Nr+i];
-                        result.absorption(row,col) += a1*angular*phase;
-                    }
                 }
             }
         }
@@ -151,11 +148,12 @@ Eigen::VectorXcd test_evolution(int threads, int scenario, bool ilut)
     const double x = ramp_periods > 0 ? dt/(ramp_periods*initial_period) : 1.0;
     const double companion_ramp = x < 1 ? 3*x*x-2*x*x*x : 1.0;
     Eigen::MatrixXcd h = next.h0 + next.v1 + companion_ramp*next.v2;
-    if (absorb) h -= 0.5*I*next.absorption;
     if (scenario == 2) h += Eigen::MatrixXcd(cn.CAP);
+    // The sparse H stays conservative; the sinks enter only the full generator.
+    const Eigen::MatrixXcd h_full = h - 0.5*I*next.absorption;
     const auto identity = Eigen::MatrixXcd::Identity(h.rows(),h.cols());
-    const Eigen::MatrixXcd a = identity + I*(dt/2)*h;
-    const Eigen::VectorXcd rhs = (identity - I*(dt/2)*h)*cn.psi;
+    const Eigen::MatrixXcd a = identity + I*(dt/2)*h_full;
+    const Eigen::VectorXcd rhs = (identity - I*(dt/2)*h_full)*cn.psi;
     Eigen::VectorXcd expected = a.partialPivLu().solve(rhs);
     if (scenario == 2) {
         const int start = int(std::floor(cn.L*0.8/cn.dr));
@@ -170,6 +168,12 @@ Eigen::VectorXcd test_evolution(int threads, int scenario, bool ilut)
     require((Eigen::MatrixXcd(cn.V2)-next.v2).norm() < 1e-12, "V2 reference mismatch");
     require((Eigen::MatrixXcd(cn.dVdt)-next.dvdt).norm() < 1e-12, "Potential derivative mismatch");
     require((Eigen::MatrixXcd(cn.H)-h).norm() < 1e-12, "Full Hamiltonian reference mismatch");
+    if (absorb) {
+        require(next.absorption.norm() > 0, "Fixture's absorber is not resolved");
+        const Eigen::VectorXcd probe = expected;
+        require((cn.apply_sink(probe) - next.absorption*probe).norm() <= 1e-10*(next.absorption*probe).norm(),
+                "Absorption operator differs from the independent reference");
+    }
     require((cn.psi-expected).norm()/expected.norm() < 1e-8, "CN differs from independent dense solve");
     require(cn.last_solver_residual <= 1e-9, "CN residual exceeded tolerance");
     return cn.psi;

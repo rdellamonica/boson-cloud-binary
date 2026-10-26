@@ -31,7 +31,7 @@ include/, src/     C++ solver (library + GravitationalMolecule and IsolatedBH ex
 initial_states/    Python scripts that write initial states in the MODESBIN format
 dashboard/         Live web dashboard for running and finished simulations
 examples/minimal/  A configuration that runs in about a minute
-tests/             Regression tests (ctest) and a scaling benchmark
+tests/             Test suite (ctest: unit, regression, physics, integration, python) and a scaling benchmark
 external/toml++/   Bundled toml++ v3.4 TOML parser (header only, MIT licence)
 docs/              Doxygen configuration
 ```
@@ -211,6 +211,24 @@ after each step (`[mask]`) or by a complex absorbing potential (`[cap]`).
 `checkpoint.bin` matches it, the continued run is bitwise identical to an
 uninterrupted one at a fixed thread count; raising `num_steps` or `num_periods`
 in the folder's `config.toml` extends a finished run.
+
+## Tests
+
+The suite runs in about half a minute and is also run on every push by
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml):
+
+```sh
+ctest --test-dir build -j 4 --output-on-failure
+ctest --test-dir build -L unit            # one label only
+```
+
+| Label | What it covers |
+| --- | --- |
+| `unit` | Configuration parsing and defaults, the MODESBIN reader, output folders, argument validation, the rolling phase average |
+| `regression` | The s-wave absorbers and their projector against an independent addition-theorem reference, the isolated black hole, the startup and back-reaction ramps, the flux/state time alignment, and single- against multi-threaded assembly and solves |
+| `physics` | Hermiticity, norm conservation, hydrogenic eigenstates and their energies, the Jacobi constant on a fixed orbit and its convergence in `dt`, the mirror symmetry between co- and counter-rotation, flux continuity at `r_ex`, the gravitational-wave inspiral against Peters' law, mass balance between the cloud and the accreting holes, the damping mask and the CAP |
+| `integration` | Restarting a run (bitwise from `checkpoint.bin`, from the diagnostics without one, after an interrupted write, and extending a finished run) and the two executables end to end |
+| `python` | The initial-state scripts against their analytic states, and the dashboard's run discovery, payloads, snapshot viewer, zip export and HTTP endpoints. Skipped, not failed, when NumPy, SciPy, SymPy or mpmath are missing |
 
 ## Parallel performance
 

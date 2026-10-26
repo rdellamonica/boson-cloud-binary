@@ -28,7 +28,7 @@ struct Config
     /// @name [simulation]
     /// @{
     double dt;                          ///< Initial timestep (default 10).
-    int num_periods;                    ///< Run length in initial orbital periods, used if num_steps = 0.
+    double num_periods;                 ///< Run length in initial orbital periods (may be fractional), used if num_steps = 0.
     int save_every;                     ///< Snapshot interval in steps (default 50).
     double ramp_periods;                ///< Startup ramp length in initial periods (default 0).
     bool ramp_secondary_potential = true; ///< Ramp the companion's potential with Omega.
@@ -107,7 +107,7 @@ inline Config load_config(const std::string &filename)
     c.L = tbl["grid"]["L"].value_or(5000.0);
 
     c.dt = tbl["simulation"]["dt"].value_or(10.0);
-    c.num_periods = tbl["simulation"]["num_periods"].value_or(0);
+    c.num_periods = tbl["simulation"]["num_periods"].value_or(0.0);
     c.num_steps = tbl["simulation"]["num_steps"].value_or(0);
     c.save_every = tbl["simulation"]["save_every"].value_or(50);
     c.l_max = tbl["simulation"]["l_max"].value_or(5);

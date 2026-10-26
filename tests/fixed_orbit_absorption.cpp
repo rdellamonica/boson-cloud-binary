@@ -97,7 +97,7 @@ int main()
                     "Unresolved absorbers differ from absorption=false");
         }
         run_case(true, 4.0, 0.1, 22.0, 0.0, true); // Secondary unresolved.
-        run_case(true, 0.4, 10.0, 22.0, 0.0, false); // Primary unresolved; secondary explicitly disabled.
+        run_case(true, 0.4, 10.0, 22.0, 0.0, true); // Primary unresolved; only the secondary absorbs.
         run_case(true, 4.0, 1.0, 200.0, 0.0, false); // No interior support.
         std::cout << "Fixed-orbit absorption checks passed.\n";
         return 0;

@@ -102,48 +102,54 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(isolated_bh tests/isolated_bh.cpp)
-    target_link_libraries(isolated_bh PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/isolated-test-output")
-    add_test(NAME isolated_bh COMMAND isolated_bh)
-    set_tests_properties(isolated_bh PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/isolated-test-output")
-    add_executable(parallel_correctness tests/parallel_correctness.cpp)
-    target_link_libraries(parallel_correctness PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-output")
-    add_test(NAME parallel_correctness COMMAND parallel_correctness)
-    set_tests_properties(parallel_correctness PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-output")
-    add_executable(orbital_ramp tests/orbital_ramp.cpp)
-    target_link_libraries(orbital_ramp PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/orbital-test-output")
-    add_test(NAME orbital_ramp COMMAND orbital_ramp)
-    set_tests_properties(orbital_ramp PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/orbital-test-output")
-    add_executable(fixed_orbit_absorption tests/fixed_orbit_absorption.cpp)
-    target_link_libraries(fixed_orbit_absorption PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/absorption-test-output")
-    add_test(NAME fixed_orbit_absorption COMMAND fixed_orbit_absorption)
-    set_tests_properties(fixed_orbit_absorption PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/absorption-test-output")
-    add_executable(spherical_absorption tests/spherical_absorption.cpp)
-    target_link_libraries(spherical_absorption PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/spherical-test-output")
-    add_test(NAME spherical_absorption COMMAND spherical_absorption)
-    set_tests_properties(spherical_absorption PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/spherical-test-output")
-    add_executable(swave_projector tests/swave_projector.cpp)
-    target_link_libraries(swave_projector PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/swave-test-output")
-    add_test(NAME swave_projector COMMAND swave_projector)
-    set_tests_properties(swave_projector PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/swave-test-output")
+    # Each test runs in its own scratch directory, since the solver writes
+    # Simulation_* folders into the working directory.
+    function(add_solver_test name)
+        cmake_parse_arguments(ARG "" "" "LABELS;ARGS" ${ARGN})
+        add_executable(${name} tests/${name}.cpp)
+        target_link_libraries(${name} PRIVATE GravitationalMoleculeLib)
+        target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+        set(work "${CMAKE_CURRENT_BINARY_DIR}/test-output/${name}")
+        file(MAKE_DIRECTORY "${work}")
+        add_test(NAME ${name} COMMAND ${name} ${ARG_ARGS})
+        set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY "${work}" LABELS "${ARG_LABELS}")
+    endfunction()
+
+    # Unit tests of the building blocks
+    add_solver_test(config_and_io LABELS unit)
+    add_solver_test(rolling_average LABELS unit)
+
+    # Regression tests against independent reference implementations
+    add_solver_test(parallel_correctness LABELS regression)
+    add_solver_test(spherical_absorption LABELS regression)
+    add_solver_test(swave_projector LABELS regression)
+    add_solver_test(isolated_bh LABELS regression)
+    add_solver_test(orbital_ramp LABELS regression)
+    add_solver_test(fixed_orbit_absorption LABELS regression)
+    add_solver_test(flux_time_alignment LABELS regression)
+
+    # Physical behaviour and conservation laws
+    add_solver_test(physics LABELS physics)
+
+    # Restart and command-line drivers
+    add_solver_test(restart LABELS integration)
+    add_solver_test(command_line LABELS integration
+        ARGS $<TARGET_FILE:GravitationalMolecule> $<TARGET_FILE:IsolatedBH>)
+
+    # Python: initial-state scripts and dashboard (skipped without the modules)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME python_initial_states
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/python/test_initial_states.py
+                    --solver $<TARGET_FILE:GravitationalMolecule>)
+        add_test(NAME python_dashboard
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/python/test_dashboard.py
+                    --solver $<TARGET_FILE:GravitationalMolecule>)
+        set_tests_properties(python_initial_states python_dashboard PROPERTIES
+            LABELS python SKIP_RETURN_CODE 77)
+    endif()
+
+    # Scaling benchmark (not a test): python3 tests/benchmark_parallel.py build/mode_benchmark
     add_executable(mode_benchmark tests/mode_benchmark.cpp)
     target_link_libraries(mode_benchmark PRIVATE GravitationalMoleculeLib)
-    add_executable(flux_time_alignment tests/flux_time_alignment.cpp)
-    target_link_libraries(flux_time_alignment PRIVATE GravitationalMoleculeLib)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/flux-test-output")
-    add_test(NAME flux_time_alignment COMMAND flux_time_alignment)
-    set_tests_properties(flux_time_alignment PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/flux-test-output")
 endif()

@@ -1,5 +1,4 @@
 #include "CrankNicolsonModes.hpp"
-#include "SphericalAbsorptionReference.hpp"
 #include <omp.h>
 #include <cmath>
 #include <fstream>
@@ -27,10 +26,22 @@ void set_radius(CrankNicolsonModes& cn, double radius)
     cn.P = 2 * M_PI / cn.Omega;
 }
 
-double expected_radius(const CrankNicolsonModes& cn, double duration)
+double smoothstep(double x)
 {
-    // A zero cloud leaves only the existing forward-Euler GW contribution.
-    return cn.R - (64.0/5.0)*cn.M1*cn.M2*(cn.M1+cn.M2)/std::pow(cn.R,3)*duration;
+    return x <= 0 ? 0.0 : x >= 1 ? 1.0 : 3*x*x - 2*x*x*x;
+}
+
+// Back-reaction weight at the end of a step: zero until the startup ramp ends,
+// then a smooth step over one initial period.
+double backreaction_ramp(double t_end, double ramp_end, double initial_period)
+{
+    return smoothstep((t_end - ramp_end) / initial_period);
+}
+
+double expected_radius(const CrankNicolsonModes& cn, double duration, double ramp = 1.0)
+{
+    // A zero cloud leaves only the forward-Euler GW contribution.
+    return cn.R - (64.0/5.0)*cn.M1*cn.M2*(cn.M1+cn.M2)/std::pow(cn.R,3)*duration*ramp;
 }
 
 void prepare(CrankNicolsonModes& cn)
@@ -55,22 +66,17 @@ void test_expanding_orbit(bool absorb)
     set_radius(cn, 80.0);
     cn.dt = 0.1*initial_period;
     require(5*cn.P > cn.t[1] + cn.dt, "Fixture must cross the old moving gate");
-    const double expected = expected_radius(cn, cn.dt);
-    // For l=m=0 the absorption matrix element is the radial profile / (4*pi).
-    const int i = 5;
-    const auto moments = primary_absorption_moments(cn, 15.0);
-    const double full_absorption = -2*cn.M1*cn.M1/10.0*moments[i];
+    // 0.2 initial periods after activation: back-reaction and absorption are
+    // both at smoothstep(0.2) of their final strength.
+    const double ramp = backreaction_ramp(cn.t[1] + cn.dt, ramp_end, initial_period);
+    const double expected = expected_radius(cn, cn.dt, ramp);
     cn.step(2);
     check_close(cn.R, expected, "Expanded orbit froze after the initial ramp completed");
     require((cn.V - (cn.V1 + cn.V2)).norm() < 1e-13,
             "Completed companion-potential ramp restarted after expansion");
-    if (absorb) {
-        // 0.2 initial periods have elapsed since the fixed absorption start.
-        const double x = 0.2;
-        check_close(cn.H.coeff(i,i).imag(), full_absorption*(3*x*x-2*x*x*x),
-                    "Absorption ramp changed when the orbital period changed");
-        require(cn.H.coeff(i,i).imag() < 0, "Absorption switched off again");
-    }
+    const double partial_sink = cn.sink_strength(1);
+    if (absorb)
+        require(partial_sink > 0, "Absorption switched off again");
 
     // Pass the end of the absorption ramp, then increase P again. The potential
     // and absorption must remain fully enabled, and R must update on every step.
@@ -83,8 +89,12 @@ void test_expanding_orbit(bool absorb)
         cn.step(step);
         check_close(cn.R, next_radius, "Orbital evolution skipped a post-ramp step");
         require((cn.V - (cn.V1 + cn.V2)).norm() < 1e-13, "Potential ramp is not permanently complete");
-        if (absorb && step == 4)
-            check_close(cn.H.coeff(i,i).imag(), full_absorption, "Completed absorption ramp restarted");
+        if (absorb && step == 4) {
+            // Same geometry as step 2 (R = 80), now at full absorption strength.
+            const double full_sink = cn.sink_strength(1);
+            check_close(partial_sink, full_sink*smoothstep(0.2),
+                        "Absorption ramp changed when the orbital period changed");
+        }
     }
 }
 
@@ -98,7 +108,9 @@ void test_crossing_step()
     cn.step(1);
     check_close(cn.R, 50.0, "Orbit moved before activation");
     cn.dt = 0.2*initial_period;
-    const double expected = expected_radius(cn, 0.1*initial_period);
+    // Only the 0.1 P0 after activation counts, weighted by the back-reaction ramp.
+    const double expected = expected_radius(cn, 0.1*initial_period,
+                                            backreaction_ramp(5.1*initial_period, 5*initial_period, initial_period));
     cn.step(2);
     check_close(cn.R, expected, "Ramp crossing integrated time before activation");
     check_close(cn.t[2], 5.1*initial_period, "Adaptive dt changed the completed step timestamp");
