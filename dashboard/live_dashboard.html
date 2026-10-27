@@ -438,6 +438,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: f
 .d3menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 5; min-width: 168px; padding: 4px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px;
   box-shadow: 0 10px 26px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.06); animation: rpIn .12s ease-out; }
 .d3menu[hidden] { display: none; }
+#pruneGrid[hidden] { display: none; }
 .d3tools .d3menu button { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 7px 9px; border: 0; background: transparent; text-align: left; color: var(--text-primary); }
 .d3tools .d3menu button:hover, .d3tools .d3menu button:focus-visible { background: var(--surface-2); color: var(--accent); box-shadow: none; }
 .d3menu b { font-weight: 600; font-size: 12px; min-width: 28px; }
@@ -733,6 +734,7 @@ html { scroll-padding-top: 52px; }
       <a href="#ionization"><svg class="i"><use href="#i-zap"/></svg>Ionization</a>
       <a href="#orbit"><svg class="i"><use href="#i-orbit"/></svg>Orbit &amp; masses</a>
       <a href="#modes"><svg class="i"><use href="#i-layers"/></svg>Modes &amp; energies</a>
+      <a href="#pruning"><svg class="i"><use href="#i-sliders"/></svg>Mode pruning</a>
       <a href="#snapshot"><svg class="i"><use href="#i-aperture"/></svg>Snapshot</a>
       <a href="#setup"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
     </nav>
@@ -823,6 +825,14 @@ html { scroll-padding-top: 52px; }
           <div class="card reveal" style="--c: var(--s5)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mode fractions</h3><p class="sub">|c<sub>LM</sub>|² = M<sub>c</sub><sup>LM</sup> / M<sub>c</sub></p></div><div class="actions"><button class="chip" data-log="pFrac">log</button><button class="chip sq" data-expand="pFrac" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pFrac"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s8)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Cloud energy</h3><p class="sub">E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6</p></div><div class="actions"><button class="chip sq" data-expand="pEs" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEs"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Energy per mode</h3><p class="sub">E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup>, dashed: levels; fixed orbit adds ε<sub>b</sub> + gΩ</p></div><div class="actions"><button class="chip sq" data-expand="pEmodes" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEmodes"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
+
+      <section id="pruning">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-sliders"/></svg></div><h2>Mode pruning</h2><span id="pruneNote">modes evolved over time</span></div>
+        <div class="grid" id="pruneGrid">
+          <div class="card reveal" style="--c: var(--s3)"><div class="head"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><div><h3>Active modes</h3><p class="sub">a bar wherever a mode is evolved; rows grouped by L, m = −L…L upward</p></div><div class="actions"><button class="chip sq" data-expand="pActive" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pActive"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s6)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Active mode count</h3><p class="sub">evolved modes, dashed: all modes up to l<sub>max</sub></p></div><div class="actions"><button class="chip sq" data-expand="pActiveCount" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pActiveCount"></div><div class="skeleton"></div></div>
         </div>
       </section>
 
@@ -924,7 +934,7 @@ function xValues(s) {
 }
 
 // Plots of individual modes: hovering a curve names that curve and thickens it.
-const MODE_PLOTS = new Set(['pMass', 'pPower', 'pNorms', 'pFrac', 'pEmodes', 'pRadial']);
+const MODE_PLOTS = new Set(['pMass', 'pPower', 'pNorms', 'pFrac', 'pEmodes', 'pRadial', 'pActive']);
 const charts = {};
 
 // Traces and layout keep a Plotly-like shape; this maps them onto the d3 charts.
@@ -1020,6 +1030,30 @@ function render() {
     yrange = [1.1 * (d.eps_b - 4 * d.latest.Omega), 1.1 * (d.eps_b + 4 * d.latest.Omega)].sort((a, b) => a - b);
   }
   draw('pEmodes', modes.map((m, i) => line(s.E_modes[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: 'E<sup>LM</sup> / M<sup>LM</sup>' }, range: yrange }, shapes: eShapes, annotations: levelAnn });
+
+  renderPruning(d, X, xaxis, line);
+}
+
+// Mode pruning: one bar per mode where it is evolved, at height L + k/(L+1)
+// with k = (m + L)/2, so each L is a band of L + 1 rows.
+function renderPruning(d, X, xaxis, line) {
+  const p = d.pruning, modes = d.info.modes;
+  $('pruneGrid').hidden = !p;
+  if (!p) {
+    $('pruneNote').textContent = `pruning off for this run: all ${modes.length} modes are evolved`;
+    return;
+  }
+  const lmax = Math.max(...modes.map(m => m[0]));
+  $('pruneNote').textContent = `${p.now} of ${p.total} modes evolved now, ${p.ever} at some point, ${p.changes - 1} change${p.changes === 2 ? '' : 's'} of the set`;
+  // Thinner bars for more rows per L, so neighbouring m stay apart.
+  const width = Math.max(1.2, Math.min(5, 0.7 * 210 / ((lmax + 1.3) * (lmax + 1))));
+  const bars = modes.map((m, i) => {
+    const y0 = m[0] + 0.8 * ((m[1] + m[0]) / 2) / (m[0] + 1);
+    return line(p.active[i].map(a => (a ? y0 : null)), modeName(m), { color: modeStyle(m).color, width }, { showlegend: false });
+  });
+  draw('pActive', bars, { xaxis, yaxis: { title: { text: 'L' }, range: [-0.3, lmax + 1] } });
+  draw('pActiveCount', [line(p.count, 'active modes', { color: css('--s6'), width: 1.8 }, { showlegend: false })],
+    { xaxis, yaxis: { title: { text: 'evolved modes' }, range: [0, 1.05 * p.total] }, shapes: [hline(p.total, css('--text-muted'), 'dash', 1)] });
 }
 
 const fmt = (v, d = 4) => (v === null || v === undefined || !isFinite(v)) ? '–' : (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0) ? v.toExponential(d - 1) : (+v.toPrecision(d)).toString());

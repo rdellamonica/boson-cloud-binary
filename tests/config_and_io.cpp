@@ -115,6 +115,8 @@ check_every = 4
     require(c.pruning && c.prune_tolerance == 1e-6 && c.prune_check_every == 4, "Pruning values");
     const Config bare = config_from("[pruning]\n");
     require(bare.pruning && bare.prune_tolerance == 1e-8 && bare.prune_check_every == 10, "Pruning defaults");
+    const Config off = config_from("[pruning]\nenabled = false\ntolerance = 1e-6\n");
+    require(!off.pruning && off.prune_tolerance == 1e-6, "enabled = false must switch pruning off");
 }
 
 void config_validation()

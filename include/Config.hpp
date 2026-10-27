@@ -84,7 +84,7 @@ struct Config
 
     /// @name [pruning]: evolve only the modes that matter (see CrankNicolsonModes)
     /// @{
-    bool pruning = false;
+    bool pruning = false;         ///< True when a [pruning] table is present and enabled is not false.
     double prune_tolerance = 0.0; ///< Norm fraction that makes a mode relevant (default 1e-8).
     int prune_check_every = 10;   ///< Steps between updates of the active set (default 10).
     /// @}
@@ -161,7 +161,8 @@ inline Config load_config(const std::string &filename)
 
     if (tbl.contains("pruning") && tbl["pruning"].is_table())
     {
-        c.pruning = true;
+        // enabled = false keeps the table (and its settings) but evolves every mode.
+        c.pruning = tbl["pruning"]["enabled"].value_or(true);
         c.prune_tolerance = tbl["pruning"]["tolerance"].value_or(1e-8);
         c.prune_check_every = tbl["pruning"]["check_every"].value_or(10);
         if (!(c.prune_tolerance > 0.0 && c.prune_tolerance < 1.0))

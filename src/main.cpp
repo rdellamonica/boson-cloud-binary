@@ -82,7 +82,9 @@ int main(int argc, char **argv)
                                                : "frequency only (companion potential at full strength)")
               << "\n";
 
-    if (cfg.pruning)
+    if (!cfg.pruning)
+        std::cout << "Mode pruning: off (every mode is evolved)\n";
+    else
     {
         solver.prune_tolerance = cfg.prune_tolerance;
         solver.prune_check_every = cfg.prune_check_every;

@@ -157,7 +157,10 @@ void CrankNicolsonModes::step(int step_id)
     // resumed run checks at the same steps).
     if (pruning_enabled() && (step_id - 1) % prune_check_every == 0 &&
         update_active_modes(prune_check_every * dt))
+    {
         apply_active_set();
+        write_active_modes(step_id);
+    }
 
     // Keep the previous state for the orbit's midpoint accretion rates.
     psi_last = psi;
@@ -262,6 +265,11 @@ void CrankNicolsonModes::run(int n_steps, double r_ex_)
     std::cout << "Output folder: " << output_folder << std::endl;
 
     open_diagnostics(std::ios::out);
+    if (pruning_enabled())
+    {
+        active_modes_file.open(output_folder + "/active_modes.txt", std::ios::out);
+        write_active_modes(0);
+    }
 
     save_run_info();
     // Refresh the initial operator, including a CAP enabled after initialize().

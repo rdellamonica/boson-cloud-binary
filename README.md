@@ -156,7 +156,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[solver]` | `preconditioner` | `"radial"` (default) or `"ilut"` |
 | `[mask]` | `L_factor`, `W`, `n` | Multiplicative damping layer beyond `L_factor * L` |
 | `[cap]` | `L_factor`, `W`, `n` | Complex absorbing potential beyond `L_factor * L` |
-| `[pruning]` | `tolerance`, `check_every` | Evolve only the modes that matter (defaults `1e-8` and `10` steps); see *Mode pruning* below |
+| `[pruning]` | `enabled`, `tolerance`, `check_every` | Evolve only the modes that matter (defaults `true`, `1e-8` and `10` steps); `enabled = false` evolves every mode but keeps the settings. See *Mode pruning* below |
 
 ## Output
 
@@ -170,7 +170,10 @@ Each run writes a `Simulation_YYYY_MM_DD_HH_MM_SS/` folder with
   `p_bin_inst.txt` and `dV_bin_dt.txt`,
 - one row per step and one column per mode in `flux.txt`, `energy_flux.txt`,
   `norms.txt` and `energy_modes.txt`,
-- `checkpoint.bin`, the exact binary state at the last snapshot, used to resume.
+- `checkpoint.bin`, the exact binary state at the last snapshot, used to resume,
+- with pruning, `active_modes.txt`: one line `step t count flags...` at the start
+  and at every change of the active set, with a 0/1 flag per mode in the order
+  of `modes.txt`.
 
 ## Method
 
@@ -218,7 +221,8 @@ both fall below 1% of it. The received amplitude grows linearly over the time
 between checks, but no longer than the inverse of the local mismatch of the
 modes' centrifugal energies, after which an off-resonant response saturates.
 The dropped mass is reported in the log, and the active set is stored in
-`checkpoint.bin`, so pruned runs restart exactly.
+`checkpoint.bin`, so pruned runs restart exactly. Without a `[pruning]` table,
+or with `enabled = false` in it, every mode is evolved.
 
 Fluxes are the most sensitive output, because the ionized field lives in
 modes holding a small share of the norm. For the binary and cloud of the
@@ -290,9 +294,10 @@ python dashboard/live_dashboard.py path/to/runs [--port 8050] [--depth 4]
 
 The dashboard finds every run folder below the given path and serves a page at
 `http://127.0.0.1:8050` with the orbit, fluxes, energies, norms and binary power,
-a snapshot viewer for the radial profiles and density slices (with a choice of
-colormaps), and downloads of the data. Every plot can be saved as SVG or PDF
-from the download button in its corner. It re-reads the files as they grow, so
-it can follow runs in progress, and it remembers its settings (theme, axes,
-slice options, colormap, last run) in a browser cookie. Its fonts, d3, jsPDF
-and svg2pdf.js are bundled in `dashboard/assets` with their licences.
+the modes evolved over time in a pruned run, a snapshot viewer for the radial
+profiles and density slices (with a choice of colormaps), and downloads of the
+data. Every plot can be saved as SVG or PDF from the download button in its
+corner. It re-reads the files as they grow, so it can follow runs in progress,
+and it remembers its settings (theme, axes, slice options, colormap, last run)
+in a browser cookie. Its fonts, d3, jsPDF and svg2pdf.js are bundled in
+`dashboard/assets` with their licences.

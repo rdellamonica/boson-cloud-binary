@@ -178,6 +178,27 @@ def test_data_payload(dash, folder):
     assert len(coarse["series"]["t"]) <= 6, "max_points did not subsample"
 
 
+def test_pruning_payload(dash, folder):
+    # Without active_modes.txt the run was never pruned.
+    if not os.path.exists(os.path.join(folder, "active_modes.txt")):
+        assert dash.data_payload(dash.get_run(folder), 0, 4000)["pruning"] is None, \
+            "an unpruned run reports pruning"
+    with tempfile.TemporaryDirectory() as other:
+        pruned = os.path.realpath(synthetic_run(other))
+        flags = lambda on: " ".join("1" if j in on else "0" for j in range(len(MODES)))
+        with open(os.path.join(pruned, "active_modes.txt"), "w") as f:
+            f.write(f"0 0.0 2 {flags({0, 2})}\n")
+            f.write(f"8 14.0 3 {flags({0, 2, 4})}\n")
+            f.write("15 28.0 1 1 0")  # partial line of a run still writing
+        p = dash.data_payload(dash.get_run(pruned), 0, 4000)["pruning"]
+        assert p is not None, "active_modes.txt was not read"
+        # Row k is written by step k + 1: the second set applies from row 7 on.
+        assert p["count"] == [2] * 7 + [3] * (ROWS - 7), f"counts {p['count']}"
+        assert p["active"][4] == [None] * 7 + [True] * (ROWS - 7), "mode (2, 0) switches on at step 8"
+        assert p["active"][1] == [None] * ROWS, "mode (1, -1) is never evolved"
+        assert (p["now"], p["total"], p["changes"], p["ever"]) == (3, len(MODES), 2, 3), f"summary {p}"
+
+
 def test_snapshot_payload(dash, folder):
     run = dash.get_run(folder)
     psi = dash.load_snapshot(run, 0)
@@ -277,10 +298,11 @@ def main():
         folder = os.path.realpath(folder)
         tests = [lambda: test_discovery(dash, root, folder),
                  lambda: test_data_payload(dash, folder),
+                 lambda: test_pruning_payload(dash, folder),
                  lambda: test_snapshot_payload(dash, folder),
                  lambda: test_zip_export(dash, root, folder),
                  lambda: test_http_endpoints(dash, root, folder)]
-        names = ["discovery", "data payload", "snapshot payload", "zip export", "http endpoints"]
+        names = ["discovery", "data payload", "pruning payload", "snapshot payload", "zip export", "http endpoints"]
         for name, test in zip(names, tests):
             try:
                 test()

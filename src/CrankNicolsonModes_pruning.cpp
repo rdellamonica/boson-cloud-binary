@@ -5,6 +5,7 @@
 #include "CrankNicolsonModes.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -117,6 +118,17 @@ bool CrankNicolsonModes::update_active_modes(double horizon, bool from_scratch)
     std::cout << "\nActive modes: " << active_mode_count() << "/" << n_modes << " at t = " << t_i
               << " (pruned mass so far " << pruned_mass_total << ")" << std::endl;
     return true;
+}
+
+void CrankNicolsonModes::write_active_modes(int step_id)
+{
+    if (!active_modes_file.is_open())
+        return;
+    active_modes_file << step_id << ' ' << std::scientific << std::setprecision(12) << t_i << ' '
+                      << active_mode_count();
+    for (const char active : active_modes)
+        active_modes_file << ' ' << static_cast<int>(active);
+    active_modes_file << std::endl; // flushed: changes are rare
 }
 
 void CrankNicolsonModes::apply_active_set()

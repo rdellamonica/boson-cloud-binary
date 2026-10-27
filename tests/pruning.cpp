@@ -221,6 +221,42 @@ void exact_restart()
     require(test::read_rows(old / "t.txt").size() == 120, "Resume from an old checkpoint did not finish");
 }
 
+void active_modes_log()
+{
+    test::ScratchDir dir("log");
+    // A pruned run logs every change of the active set; an unpruned one has no log.
+    for (double tolerance : {0.0, 1e-6}) {
+        const fs::path root = fs::current_path() / (tolerance > 0 ? "pruned" : "full");
+        fs::create_directories(root);
+        const fs::path previous = fs::current_path();
+        fs::current_path(root);
+        auto cn = make(tolerance);
+        cn->set_initial_state_full(initial_state(*cn));
+        cn->initialize();
+        cn->run(101, r_ex);
+        fs::current_path(previous);
+        const fs::path log = test::simulation_folder(root) / "active_modes.txt";
+        if (tolerance == 0.0) {
+            require(!fs::exists(log), "An unpruned run wrote active_modes.txt");
+            continue;
+        }
+        const auto rows = test::read_rows(log);
+        require(rows.size() >= 2, "The active set never changed in the log");
+        require(rows.front()[0] == 0 && rows.front()[1] == 0, "The log does not start with the initial set");
+        double previous_step = -1;
+        for (const auto &row : rows) {
+            require(row.size() == 3 + static_cast<std::size_t>(cn->n_modes), "Malformed log row");
+            require(row[0] > previous_step, "Log steps are not increasing");
+            previous_step = row[0];
+            double count = 0;
+            for (std::size_t j = 3; j < row.size(); ++j) count += row[j];
+            require(count == row[2], "Logged count does not match the flags");
+        }
+        for (int j = 0; j < cn->n_modes; ++j)
+            require(rows.back()[3 + j] == (cn->mode_is_active(j) ? 1 : 0), "Last log row is not the final set");
+    }
+}
+
 void rejects_invalid_settings()
 {
     test::ScratchDir dir("invalid");
@@ -260,5 +296,6 @@ int main()
                          std::pair{"mass conservation with pruning", &conservation_with_pruning},
                          std::pair{"switching modes on and off", &switching_on_and_off},
                          std::pair{"exact restart", &exact_restart},
+                         std::pair{"active modes log", &active_modes_log},
                          std::pair{"invalid settings", &rejects_invalid_settings});
 }

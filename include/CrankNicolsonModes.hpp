@@ -351,6 +351,13 @@ private:
     std::vector<char> active_modes;       ///< 1 for evolved modes, 0 for modes held at zero.
     double pruned_mass_total = 0.0;
     std::vector<char> checkpoint_active_modes; ///< Active set read from checkpoint.bin, if stored.
+    /// Log of the active set, active_modes.txt: one line "step t count flags..."
+    /// per change, where the set applies from that step on.
+    std::ofstream active_modes_file;
+    /// Append the current active set to active_modes.txt, as in effect from @p step_id.
+    void write_active_modes(int step_id);
+    /// Truncate active_modes.txt to the resumed snapshot and log the set the run continues with.
+    void resume_active_modes_log(int start);
     bool pruning_enabled() const { return prune_tolerance > 0.0; }
     /// Norm share gained by each mode from the active ones over @p horizon, @f$d_j@f$.
     std::vector<double> mode_drive(double horizon) const;

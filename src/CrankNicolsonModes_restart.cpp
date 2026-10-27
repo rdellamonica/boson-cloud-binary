@@ -312,6 +312,49 @@ void CrankNicolsonModes::reconstruct_state_from_diagnostics(int step_id)
     }
 }
 
+void CrankNicolsonModes::resume_active_modes_log(int start)
+{
+    // Keep the entries up to the snapshot, then log the set the continuation
+    // starts with if it differs from the last kept one (no checkpoint, or
+    // pruning switched on or off in config.toml).
+    const std::string path = output_folder + "/active_modes.txt";
+    std::vector<std::string> kept;
+    {
+        std::ifstream in(path);
+        if (!in && !pruning_enabled())
+            return; // Never pruned.
+        std::string line;
+        while (std::getline(in, line))
+        {
+            std::istringstream row(line);
+            int step = 0;
+            if (row >> step && step <= start)
+                kept.push_back(line);
+        }
+    }
+    std::string last_flags;
+    if (!kept.empty())
+    {
+        std::istringstream row(kept.back());
+        std::string step, time, count, flag;
+        row >> step >> time >> count;
+        while (row >> flag)
+            last_flags += flag;
+    }
+    std::string flags;
+    for (const char active : active_modes)
+        flags += active ? '1' : '0';
+
+    {
+        std::ofstream out(path, std::ios::trunc);
+        for (const auto &line : kept)
+            out << line << '\n';
+    }
+    active_modes_file.open(path, std::ios::out | std::ios::app);
+    if (flags != last_flags)
+        write_active_modes(start + 1);
+}
+
 void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r_ex_)
 {
     namespace fs = std::filesystem;
@@ -427,6 +470,7 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
             update_active_modes(prune_check_every * dt, true);
         apply_active_set();
     }
+    resume_active_modes_log(start);
 
     if (start + 1 >= n_steps)
     {

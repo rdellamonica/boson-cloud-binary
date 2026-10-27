@@ -116,6 +116,34 @@ class Run:
         self.slice_geometry = {}            # (r_plot, n_grid) -> interpolation tables
         self.payload_cache = OrderedDict()  # finished snapshot payloads, LRU
         self.rate_history = []  # (wall time, rows) for the step rate
+        self.active_log = (None, None)  # ((mtime, size), parsed active_modes.txt)
+
+    def active_modes(self):
+        """Changes of the evolved-mode set from active_modes.txt, or None when
+        the run was never pruned: (first step of each set, 0/1 flags per set)."""
+        path = os.path.join(self.folder, "active_modes.txt")
+        try:
+            st = os.stat(path)
+        except OSError:
+            return None
+        key = (st.st_mtime, st.st_size)
+        if self.active_log[0] == key:
+            return self.active_log[1]
+        steps, flags = [], []
+        with open(path) as f:
+            for line in f:
+                parts = line.split()
+                # "step t count flag_0 ... flag_{n-1}"; skip partial lines.
+                if len(parts) != 3 + len(self.modes):
+                    continue
+                try:
+                    steps.append(int(parts[0]))
+                    flags.append([int(v) for v in parts[3:]])
+                except ValueError:
+                    continue
+        parsed = (np.array(steps, dtype=int), np.array(flags, dtype=bool)) if steps else None
+        self.active_log = (key, parsed)
+        return parsed
 
     def update(self):
         for table in self.tables.values():
@@ -497,6 +525,24 @@ def data_payload(run, window_orbits, max_points):
     with np.errstate(divide="ignore", invalid="ignore"):
         e_per_mode = energy_modes / norms
 
+    # Evolved modes with pruning. Diagnostic row k is written by step k + 1,
+    # and a logged set is in effect from its step on.
+    pruning = None
+    log = run.active_modes()
+    if log is not None:
+        change_steps, sets = log
+        which = np.searchsorted(change_steps, np.asarray(idx) + 1, side="right") - 1
+        active = sets[np.clip(which, 0, None)]
+        active[which < 0] = True  # rows before the first entry: every mode
+        pruning = {
+            "count": [int(c) for c in active.sum(axis=1)],
+            # Mode i is drawn at height y_i where active and left out elsewhere.
+            "active": [[True if a else None for a in active[:, i]] for i in range(len(modes))],
+            "now": int(sets[-1].sum()), "total": len(modes),
+            "changes": int(len(change_steps)),
+            "ever": int(sets.any(axis=0).sum()),
+        }
+
     series = {
         "t": clean(t[idx], 10),
         "R": clean(R_orb[idx], 9),
@@ -530,7 +576,7 @@ def data_payload(run, window_orbits, max_points):
     return {
         "info": info, "ready": True, "series": series, "latest": latest,
         "selected": selected, "others": others, "radiative": radiative,
-        "levels": levels, "eps_b": eps_b,
+        "levels": levels, "eps_b": eps_b, "pruning": pruning,
         "theory": None if theory is None else {
             "mass": theory[0] / q0 ** 2, "power": -theory[1] / q0 ** 2},
     }
