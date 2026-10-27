@@ -51,6 +51,7 @@ void config_defaults()
     require(c.mu == 0.2 && c.M_c == 0.0 && c.a == 0.0 && c.n == 2 && c.l == 1 && c.m == 1, "Atom defaults");
     require(c.threads == 0 && c.preconditioner == "radial", "Parallel and solver defaults");
     require(!c.mask && !c.cap, "Mask and CAP are off unless their tables exist");
+    require(!c.pruning, "Pruning is off unless its table exists");
 }
 
 void config_values()
@@ -96,6 +97,9 @@ L_factor = 0.8
 L_factor = 0.9
 W = 0.5
 n = 4
+[pruning]
+tolerance = 1e-6
+check_every = 4
 )");
     require(c.N == 512 && c.L == 300.5, "Grid values");
     require(c.q == 0.25 && c.R == 40.0 && c.counter, "Binary values");
@@ -108,6 +112,9 @@ n = 4
     require(c.mask && c.mask_L_factor == 0.8 && c.mask_W == 0.1 && c.mask_n == 3,
             "A [mask] table enables the mask, with defaults for missing keys");
     require(c.cap && c.cap_L_factor == 0.9 && c.cap_W == 0.5 && c.cap_n == 4, "CAP values");
+    require(c.pruning && c.prune_tolerance == 1e-6 && c.prune_check_every == 4, "Pruning values");
+    const Config bare = config_from("[pruning]\n");
+    require(bare.pruning && bare.prune_tolerance == 1e-8 && bare.prune_check_every == 10, "Pruning defaults");
 }
 
 void config_validation()
@@ -117,6 +124,10 @@ void config_validation()
                                           "Negative thread count accepted");
     require_throws<std::invalid_argument>([] { config_from("[solver]\npreconditioner = \"lu\"\n"); },
                                           "Unknown preconditioner accepted");
+    require_throws<std::invalid_argument>([] { config_from("[pruning]\ntolerance = 0.0\n"); },
+                                          "Zero pruning tolerance accepted");
+    require_throws<std::invalid_argument>([] { config_from("[pruning]\ncheck_every = 0\n"); },
+                                          "Zero pruning interval accepted");
     require_throws<std::invalid_argument>([] { config_from("[simulation]\nsteps_per_period = 0.0\n"); },
                                           "Non-positive steps_per_period accepted");
     require_throws<std::invalid_argument>([] { config_from("[simulation]\npower_average_orbits = -2.0\n"); },

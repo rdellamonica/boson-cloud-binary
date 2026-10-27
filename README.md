@@ -156,6 +156,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[solver]` | `preconditioner` | `"radial"` (default) or `"ilut"` |
 | `[mask]` | `L_factor`, `W`, `n` | Multiplicative damping layer beyond `L_factor * L` |
 | `[cap]` | `L_factor`, `W`, `n` | Complex absorbing potential beyond `L_factor * L` |
+| `[pruning]` | `tolerance`, `check_every` | Evolve only the modes that matter (defaults `1e-8` and `10` steps); see *Mode pruning* below |
 
 ## Output
 
@@ -206,6 +207,31 @@ averaged over `power_average_orbits` orbits of phase.
 
 **Outer boundary.** Outgoing radiation can be removed by a damping mask applied
 after each step (`[mask]`) or by a complex absorbing potential (`[cap]`).
+
+**Mode pruning.** Every pair of modes is coupled by the binary's multipoles,
+so a step costs roughly the square of the number of modes. With a `[pruning]`
+table only an active subset is evolved and the rest is held at exactly zero.
+Every `check_every` steps, a mode is switched on when its share of the norm, or
+the share it would receive from the active modes before the next check, exceeds
+`tolerance`; an active mode is switched off, and its amplitude dropped, when
+both fall below 1% of it. The received amplitude grows linearly over the time
+between checks, but no longer than the inverse of the local mismatch of the
+modes' centrifugal energies, after which an off-resonant response saturates.
+The dropped mass is reported in the log, and the active set is stored in
+`checkpoint.bin`, so pruned runs restart exactly.
+
+Fluxes are the most sensitive output, because the ionized field lives in
+modes holding a small share of the norm. For the binary and cloud of the
+minimal example with `l_max = 12` and `ramp_periods = 1`, over three orbits
+(91 modes, 4 threads):
+
+| `tolerance` | Active modes | Speedup | Orbit-averaged flux error | Energy error |
+| --- | --- | --- | --- | --- |
+| `1e-6` | 5 | 11x | 94% | 3e-3 |
+| `1e-8` | 20 | 9x | 0.7% | 2e-5 |
+| `1e-10` | 60 | 2.8x | 5e-5 | 8e-7 |
+
+Check a new setup against a short run without pruning before relying on it.
 
 **Restart.** A run folder can be resumed from its last complete snapshot. When
 `checkpoint.bin` matches it, the continued run is bitwise identical to an

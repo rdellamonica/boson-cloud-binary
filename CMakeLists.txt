@@ -42,6 +42,7 @@ add_library(GravitationalMoleculeLib
     src/CrankNicolsonModes_hamiltonian.cpp
     src/CrankNicolsonModes_matrices.cpp
     src/CrankNicolsonModes_outgoing.cpp
+    src/CrankNicolsonModes_pruning.cpp
     src/CrankNicolsonModes_restart.cpp
     src/CrankNicolsonModes_utils.cpp
     src/RollingPhase.cpp
@@ -130,6 +131,7 @@ if(BUILD_TESTING)
 
     # Physical behaviour and conservation laws
     add_solver_test(physics LABELS physics)
+    add_solver_test(pruning LABELS physics)
 
     # Restart and command-line drivers
     add_solver_test(restart LABELS integration)

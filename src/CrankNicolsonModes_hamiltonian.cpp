@@ -97,10 +97,12 @@ void CrankNicolsonModes::build_coupling_cache()
                 rows[j].push_back(std::move(pair));
         }
     }
-    mode_pairs.clear();
+    all_mode_pairs.clear();
     for (auto &row : rows)
         for (auto &pair : row)
-            mode_pairs.push_back(std::move(pair));
+            all_mode_pairs.push_back(std::move(pair));
+    if (active_modes.size() != static_cast<std::size_t>(n_modes))
+        active_modes.assign(n_modes, 1);
 }
 
 dcomplex CrankNicolsonModes::orbital_phase(int m_star) const
@@ -110,7 +112,13 @@ dcomplex CrankNicolsonModes::orbital_phase(int m_star) const
 
 void CrankNicolsonModes::build_sparse_element_caches()
 {
-    // Construct the pattern only once, including entries whose current value is zero.
+    // Only couplings between active modes enter the operators.
+    mode_pairs.clear();
+    for (const auto &pair : all_mode_pairs)
+        if (active_modes[pair.row_mode] && active_modes[pair.col_mode])
+            mode_pairs.push_back(pair);
+
+    // Construct the pattern once per active set, including entries whose current value is zero.
     std::vector<Eigen::Triplet<dcomplex>> pattern;
     pattern.reserve(mode_pairs.size() * (Nr - 2));
     for (const auto &pair : mode_pairs)

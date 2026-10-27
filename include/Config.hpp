@@ -81,6 +81,13 @@ struct Config
     double cap_W;        ///< Strength (default 0.1).
     int cap_n;           ///< Power of the profile (default 3).
     /// @}
+
+    /// @name [pruning]: evolve only the modes that matter (see CrankNicolsonModes)
+    /// @{
+    bool pruning = false;
+    double prune_tolerance = 0.0; ///< Norm fraction that makes a mode relevant (default 1e-8).
+    int prune_check_every = 10;   ///< Steps between updates of the active set (default 10).
+    /// @}
 };
 
 /**
@@ -150,6 +157,17 @@ inline Config load_config(const std::string &filename)
         c.cap_L_factor = tbl["cap"]["L_factor"].value_or(1.0);
         c.cap_W = tbl["cap"]["W"].value_or(0.1);
         c.cap_n = tbl["cap"]["n"].value_or(3);
+    }
+
+    if (tbl.contains("pruning") && tbl["pruning"].is_table())
+    {
+        c.pruning = true;
+        c.prune_tolerance = tbl["pruning"]["tolerance"].value_or(1e-8);
+        c.prune_check_every = tbl["pruning"]["check_every"].value_or(10);
+        if (!(c.prune_tolerance > 0.0 && c.prune_tolerance < 1.0))
+            throw std::invalid_argument("pruning.tolerance must lie in (0, 1)");
+        if (c.prune_check_every < 1)
+            throw std::invalid_argument("pruning.check_every must be at least 1");
     }
 
     return c;

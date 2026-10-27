@@ -22,6 +22,9 @@
 namespace
 {
 constexpr char checkpoint_magic[8] = {'G', 'M', 'C', 'K', 'P', 'T', '0', '1'};
+// Optional trailer with the active-mode set of a pruned run. Older checkpoints
+// end before it, and older readers ignore it.
+constexpr char active_set_magic[8] = {'A', 'C', 'T', 'I', 'V', 'E', '0', '1'};
 
 template <class T>
 void write_pod(std::ostream &out, const T &value)
@@ -162,6 +165,12 @@ void CrankNicolsonModes::save_checkpoint(int step_id) const
                   static_cast<std::streamsize>(size * sizeof(dcomplex)));
         power_average.save(out);
 
+        out.write(active_set_magic, sizeof(active_set_magic));
+        const std::int32_t count = n_modes;
+        write_pod(out, count);
+        out.write(active_modes.data(), static_cast<std::streamsize>(active_modes.size()));
+        write_pod(out, pruned_mass_total);
+
         if (!out)
         {
             std::cerr << "Could not write checkpoint " << tmp_path << "\n";
@@ -214,6 +223,22 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
         return false;
     }
 
+    // Without a stored active set, resume() selects one from the state.
+    std::vector<char> active;
+    double pruned = 0.0;
+    char trailer[sizeof(active_set_magic)];
+    std::int32_t count = -1;
+    in.read(trailer, sizeof(trailer));
+    read_pod(in, count);
+    if (in && std::memcmp(trailer, active_set_magic, sizeof(trailer)) == 0 && count == n_modes)
+    {
+        active.resize(static_cast<std::size_t>(n_modes));
+        in.read(active.data(), static_cast<std::streamsize>(active.size()));
+        read_pod(in, pruned);
+        if (!in)
+            return false;
+    }
+
     t_i = values[0];
     theta = values[1];
     phase = values[2];
@@ -229,6 +254,8 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
     p_bin = values[12];
     psi = state;
     power_average = average;
+    checkpoint_active_modes = active;
+    pruned_mass_total = pruned;
     return true;
 }
 
@@ -355,6 +382,7 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
 
     std::cout << "Restarting from snapshot " << start << std::endl;
 
+    checkpoint_active_modes.clear();
     if (load_checkpoint(start))
     {
         std::cout << "Exact state restored from checkpoint.bin." << std::endl;
@@ -388,6 +416,17 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     const double restored_Omega = Omega;
     build_time_dependent_perturbation(t_i);
     Omega = restored_Omega;
+
+    if (pruning_enabled())
+    {
+        // The stored active set makes the continuation exact; otherwise select
+        // one from the snapshot as for a new run.
+        if (!checkpoint_active_modes.empty())
+            active_modes = checkpoint_active_modes;
+        else
+            update_active_modes(prune_check_every * dt, true);
+        apply_active_set();
+    }
 
     if (start + 1 >= n_steps)
     {

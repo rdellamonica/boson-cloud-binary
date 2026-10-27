@@ -82,6 +82,14 @@ int main(int argc, char **argv)
                                                : "frequency only (companion potential at full strength)")
               << "\n";
 
+    if (cfg.pruning)
+    {
+        solver.prune_tolerance = cfg.prune_tolerance;
+        solver.prune_check_every = cfg.prune_check_every;
+        std::cout << "Mode pruning: tolerance " << cfg.prune_tolerance << ", active set checked every "
+                  << cfg.prune_check_every << " steps\n";
+    }
+
     solver.use_block_preconditioner = cfg.preconditioner == "radial";
     solver.initialize();
 

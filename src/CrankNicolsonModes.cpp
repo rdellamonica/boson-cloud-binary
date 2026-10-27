@@ -89,6 +89,15 @@ void CrankNicolsonModes::initialize()
     std::cout << "Building sparse matrices for the Crank-Nicolson Method..." << std::endl;
     build_CN_matrices();
 
+    if (pruning_enabled())
+    {
+        if (prune_check_every < 1 || !(prune_tolerance < 1.0))
+            throw std::invalid_argument("Pruning needs 0 < prune_tolerance < 1 and prune_check_every >= 1");
+        // Select the initial active set (a resumed run restores its own).
+        if (update_active_modes(prune_check_every * dt, true))
+            apply_active_set();
+    }
+
     if (absorption)
     {
         std::cout << "Spherical absorption activated." << std::endl;
@@ -144,6 +153,12 @@ void CrankNicolsonModes::set_initial_state_full(Eigen::VectorXcd psi_0)
 
 void CrankNicolsonModes::step(int step_id)
 {
+    // Refresh the evolved modes before the step (keyed on step_id, so that a
+    // resumed run checks at the same steps).
+    if (pruning_enabled() && (step_id - 1) % prune_check_every == 0 &&
+        update_active_modes(prune_check_every * dt))
+        apply_active_set();
+
     // Keep the previous state for the orbit's midpoint accretion rates.
     psi_last = psi;
 

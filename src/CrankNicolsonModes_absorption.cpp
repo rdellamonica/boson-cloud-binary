@@ -134,9 +134,11 @@ void CrankNicolsonModes::build_swave_projector(
     if (mode00 < 0)
         return;
     const double sqrt4pi = std::sqrt(4.0 * M_PI);
-    for (const auto &pair : mode_pairs)
+    // With pruning, the projector is restricted to the active modes (the sink
+    // is the Galerkin projection of the full one), even when (0, 0) is inactive.
+    for (const auto &pair : all_mode_pairs)
     {
-        if (pair.col_mode != mode00)
+        if (pair.col_mode != mode00 || !active_modes[pair.row_mode])
             continue;
         const dcomplex phase = orbital_phase(pair.m_star);
         const double parity = secondary && pair.m_star % 2 != 0 ? -1.0 : 1.0;

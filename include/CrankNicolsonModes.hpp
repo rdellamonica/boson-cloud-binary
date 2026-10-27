@@ -160,6 +160,36 @@ public:
     Eigen::VectorXd t;    ///< Time of each sample.
     Eigen::VectorXd r;    ///< Radial nodes.
     Eigen::VectorXcd psi; ///< Current state, stacked radial functions U_lm.
+    /**
+     * @name Adaptive mode pruning
+     *
+     * With @c prune_tolerance > 0, only an active subset of the modes is
+     * evolved: the potential couplings, the sinks and the linear solve are
+     * restricted to it, so the cost of a step scales with the square of the
+     * number of active modes instead of all @ref modes. Inactive modes are held
+     * at exactly zero. Every @c prune_check_every steps each mode's share of
+     * the norm, @f$p_j@f$, and the share it would receive from the active
+     * modes before the next check, @f$d_j@f$, are compared with the
+     * tolerance. The received amplitude is
+     * @f$\sum_k V_{jk}\psi_k \min(\tau, 1/\Delta E_{jk})@f$, with @f$\tau@f$
+     * the time between checks and @f$\Delta E_{jk}(r)@f$ the local mismatch of
+     * the two modes' centrifugal energies, after which an off-resonant
+     * response stops growing. An inactive mode is switched on when
+     * @f$\max(p_j, d_j)@f$ exceeds the tolerance, and an active one is
+     * switched off, and its amplitude
+     * dropped, when both fall below 1% of it. Set both before initialize().
+     */
+    /// @{
+    double prune_tolerance = 0.0; ///< Norm fraction that makes a mode relevant; 0 evolves every mode.
+    int prune_check_every = 10;   ///< Steps between updates of the active set.
+    /// Number of modes currently evolved.
+    int active_mode_count() const;
+    /// Whether mode @p j is currently evolved.
+    bool mode_is_active(int j) const { return active_modes[j] != 0; }
+    /// Cloud mass removed so far by switching modes off.
+    double pruned_mass() const { return pruned_mass_total; }
+    /// @}
+
     bool mask = false;    ///< A damping mask is applied after every step.
     bool cap = false;     ///< A complex absorbing potential is part of H.
 
@@ -313,7 +343,27 @@ private:
         std::vector<Eigen::Index> offsets;
     };
 
-    std::vector<ModePair> mode_pairs;
+    std::vector<ModePair> all_mode_pairs; ///< Couplings between every pair of modes, grouped by row.
+    std::vector<ModePair> mode_pairs;     ///< Couplings between active modes, in the sparse pattern.
+
+    /// @name Adaptive mode pruning
+    /// @{
+    std::vector<char> active_modes;       ///< 1 for evolved modes, 0 for modes held at zero.
+    double pruned_mass_total = 0.0;
+    std::vector<char> checkpoint_active_modes; ///< Active set read from checkpoint.bin, if stored.
+    bool pruning_enabled() const { return prune_tolerance > 0.0; }
+    /// Norm share gained by each mode from the active ones over @p horizon, @f$d_j@f$.
+    std::vector<double> mode_drive(double horizon) const;
+    /**
+     * @brief Update the active set; return true if it changed.
+     * @param horizon Time until the next check.
+     * @param from_scratch Treat every mode as a candidate (initial state or resume
+     *        without a stored set).
+     */
+    bool update_active_modes(double horizon, bool from_scratch = false);
+    /// Rebuild the sparse operators of the current active set at time @c t_i.
+    void apply_active_set();
+    /// @}
     std::vector<double> radial_f1, radial_f2;    ///< Cached F1, F2 indexed l*Nr+i.
     std::vector<dcomplex> stationary_values;     ///< H0 values in H's sparsity pattern.
     std::vector<Eigen::Index> potential_offsets; ///< Map from H slots to V slots (-1 if none).
