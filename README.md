@@ -140,7 +140,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[grid]` | `N`, `L` | Number of radial nodes and outer radius |
 | `[binary]` | `q`, `R`, `counter` | Mass ratio `M2/M1`, initial separation, counter-rotation |
 | `[atom]` | `mu`, `M_c` | Boson mass and cloud mass (`n, l, m` are used by the initial-state scripts) |
-| `[simulation]` | `dt` | Timestep during the startup ramp (and always on a fixed orbit) |
+| `[simulation]` | `dt` | Timestep during the startup ramp (and always on a fixed orbit); if omitted, the initial period `P0` divided by `steps_per_period` |
 | | `num_steps` / `num_periods` | Run length in steps, or in initial orbital periods if `num_steps = 0` |
 | | `save_every` | Snapshot and checkpoint interval in steps |
 | | `l_max` | Largest multipole; only modes with even `l - m` are evolved |

@@ -42,7 +42,10 @@ void config_defaults()
     test::ScratchDir dir("config_defaults");
     const Config c = config_from("");
     require(c.N == 2048 && c.L == 5000.0, "Grid defaults");
-    require(c.dt == 10.0 && c.num_steps == 0 && c.num_periods == 0 && c.save_every == 50, "Run-length defaults");
+    // dt defaults to the initial period P0 = 2 pi sqrt(R^3 / (1 + q)) over steps_per_period.
+    close(c.dt, 2.0 * M_PI * std::sqrt(50.0 * 50.0 * 50.0 / 1.001) / 50.0, 1e-14, "Default dt");
+    require(c.dt_from_period, "Default dt not flagged as derived from the period");
+    require(c.num_steps == 0 && c.num_periods == 0 && c.save_every == 50, "Run-length defaults");
     require(c.l_max == 5 && c.r_ex == 1000.0 && c.epsilon == 0.001 && c.epsilon_smear == 2.0, "Simulation defaults");
     require(c.ramp_periods == 0.0 && c.ramp_secondary_potential && c.steps_per_period == 50.0 &&
             c.power_average_orbits == 2.0, "Ramp and averaging defaults");
@@ -137,6 +140,10 @@ void config_validation()
     require_throws<std::exception>([] { config_from("[grid\nN = 3\n"); }, "Malformed TOML accepted");
     require(config_from("[simulation]\nnum_periods = 2.5\n").num_periods == 2.5, "Fractional num_periods was lost");
     require(config_from("[simulation]\ndt = 2\nnum_periods = 3\n").dt == 2.0, "Integer value for a real key was lost");
+    require(!config_from("[simulation]\ndt = 2\n").dt_from_period, "An explicit dt was flagged as derived");
+    // The derived dt follows the binary and steps_per_period, in any table order.
+    const Config derived = config_from("[simulation]\nsteps_per_period = 40\n[binary]\nR = 20\nq = 0.1\n");
+    close(derived.dt, 2.0 * M_PI * std::sqrt(20.0 * 20.0 * 20.0 / 1.1) / 40.0, 1e-14, "dt from the initial period");
     require_throws<std::exception>([] { load_config("does_not_exist.toml"); }, "Missing file accepted");
 }
 

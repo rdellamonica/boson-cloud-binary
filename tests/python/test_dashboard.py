@@ -199,6 +199,19 @@ def test_pruning_payload(dash, folder):
         assert (p["now"], p["total"], p["changes"], p["ever"]) == (3, len(MODES), 2, 3), f"summary {p}"
 
 
+def test_default_dt(dash):
+    # Without dt the solver starts at P0 / steps_per_period; the setup table shows that value.
+    cfg = {"binary": {"q": 0.5, "R": 20.0}, "simulation": {"steps_per_period": 32, "num_periods": 2}}
+    expected = 2 * math.pi * math.sqrt(20.0 ** 3 / 1.5) / 32
+    assert abs(dash.default_dt(cfg) - expected) < 1e-12 * expected, "default dt"
+    dt_row = lambda c: next(row for g in dash.run_setup(c, "", np.linspace(0.0, 40.0, 9), 3)["groups"]
+                            for row in g["rows"] if row.get("key") == "simulation.dt")
+    row = dt_row(cfg)
+    assert row["default"] and row["value"] == dash._fmt(expected), f"derived dt row {row}"
+    cfg["simulation"]["dt"] = 2.0
+    assert dt_row(cfg)["value"] == dash._fmt(2.0) and not dt_row(cfg)["default"], "explicit dt row"
+
+
 def test_snapshot_payload(dash, folder):
     run = dash.get_run(folder)
     psi = dash.load_snapshot(run, 0)
@@ -299,10 +312,11 @@ def main():
         tests = [lambda: test_discovery(dash, root, folder),
                  lambda: test_data_payload(dash, folder),
                  lambda: test_pruning_payload(dash, folder),
+                 lambda: test_default_dt(dash),
                  lambda: test_snapshot_payload(dash, folder),
                  lambda: test_zip_export(dash, root, folder),
                  lambda: test_http_endpoints(dash, root, folder)]
-        names = ["discovery", "data payload", "pruning payload", "snapshot payload", "zip export", "http endpoints"]
+        names = ["discovery", "data payload", "pruning payload", "default dt", "snapshot payload", "zip export", "http endpoints"]
         for name, test in zip(names, tests):
             try:
                 test()

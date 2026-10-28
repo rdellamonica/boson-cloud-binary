@@ -5,7 +5,9 @@
 #ifndef CONFIG_HPP
 #define CONFIG_HPP
 
+#include <cmath>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <stdexcept>
 #include <toml++/toml.hpp>
@@ -27,7 +29,8 @@ struct Config
 
     /// @name [simulation]
     /// @{
-    double dt;                          ///< Initial timestep (default 10).
+    double dt;                          ///< Initial timestep (default: initial period / steps_per_period).
+    bool dt_from_period = false;        ///< True when dt was not given and follows from the initial period.
     double num_periods;                 ///< Run length in initial orbital periods (may be fractional), used if num_steps = 0.
     int save_every;                     ///< Snapshot interval in steps (default 50).
     double ramp_periods;                ///< Startup ramp length in initial periods (default 0).
@@ -113,7 +116,7 @@ inline Config load_config(const std::string &filename)
     c.N = tbl["grid"]["N"].value_or(2048);
     c.L = tbl["grid"]["L"].value_or(5000.0);
 
-    c.dt = tbl["simulation"]["dt"].value_or(10.0);
+    const std::optional<double> dt = tbl["simulation"]["dt"].value<double>();
     c.num_periods = tbl["simulation"]["num_periods"].value_or(0.0);
     c.num_steps = tbl["simulation"]["num_steps"].value_or(0);
     c.save_every = tbl["simulation"]["save_every"].value_or(50);
@@ -135,6 +138,11 @@ inline Config load_config(const std::string &filename)
     c.q = tbl["binary"]["q"].value_or(0.001);
     c.R = tbl["binary"]["R"].value_or(50.0);
     c.counter = tbl["binary"]["counter"].value_or(false);
+
+    // Without an explicit dt, start with the fraction of the initial period
+    // P0 = 2 pi sqrt(R^3 / (1 + q)) that the orbital evolution uses.
+    c.dt_from_period = !dt;
+    c.dt = dt ? *dt : 2.0 * M_PI * std::sqrt(std::pow(c.R, 3) / (1.0 + c.q)) / c.steps_per_period;
 
     c.mu = tbl["atom"]["mu"].value_or(0.2);
     c.n = tbl["atom"]["n"].value_or(2);

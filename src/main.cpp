@@ -51,6 +51,8 @@ int main(int argc, char **argv)
     std::cout << "Using up to " << omp_get_max_threads() << " OpenMP threads.\n";
 
     std::cout << "Loaded configuration from " << config_file << "\n";
+    if (cfg.dt_from_period)
+        std::cout << "Timestep dt = " << cfg.dt << " (initial period / " << cfg.steps_per_period << ")\n";
 
     CrankNicolsonModes solver(
         cfg.N,

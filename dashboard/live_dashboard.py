@@ -190,6 +190,13 @@ def _fmt(v):
     return str(v)
 
 
+def default_dt(cfg):
+    """Initial timestep when config.toml leaves dt out: P0 / steps_per_period, as in load_config."""
+    get = lambda sec, key, default: (cfg.get(sec, {}) or {}).get(key, default)
+    q, R = float(get("binary", "q", 0.001)), float(get("binary", "R", 50.0))
+    return 2 * math.pi * math.sqrt(R ** 3 / (1 + q)) / float(get("simulation", "steps_per_period", 50.0))
+
+
 # (group id, title, icon, rows); a row is (section, key, label, default, unit, hint).
 SETUP_SCHEMA = [
     ("binary", "Binary", "orbit", [
@@ -224,7 +231,7 @@ SETUP_SCHEMA = [
         ("simulation", "r_ex", "Extraction radius r_ex", 1000.0, "M", "fluxes and M_c are measured inside r_ex"),
     ]),
     ("time", "Time stepping", "clock", [
-        ("simulation", "dt", "Time step dt", 10.0, "M", ""),
+        ("simulation", "dt", "Time step dt", None, "M", ""),
         ("simulation", "num_steps", "Steps", 0, "", "0 means num_periods is used"),
         ("simulation", "num_periods", "Periods", 0, "", "used when num_steps is 0"),
         ("simulation", "save_every", "Save every", 50, "steps", ""),
@@ -258,7 +265,7 @@ def run_setup(cfg, text, r, n_modes):
     evolving = bool(get("simulation", "evolve_orbit", False))
     absorption = bool(get("simulation", "absorption", False))
     smear = float(get("simulation", "epsilon_smear", 2.0))
-    dt = float(get("simulation", "dt", 10.0))
+    dt = float(get("simulation", "dt", default_dt(cfg)))
     steps = int(get("simulation", "num_steps", 0))
     periods = int(get("simulation", "num_periods", 0))
     save_every = int(get("simulation", "save_every", 50))
@@ -283,6 +290,8 @@ def run_setup(cfg, text, r, n_modes):
                 rw["value"] = "counter-rotating" if counter else "co-rotating"
             elif key == "evolve_orbit":
                 rw["value"] = "evolving" if evolving else "fixed circular"
+            elif sec == "simulation" and key == "dt" and rw["default"]:
+                rw["value"], rw["hint"] = _fmt(dt), "initial period / steps_per_period"
             elif sec == "simulation" and key == "num_periods" and int(get(sec, "num_steps", 0)) > 0:
                 continue
             elif sec == "simulation" and key == "num_steps" and steps != int(get(sec, key, 0)):
@@ -455,7 +464,7 @@ def data_payload(run, window_orbits, max_points):
             "evolving": evolving,
             "mu": mu, "q0": q0,
             "save_every": cfg["simulation"].get("save_every"),
-            "dt": cfg["simulation"].get("dt", 10.0),
+            "dt": cfg["simulation"].get("dt", default_dt(cfg)),
             "num_steps": cfg["simulation"].get("num_steps"),
             "num_periods": cfg["simulation"].get("num_periods"),
             "last_modified": run.last_modified(),
