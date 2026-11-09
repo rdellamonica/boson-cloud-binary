@@ -67,10 +67,10 @@ void check_endpoints(int threads, bool mask)
         require(bool(snapshot >> re >> im), "Missing initial derivative snapshot");
         saved_initial_derivative[i] = dcomplex(re,im);
     }
-    const Eigen::VectorXcd expected_initial = -I*(cn.H*cn.psi);
+    const Eigen::VectorXcd expected_initial = -I*(cn.H()*cn.psi);
     require((saved_initial_derivative-expected_initial).norm() < 5e-6*expected_initial.norm(),
             "Initial derivative does not match the initialized endpoint (including CAP)");
-    require((cn.H-(cn.H0+cn.V+cn.CAP)).norm() < 1e-12,
+    require((cn.H()-(cn.H0+cn.V()+cn.CAP)).norm() < 1e-12,
             "Initial Hamiltonian omitted a CAP enabled after initialize");
 
     bool detects_previous_derivative = false, detects_pre_mask_derivative = false;
@@ -81,7 +81,7 @@ void check_endpoints(int threads, bool mask)
         cn.step(step);
         // The full generator H - i Gamma/2, including the absorbers.
         const Eigen::VectorXcd derivative = cn.schrodinger_rhs(cn.psi);
-        const Eigen::VectorXcd potential_state = cn.V*cn.psi;
+        const Eigen::VectorXcd potential_state = cn.V()*cn.psi;
         dcomplex expected_dv = 0, stale_dv = 0;
         for (int m=0; m<cn.n_modes; ++m)
             for (int i=0; i<=static_cast<int>(std::floor(42.5/cn.dr)); ++i) {

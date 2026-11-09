@@ -12,7 +12,7 @@ psi(t, r, theta, phi) = sum_lm U_lm(t, r) / r * Y_lm(theta, phi),
 ```
 
 so that the binary's multipoles couple the radial functions `U_lm`. The coupled
-system is evolved with a Crank–Nicolson scheme on a uniform radial grid. The
+system is evolved with a Crank–Nicolson scheme on a uniform or stretched radial grid. The
 framework includes, without any perturbative expansion:
 
 - **ionization** (outgoing fluxes through an extraction radius),
@@ -116,6 +116,75 @@ folder instead of the configuration:
 ../../build/GravitationalMolecule Simulation_YYYY_MM_DD_HH_MM_SS
 ```
 
+## Stretched radial grid
+
+A uniform grid spends as many nodes on the far zone, where only outgoing waves
+travel, as on the cloud. A stretched grid keeps the fine spacing where the cloud
+lives and widens it smoothly further out, so the box can reach much larger radii
+for the same number of nodes.
+
+**1. Choose the grid in `config.toml`.**
+
+```toml
+[grid]
+type = "stretched"   # "uniform" (the default) keeps the evenly spaced grid
+L = 4000.0           # outer radius
+N = 1300             # radial nodes (see step 2)
+r_core = 400.0       # refined region; default 4 n^2 / mu^2 from [atom]
+stretch = 4.0        # far spacing / core spacing; default 4
+transition = 100.0   # width of the change around r_core; default r_core / 4
+```
+
+Below `r_core` the spacing is nearly constant; beyond `r_core + transition` it
+is `stretch` times larger. In between it follows
+`h(r) ∝ 1 + (stretch - 1)/2 (1 + tanh((r - r_core) / transition))`. Setting
+`stretch = 1` gives back an evenly spaced grid.
+
+**2. Pick `N` from the spacing you want in the core.** For a target core
+spacing `h_core`,
+
+```text
+N ≈ (r_core + (L - r_core) / stretch) / h_core + 1
+```
+
+For example, `L = 4000`, `r_core = 400`, `stretch = 4` and `h_core = 1` give
+`N ≈ 1300`, where a uniform grid with the same spacing would need 4000 nodes.
+The solver prints the spacing it got at startup:
+`Stretched radial grid: dr = 0.96 near the centre, 3.84 at r = 4000`.
+
+**3. Put the extraction radius inside the refined region.** The fluxes are
+radial derivatives at `r_ex`, so they are only as accurate as the spacing there.
+Keep `r_ex < r_core` (raise `r_core` if needed); the solver prints a note when
+`r_ex` lies in the coarse zone. In the test below the flux at `r_ex` was 3% off
+with `r_ex` in the coarse zone and 0.5% off with `r_core` beyond it.
+
+**4. Generate the initial state with the same `config.toml`.** All
+initial-state scripts read `[grid]`, build exactly the solver's nodes and store
+them in the `MODESBIN` file:
+
+```sh
+python initial_states/get_initial_state_COM_fast.py --config config.toml --output initial_modes.bin
+```
+
+A state made for a different grid is still accepted: the solver interpolates
+it onto its own nodes (cubic) and says so in the log. Files written before this
+change carry no nodes and are taken to be uniform on the same `[0, L]`, so
+regenerate those if `L` changed. Regenerating on the right grid also avoids the
+small interpolation error.
+
+**5. Run and monitor as usual.** Nothing else changes: the run folder's
+`r.txt` lists the actual nodes, every diagnostic (norms, energies, fluxes,
+binary power, sinks) uses the trapezoid weights of the stretched grid, and the
+dashboard shows the grid type and the spacing range under *Grid & modes*.
+The mask and CAP still act between `L_factor * L` and `L`, now in the coarse
+zone; keep that layer many far-zone spacings thick (with `L = 4000` and
+`L_factor = 0.85`, it is 600 wide against a spacing of about 4).
+
+**What to expect.** With `L = 4000`, `r_core = 400` and `stretch = 4`, 1300
+stretched nodes reproduced the cloud's norm, energy and binary power of a
+4160-node uniform run with the same core spacing to `1e-5` or better, in a third
+of the time.
+
 ## Initial states
 
 All scripts read the simulation's `config.toml` (grid, binary and atom tables)
@@ -138,6 +207,8 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | Table | Key | Meaning |
 | --- | --- | --- |
 | `[grid]` | `N`, `L` | Number of radial nodes and outer radius |
+| | `type` | `"uniform"` (default) or `"stretched"`: fine spacing where the cloud lives, coarser outside. See [Stretched radial grid](#stretched-radial-grid) |
+| | `r_core`, `stretch`, `transition` | Stretched grid only: radius of the refined region (default `4 n^2 / mu^2`), outer-to-inner spacing ratio (default 4) and width of the change (default `r_core / 4`) |
 | `[binary]` | `q`, `R`, `counter` | Mass ratio `M2/M1`, initial separation, counter-rotation |
 | `[atom]` | `mu`, `M_c` | Boson mass and cloud mass (`n, l, m` are used by the initial-state scripts) |
 | `[simulation]` | `dt` | Timestep during the startup ramp (and always on a fixed orbit); if omitted, the initial period `P0` divided by `steps_per_period` |
@@ -147,6 +218,8 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | | `r_ex` | Extraction radius for the fluxes and for the inner-region integrals |
 | | `ramp_periods` | Startup ramp length, in initial orbital periods |
 | | `ramp_secondary_potential` | Ramp the companion's potential with the frequency (default `true`) |
+| | `orbit_delay_periods` | With `evolve_orbit`, initial periods after the startup ramp during which the companion is fully on but the orbit and masses stay fixed (default 0) |
+| | `orbit_ramp_periods` | With `evolve_orbit`, initial periods over which the back-reaction on the separation is switched on once that hold ends (default 1; 0 switches it on at once) |
 | | `evolve_orbit` | Evolve the separation and masses (default `false`) |
 | | `steps_per_period` | Post-ramp timestep `dt = P / steps_per_period` with orbital evolution (default 50) |
 | | `power_average_orbits` | Orbits in the rolling average of the binary power (default 2) |
@@ -156,7 +229,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[solver]` | `preconditioner` | `"radial"` (default) or `"ilut"` |
 | `[mask]` | `L_factor`, `W`, `n` | Multiplicative damping layer beyond `L_factor * L` |
 | `[cap]` | `L_factor`, `W`, `n` | Complex absorbing potential beyond `L_factor * L` |
-| `[pruning]` | `enabled`, `tolerance`, `check_every` | Evolve only the modes that matter (defaults `true`, `1e-8` and `10` steps); `enabled = false` evolves every mode but keeps the settings. See *Mode pruning* below |
+| `[pruning]` | `enabled`, `tolerance`, `flux_tolerance`, `check_every` | Evolve only the modes that matter (defaults `true`, `1e-8`, `1e-3` and `10` steps); `enabled = false` evolves every mode but keeps the settings. See *Mode pruning* below |
 
 ## Output
 
@@ -170,6 +243,11 @@ Each run writes a `Simulation_YYYY_MM_DD_HH_MM_SS/` folder with
   `p_bin_inst.txt` and `dV_bin_dt.txt`,
 - one row per step and one column per mode in `flux.txt`, `energy_flux.txt`,
   `norms.txt` and `energy_modes.txt`,
+- `mass_budget.txt`: one row per step with the cumulative mass absorbed by each
+  black hole and the mass dropped by pruning (columns `absorbed_1 absorbed_2
+  pruned`). It is kept whether or not the orbit evolves, so together with
+  `norms.txt` and the time integral of `flux.txt` it closes the cloud's mass
+  budget; the dashboard's *Mass budget* panel shows it,
 - `checkpoint.bin`, the exact binary state at the last snapshot, used to resume,
 - with pruning, `active_modes.txt`: one line `step t count flags...` at the start
   and at every change of the active set, with a 0/1 flag per mode in the order
@@ -180,8 +258,18 @@ Each run writes a `Simulation_YYYY_MM_DD_HH_MM_SS/` folder with
 **Discretisation.** The radial operator uses second-order finite differences
 with Dirichlet boundaries. The binary potential is expanded in multipoles up to
 `2 l_max`; its angular part is a Gaunt coefficient, precomputed once, and the
-orbital phase enters as `exp(i m* theta)`. Sparse patterns are built once and
-updated in place every step.
+orbital phase enters as `exp(i m* theta)`. The coupling of each pair of modes is
+stored as one radial profile, recomputed only when the bodies move, so on a
+fixed orbit a step only updates one phase per pair. H is applied pair by pair
+without being assembled, and the solve runs on the active modes only.
+
+**Stretched radial grid.** On unequal spacings the kinetic term uses the
+three-point second difference
+`U'' ≈ 2 [h- U(i+1) - (h- + h+) U(i) + h+ U(i-1)] / (h- h+ (h- + h+))`. It is
+self-adjoint in the trapezoid inner product (weights `(r(i+1) - r(i-1)) / 2`),
+so Crank–Nicolson still conserves the norm exactly, and norms, energies, sink
+projections and pruning shares all use those weights. The nodes are equally
+spaced in `x(r) = ∫ dr / h(r)`. See *Stretched radial grid* above for usage.
 
 **Time stepping.** Each step solves
 `(1 + i dt H_full / 2) psi_new = (1 - i dt H_full / 2) psi` with BiCGSTAB. The
@@ -191,9 +279,11 @@ residual of `1e-9`.
 
 **Startup.** Over `ramp_periods` initial orbital periods
 `P0 = 2 pi sqrt(R^3 / (1 + q))`, the orbital frequency (and, by default, the
-companion's potential) is switched on with a smooth step. Absorption and
-orbital back-reaction then turn on over one further `P0`. With
-`evolve_orbit = true`, the separation evolves from the end of the ramp under
+companion's potential) is switched on with a smooth step. Absorption then turns
+on over one further `P0`. The orbit then stays fixed for `orbit_delay_periods`
+further `P0` (none by default), after which the orbital back-reaction is switched
+on over `orbit_ramp_periods` `P0` (one by default). With
+`evolve_orbit = true`, the separation evolves from the end of that hold under
 gravitational-wave emission and the phase-averaged cloud power, the masses grow
 by accretion, and the timestep follows the orbital period.
 
@@ -211,29 +301,38 @@ averaged over `power_average_orbits` orbits of phase.
 **Outer boundary.** Outgoing radiation can be removed by a damping mask applied
 after each step (`[mask]`) or by a complex absorbing potential (`[cap]`).
 
-**Mode pruning.** Every pair of modes is coupled by the binary's multipoles,
-so a step costs roughly the square of the number of modes. With a `[pruning]`
-table only an active subset is evolved and the rest is held at exactly zero.
-Every `check_every` steps, a mode is switched on when its share of the norm, or
-the share it would receive from the active modes before the next check, exceeds
-`tolerance`; an active mode is switched off, and its amplitude dropped, when
-both fall below 1% of it. The received amplitude grows linearly over the time
-between checks, but no longer than the inverse of the local mismatch of the
-modes' centrifugal energies, after which an off-resonant response saturates.
-The dropped mass is reported in the log, and the active set is stored in
-`checkpoint.bin`, so pruned runs restart exactly. Without a `[pruning]` table,
-or with `enabled = false` in it, every mode is evolved.
+**Mode pruning.** Every pair of modes is coupled by the binary's multipoles, so
+a step costs roughly the square of the number of modes. With a `[pruning]` table
+only an active subset is evolved and the rest is held at exactly zero. Every
+`check_every` steps, a mode is switched on when its share of the norm, or the
+share it would receive from the active modes before the next check, exceeds
+`tolerance`, or when its share of the outgoing flux exceeds `flux_tolerance`; an
+active mode is switched off, and its amplitude dropped, when all three fall
+below 1% of their thresholds. The received amplitude grows linearly over the
+time between checks, but no longer than the inverse of the local mismatch of the
+modes' centrifugal energies, after which an off-resonant response saturates. The
+flux share covers the ionized field, which lives in modes holding a tiny share
+of the norm but most of the flux: each coupling of an active mode is a source at
+that mode's frequency shifted by `m* Omega`, and above zero energy it radiates
+into the target mode at the golden-rule rate, computed with the regular solution
+in the binary's monopole potential. A mode's share is the larger of its share of
+this predicted flux and of the flux measured at `r_ex`. `flux_tolerance = 0`
+leaves the flux out. The dropped mass is reported in the log, and the active set
+is stored in `checkpoint.bin`, so pruned runs restart exactly. Without a
+`[pruning]` table, or with `enabled = false` in it, every mode is evolved.
 
 Fluxes are the most sensitive output, because the ionized field lives in
 modes holding a small share of the norm. For the binary and cloud of the
 minimal example with `l_max = 12` and `ramp_periods = 1`, over three orbits
-(91 modes, 4 threads):
+(91 modes, 4 threads; flux error over the last orbit):
 
-| `tolerance` | Active modes | Speedup | Orbit-averaged flux error | Energy error |
-| --- | --- | --- | --- | --- |
-| `1e-6` | 5 | 11x | 94% | 3e-3 |
-| `1e-8` | 20 | 9x | 0.7% | 2e-5 |
-| `1e-10` | 60 | 2.8x | 5e-5 | 8e-7 |
+| `tolerance` | `flux_tolerance` | Active modes | Speedup | Orbit-averaged flux error | Energy error |
+| --- | --- | --- | --- | --- | --- |
+| `1e-6` | `0` | 5 | 11x | 94% | 3e-3 |
+| `1e-6` | `1e-3` | 11 | 10x | 0.8% | 2e-4 |
+| `1e-8` | `0` | 20 | 9x | 0.8% | 2e-5 |
+| `1e-8` | `1e-3` | 20 | 9x | 0.2% | 2e-5 |
+| `1e-10` | `1e-3` | 60 | 2.5x | 5e-5 | 8e-7 |
 
 Check a new setup against a short run without pruning before relying on it.
 
@@ -293,11 +392,13 @@ python dashboard/live_dashboard.py path/to/runs [--port 8050] [--depth 4]
 ```
 
 The dashboard finds every run folder below the given path and serves a page at
-`http://127.0.0.1:8050` with the orbit, fluxes, energies, norms and binary power,
-the modes evolved over time in a pruned run, a snapshot viewer for the radial
-profiles and density slices (with a choice of colormaps), and downloads of the
-data. Every plot can be saved as SVG or PDF from the download button in its
-corner. It re-reads the files as they grow, so it can follow runs in progress,
-and it remembers its settings (theme, axes, slice options, colormap, last run)
-in a browser cookie. Its fonts, d3, jsPDF and svg2pdf.js are bundled in
-`dashboard/assets` with their licences.
+`http://127.0.0.1:8050` with the orbit, fluxes, energies, norms and binary
+power, the modes evolved over time in a pruned run, a snapshot viewer for the
+radial profiles and density slices (with a choice of colormaps), an experimental
+3D view of the cloud (WebGL volume rendering that can be rotated and zoomed),
+and downloads of the data. Every plot
+can be saved as SVG or PDF from the download button in its corner. It re-reads
+the files as they grow, so it can follow runs in progress, and it remembers its
+settings (theme, axes, slice options, colormap, last run) in a browser cookie.
+Its fonts, d3, jsPDF and svg2pdf.js are bundled in `dashboard/assets` with their
+licences.

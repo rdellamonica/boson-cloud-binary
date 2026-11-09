@@ -13,6 +13,8 @@ import struct
 import numpy as np
 import tomllib
 
+from radial_grid import radial_grid, write_modesbin_header
+
 parser = argparse.ArgumentParser(description="Generate a normalized spherical Gaussian initial state in MODESBIN format.")
 parser.add_argument("--config", required=True, help="Simulation config.toml")
 parser.add_argument("--output", required=True, help="Output MODESBIN file")
@@ -30,7 +32,7 @@ sigma = float(args.sigma)
 if sigma <= 0:
     raise ValueError("sigma must be positive.")
 
-r = np.linspace(0.0, L, N)
+r = radial_grid(config)
 modes = [(l, m) for l in range(l_max+1) for m in range(-l, l+1)]
 
 # ----------------------------------------------------------------------
@@ -68,10 +70,7 @@ def save_modes_binary(filename, U_dict):
     Nmodes = len(mode_items)
 
     with open(filename, "wb") as f:
-        f.write(b"MODESBIN")
-        f.write(struct.pack("<i", 1))
-        f.write(struct.pack("<q", Nr))
-        f.write(struct.pack("<q", Nmodes))
+        write_modesbin_header(f, r, Nmodes)
 
         for (l, m), profile in mode_items:
             profile = np.asarray(profile, dtype=np.complex128)
@@ -84,7 +83,7 @@ print("Spherical Gaussian initial state")
 print(f"  sigma        = {sigma}")
 print(f"  grid N       = {N}")
 print(f"  box size L   = {L}")
-print(f"  dr           = {r[1]-r[0]}")
+print(f"  dr           = {r[1]-r[0]} (centre) to {r[-1]-r[-2]} (edge)")
 print(f"  l_max        = {l_max}")
 print(f"  norm before  = {norm_before:.16e}")
 print(f"  norm after   = {norm_after:.16e}")

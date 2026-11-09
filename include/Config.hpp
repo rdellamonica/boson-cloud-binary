@@ -11,6 +11,7 @@
 #include <string>
 #include <stdexcept>
 #include <toml++/toml.hpp>
+#include "RadialGrid.hpp"
 
 /**
  * @brief Run parameters read from a TOML configuration file.
@@ -25,6 +26,10 @@ struct Config
     /// @{
     int N;    ///< Number of radial nodes (default 2048).
     double L; ///< Outer radius (default 5000).
+    /// Grid shape: type "uniform" (default) or "stretched", with r_core
+    /// (default 4 n^2 / mu^2, four times the cloud's mean radius scale),
+    /// stretch (default 4) and transition (default r_core / 4).
+    RadialGridSpec grid;
     /// @}
 
     /// @name [simulation]
@@ -35,6 +40,8 @@ struct Config
     int save_every;                     ///< Snapshot interval in steps (default 50).
     double ramp_periods;                ///< Startup ramp length in initial periods (default 0).
     bool ramp_secondary_potential = true; ///< Ramp the companion's potential with Omega.
+    double orbit_delay_periods = 0.0;   ///< Hold with the companion fully on and the orbit fixed, after the startup ramp, in initial periods.
+    double orbit_ramp_periods = 1.0;    ///< Orbital back-reaction switch-on after that hold, in initial periods (0: at once).
     double steps_per_period = 50.0;     ///< Post-ramp timestep is P / steps_per_period.
     double power_average_orbits = 2.0;  ///< Orbits in the rolling average of the binary power.
     bool evolve_orbit;                  ///< Feed the cloud power and accretion back on the orbit (default false).
@@ -90,6 +97,8 @@ struct Config
     bool pruning = false;         ///< True when a [pruning] table is present and enabled is not false.
     double prune_tolerance = 0.0; ///< Norm fraction that makes a mode relevant (default 1e-8).
     int prune_check_every = 10;   ///< Steps between updates of the active set (default 10).
+    /// Share of the outgoing flux that makes a mode relevant (default 1e-3; 0 ignores the flux).
+    double prune_flux_tolerance = 1e-3;
     /// @}
 };
 
@@ -124,6 +133,12 @@ inline Config load_config(const std::string &filename)
     c.r_ex = tbl["simulation"]["r_ex"].value_or(1000.0);
     c.ramp_periods = tbl["simulation"]["ramp_periods"].value_or(0.0);
     c.ramp_secondary_potential = tbl["simulation"]["ramp_secondary_potential"].value_or(true);
+    c.orbit_delay_periods = tbl["simulation"]["orbit_delay_periods"].value_or(0.0);
+    if (!(c.orbit_delay_periods >= 0.0))
+        throw std::invalid_argument("simulation.orbit_delay_periods must be nonnegative");
+    c.orbit_ramp_periods = tbl["simulation"]["orbit_ramp_periods"].value_or(1.0);
+    if (!(c.orbit_ramp_periods >= 0.0))
+        throw std::invalid_argument("simulation.orbit_ramp_periods must be nonnegative");
     c.steps_per_period = tbl["simulation"]["steps_per_period"].value_or(50.0);
     if (!(c.steps_per_period > 0.0))
         throw std::invalid_argument("simulation.steps_per_period must be positive");
@@ -151,6 +166,23 @@ inline Config load_config(const std::string &filename)
     c.a = tbl["atom"]["a"].value_or(0.0);
     c.M_c = tbl["atom"]["M_c"].value_or(0.0);
 
+    c.grid.type = tbl["grid"]["type"].value_or(std::string("uniform"));
+    if (c.grid.type != "uniform" && c.grid.type != "stretched")
+        throw std::invalid_argument("grid.type must be uniform or stretched");
+    if (c.grid.type == "stretched")
+    {
+        // Default core: four times n^2 r_B, with r_B = 1 / (mu^2 M1) and M1 = 1.
+        c.grid.r_core = tbl["grid"]["r_core"].value_or(4.0 * c.n * c.n / (c.mu * c.mu));
+        c.grid.stretch = tbl["grid"]["stretch"].value_or(4.0);
+        c.grid.transition = tbl["grid"]["transition"].value_or(0.25 * c.grid.r_core);
+        if (!(c.grid.r_core > 0.0 && c.grid.r_core < c.L))
+            throw std::invalid_argument("grid.r_core must lie in (0, L)");
+        if (!(c.grid.stretch >= 1.0))
+            throw std::invalid_argument("grid.stretch must be at least 1");
+        if (!(c.grid.transition > 0.0))
+            throw std::invalid_argument("grid.transition must be positive");
+    }
+
     if (tbl.contains("mask") && tbl["mask"].is_table())
     {
         c.mask = true;
@@ -173,10 +205,13 @@ inline Config load_config(const std::string &filename)
         c.pruning = tbl["pruning"]["enabled"].value_or(true);
         c.prune_tolerance = tbl["pruning"]["tolerance"].value_or(1e-8);
         c.prune_check_every = tbl["pruning"]["check_every"].value_or(10);
+        c.prune_flux_tolerance = tbl["pruning"]["flux_tolerance"].value_or(1e-3);
         if (!(c.prune_tolerance > 0.0 && c.prune_tolerance < 1.0))
             throw std::invalid_argument("pruning.tolerance must lie in (0, 1)");
         if (c.prune_check_every < 1)
             throw std::invalid_argument("pruning.check_every must be at least 1");
+        if (!(c.prune_flux_tolerance >= 0.0 && c.prune_flux_tolerance < 1.0))
+            throw std::invalid_argument("pruning.flux_tolerance must lie in [0, 1)");
     }
 
     return c;

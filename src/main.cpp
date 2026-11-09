@@ -72,17 +72,34 @@ int main(int argc, char **argv)
         cfg.epsilon_smear,
         config_file);
 
+    if (cfg.grid.type != "uniform")
+    {
+        solver.set_radial_grid(make_radial_grid(cfg.N, cfg.L, cfg.epsilon, cfg.grid));
+        // The fluxes are radial derivatives at r_ex, so they are only as fine as the grid there.
+        if (cfg.r_ex > cfg.grid.r_core + cfg.grid.transition && cfg.r_ex < cfg.L)
+            std::cout << "Note: r_ex = " << cfg.r_ex << " lies outside the refined region (r_core = " << cfg.grid.r_core
+                      << "); the fluxes at r_ex use the coarser spacing there. Raise grid.r_core above r_ex for"
+                      << " finer flux measurements.\n";
+    }
+
     if (!resume)
-        solver.set_initial_state_full(load_initial_modes_binary(argv[2], solver.modes));
+        solver.set_initial_state_full(
+            load_initial_modes_binary(argv[2], solver.modes, solver.r, solver.uniform_radial_grid()));
 
     solver.evolve_orbit = cfg.evolve_orbit;
     solver.ramp_secondary_potential = cfg.ramp_secondary_potential;
+    solver.orbit_delay_periods = cfg.orbit_delay_periods;
+    solver.orbit_ramp_periods = cfg.orbit_ramp_periods;
     solver.steps_per_period = cfg.steps_per_period;
     solver.set_power_average_orbits(cfg.power_average_orbits);
     std::cout << "Startup ramp over " << cfg.ramp_periods << " initial periods: "
               << (cfg.ramp_secondary_potential ? "frequency and companion potential"
                                                : "frequency only (companion potential at full strength)")
               << "\n";
+    if (cfg.evolve_orbit)
+        std::cout << "Orbit held fixed for " << cfg.orbit_delay_periods
+                  << " initial periods after the startup ramp, then back-reaction switched on over "
+                  << cfg.orbit_ramp_periods << " initial periods\n";
 
     if (!cfg.pruning)
         std::cout << "Mode pruning: off (every mode is evolved)\n";
@@ -90,8 +107,10 @@ int main(int argc, char **argv)
     {
         solver.prune_tolerance = cfg.prune_tolerance;
         solver.prune_check_every = cfg.prune_check_every;
-        std::cout << "Mode pruning: tolerance " << cfg.prune_tolerance << ", active set checked every "
-                  << cfg.prune_check_every << " steps\n";
+        solver.prune_flux_tolerance = cfg.prune_flux_tolerance;
+        std::cout << "Mode pruning: tolerance " << cfg.prune_tolerance << ", flux tolerance "
+                  << cfg.prune_flux_tolerance << ", active set checked every " << cfg.prune_check_every
+                  << " steps\n";
     }
 
     solver.use_block_preconditioner = cfg.preconditioner == "radial";

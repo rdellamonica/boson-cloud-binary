@@ -112,9 +112,15 @@ class Run:
         self.setup = run_setup(self.config, self.config_text, self.r, len(self.modes))
         self.tables = {name: GrowingTable(os.path.join(folder, name + ".txt"))
                        for name in SCALAR_FILES + MODE_FILES}
+        # Cumulative absorbed (hole 1, hole 2) and pruned mass; absent in older runs.
+        self.budget = GrowingTable(os.path.join(folder, "mass_budget.txt"))
         self.snapshot_cache = {}
         self.slice_geometry = {}            # (r_plot, n_grid) -> interpolation tables
         self.payload_cache = OrderedDict()  # finished snapshot payloads, LRU
+        self.volume_geometry = {}           # (r_plot, n) -> 3D interpolation tables
+        self.volume_cache = OrderedDict()   # finished volume payloads, LRU
+        self.projection_cache = {}          # (step, centre) -> masses about a black hole
+        self.projection_geometry = {}       # (centre, d, rho_max) -> ProjectionGeometry
         self.rate_history = []  # (wall time, rows) for the step rate
         self.active_log = (None, None)  # ((mtime, size), parsed active_modes.txt)
 
@@ -148,6 +154,7 @@ class Run:
     def update(self):
         for table in self.tables.values():
             table.update()
+        self.budget.update()
         rows = min(t.rows for t in self.tables.values())
         now = time.time()
         if not self.rate_history or self.rate_history[-1][1] != rows:
@@ -226,6 +233,10 @@ SETUP_SCHEMA = [
     ("grid", "Grid & modes", "ruler", [
         ("grid", "N", "Radial points N", 2048, "", ""),
         ("grid", "L", "Box size L", 5000.0, "M", ""),
+        ("grid", "type", "Radial grid", "uniform", "", "uniform or stretched"),
+        ("grid", "r_core", "Fine region r_core", None, "M", ""),
+        ("grid", "stretch", "Stretch factor", 4.0, "", "outer / inner spacing"),
+        ("grid", "transition", "Transition width", None, "M", ""),
         ("simulation", "epsilon", "Inner radius r₀", 0.001, "M", "first grid point"),
         ("simulation", "l_max", "l_max", 5, "", ""),
         ("simulation", "r_ex", "Extraction radius r_ex", 1000.0, "M", "fluxes and M_c are measured inside r_ex"),
@@ -236,6 +247,8 @@ SETUP_SCHEMA = [
         ("simulation", "num_periods", "Periods", 0, "", "used when num_steps is 0"),
         ("simulation", "save_every", "Save every", 50, "steps", ""),
         ("simulation", "ramp_periods", "Companion ramp-up", 0.0, "orbits", "the companion is switched on over this time"),
+        ("simulation", "orbit_delay_periods", "Orbit hold", 0.0, "orbits", "with evolve_orbit, the companion is fully on but the orbit stays fixed for this time after the companion ramp"),
+        ("simulation", "orbit_ramp_periods", "Orbit ramp-up", 1.0, "orbits", "with evolve_orbit, the back-reaction on R is switched on over this time after the hold"),
     ]),
     ("numerics", "Numerics", "steps", [
         ("parallel", "threads", "Threads", 0, "", "0 uses every core"),
@@ -276,6 +289,7 @@ def run_setup(cfg, text, r, n_modes):
         steps = int(math.floor(periods * P0 / dt))
     r_c = 1 / mu ** 2
     has_mask, has_cap = isinstance(cfg.get("mask"), dict), isinstance(cfg.get("cap"), dict)
+    stretched = str(get("grid", "type", "uniform")) != "uniform"
 
     groups = []
     for gid, title, icon, spec in SETUP_SCHEMA:
@@ -285,11 +299,17 @@ def run_setup(cfg, text, r, n_modes):
                 used.add((sec, key)); continue
             if gid == "cloud" and key in ("n", "l", "m"):
                 used.add((sec, key)); continue
+            if sec == "grid" and key in ("r_core", "stretch", "transition") and stretched is False:
+                used.add((sec, key)); continue
             rw = row(sec, key, label, default, unit, hint)
             if key == "counter":
                 rw["value"] = "counter-rotating" if counter else "co-rotating"
             elif key == "evolve_orbit":
                 rw["value"] = "evolving" if evolving else "fixed circular"
+            elif sec == "grid" and key == "r_core" and rw["default"]:
+                rw["value"], rw["hint"] = _fmt(4.0 * n * n / mu ** 2), "default 4n²/μ²; spacing grows beyond it"
+            elif sec == "grid" and key == "transition" and rw["default"]:
+                rw["value"], rw["hint"] = _fmt(float(get("grid", "r_core", 4.0 * n * n / mu ** 2)) / 4), "default r_core / 4"
             elif sec == "simulation" and key == "dt" and rw["default"]:
                 rw["value"], rw["hint"] = _fmt(dt), "initial period / steps_per_period"
             elif sec == "simulation" and key == "num_periods" and int(get(sec, "num_steps", 0)) > 0:
@@ -315,8 +335,14 @@ def run_setup(cfg, text, r, n_modes):
             if has_cap:
                 rows.append(derived("CAP begins at r", float(get("cap", "L_factor", 1.0)) * L, "M"))
         elif gid == "grid":
-            dr = float(r[1] - r[0]) if len(r) > 1 else L / max(1, int(get("grid", "N", 2048)) - 1)
-            rows += [derived("Grid spacing dr", dr, "M"),
+            kind = str(get("grid", "type", "uniform"))
+            if len(r) > 2 and kind != "uniform":
+                d = np.diff(r)
+                rows += [derived("Grid spacing dr", f"{d.min():.4g} – {d.max():.4g}", "M", "stretched grid: fine inside r_core, coarse outside")]
+            else:
+                dr = float(r[1] - r[0]) if len(r) > 1 else L / max(1, int(get("grid", "N", 2048)) - 1)
+                rows.append(derived("Grid spacing dr", dr, "M"))
+            rows += [
                      derived("Modes evolved", n_modes, "", "from modes.txt")]
         elif gid == "time":
             rows += [derived("Steps per initial orbit", P0 / dt, "", "P₀ / dt"),
@@ -416,6 +442,49 @@ def Y_theta(l, m, cos_t):
     return Y if m >= 0 else (-1) ** am * Y
 
 
+def Y_theta_table(modes, cos_t):
+    """Y_theta of every (l, m) in `modes` at cos_t, float32, one row per mode:
+    one Legendre recurrence per |m| instead of one per mode."""
+    out = np.empty((len(modes), len(cos_t)), dtype=np.float32)
+    want = {}
+    for i, (l, m) in enumerate(modes):
+        want.setdefault(abs(m), []).append((l, m, i))
+    sin_t = np.sqrt(np.clip(1.0 - cos_t ** 2, 0.0, None))
+    for am, rows in want.items():
+        l_top = max(l for l, _, _ in rows)
+        P = {am: (-1) ** am * math.prod(range(2 * am - 1, 0, -2)) * sin_t ** am}
+        if l_top > am:
+            P[am + 1] = cos_t * (2 * am + 1) * P[am]
+        for ll in range(am + 2, l_top + 1):
+            P[ll] = ((2 * ll - 1) * cos_t * P[ll - 1] - (ll + am - 1) * P[ll - 2]) / (ll - am)
+        for l, m, i in rows:
+            Y = math.sqrt((2 * l + 1) / (4 * math.pi) * math.factorial(l - am) / math.factorial(l + am)) * P[l]
+            out[i] = Y if m >= 0 else (-1) ** am * Y
+    return out
+
+
+def mass_budget(Mc, ionized, B, M_ref, idx):
+    """Fractions of the initial mass inside r_ex: residual, ionized, absorbed, pruned."""
+    if not (M_ref > 0):
+        return None
+    c = lambda a: clean(a, 10)
+    out = {"residual": c((Mc / M_ref)[idx]), "ionized": c((ionized / M_ref)[idx])}
+    if B is None:
+        out["absorbed"] = c(((M_ref - Mc - ionized) / M_ref)[idx])
+        out["inferred"] = True
+        return out
+    absorbed = B[:, 0] + B[:, 1]
+    out.update({
+        "absorbed": c((absorbed / M_ref)[idx]),
+        "absorbed_1": c((B[:, 0] / M_ref)[idx]),
+        "absorbed_2": c((B[:, 1] / M_ref)[idx]),
+        "pruned": c((B[:, 2] / M_ref)[idx]) if B[:, 2].any() else None,
+        "total": c(((Mc + ionized + absorbed + B[:, 2]) / M_ref)[idx]),
+        "inferred": False,
+    })
+    return out
+
+
 def tomaselli_rates(n, l, m, mu, q, R0, counter):
     """Perturbative (mass rate, power) from the tabulated functions; None if absent."""
     out = []
@@ -462,7 +531,7 @@ def data_payload(run, window_orbits, max_points):
             "modes": [list(md) for md in modes],
             "initial_mode": list(initial),
             "evolving": evolving,
-            "mu": mu, "q0": q0,
+            "mu": mu, "q0": q0, "n0": n0,
             "save_every": cfg["simulation"].get("save_every"),
             "dt": cfg["simulation"].get("dt", default_dt(cfg)),
             "num_steps": cfg["simulation"].get("num_steps"),
@@ -480,6 +549,8 @@ def data_payload(run, window_orbits, max_points):
 
         T = {k: run.tables[k].array(rows) for k in SCALAR_FILES}
         S = {k: run.tables[k].array(rows).T for k in MODE_FILES}
+        B = run.budget.array()
+        B = B[:rows] if B.shape[0] >= rows and B.shape[1] >= 3 else None
 
     t = T["t"][:, 0]
     R_orb = T["R_orb"][:, 0]
@@ -503,7 +574,24 @@ def data_payload(run, window_orbits, max_points):
     norms = norms_raw * mu
     Mc = norms.sum(axis=0)
 
+    # Mass budget inside r_ex: what is left, what crossed r_ex (the time integral
+    # of the mass flux sum_lm Im(U* dU/dr), trapezoid rule from t = 0), what the
+    # sinks absorbed and what pruning dropped, as fractions of the initial mass
+    # inside r_ex. Without mass_budget.txt (older runs) the absorbed part is
+    # inferred as the remainder.
+    J = current.sum(axis=0)
+    ionized = J[0] * t[0] + np.concatenate(([0.0], np.cumsum(0.5 * (J[1:] + J[:-1]) * np.diff(t))))
+    if B is not None:
+        absorbed_1, absorbed_2, pruned_mass = B[:, 0], B[:, 1], B[:, 2]
+        M_ref = Mc[0] + ionized[0] + absorbed_1[0] + absorbed_2[0] + pruned_mass[0]
+    else:
+        M_ref = Mc[0] + ionized[0]
+
     P_last = 2 * math.pi / Omega[-1] if Omega[-1] > 0 else float("nan")
+
+    # Time of each snapshot: step s ends at diagnostic row s - 1 (step 0 is t = 0).
+    info["snapshot_t"] = [float(t[s - 1]) if 0 < s <= len(t) else 0.0 if s == 0 else None
+                          for s in info["snapshots"]]
 
     # Mode selection: drop the initial mode, and drop modes
     # whose mean energy flux is below 1/500 of the total's.
@@ -555,6 +643,7 @@ def data_payload(run, window_orbits, max_points):
     series = {
         "t": clean(t[idx], 10),
         "R": clean(R_orb[idx], 9),
+        "Omega": clean(Omega[idx], 10),
         "t_over_P": clean(t[idx] / P_last, 9) if math.isfinite(P_last) else None,
         "mass_flux": [clean(-mass_flux[i][idx] / q0 ** 2) for i in range(len(modes))],
         "energy_flux": [clean(energy_flux[i][idx] / q0 ** 2) for i in range(len(modes))],
@@ -563,9 +652,13 @@ def data_payload(run, window_orbits, max_points):
         "p_bin_inst": clean(T["p_bin_inst"][idx, 0]),
         "p_bin": clean(T["p_bin"][idx, 0]),
         "p_out": clean(p_ion[idx]),
+        # Quadrupole GW power of the circular binary, (32/5) M1^2 M2^2 (M1 + M2) / R^5,
+        # the same formula the solver uses for the GW decay of R.
+        "p_gw": clean((32.0 / 5.0 * M_1 ** 4 * q_arr ** 2 * M_1 * (1 + q_arr) / R_orb ** 5)[idx]),
         "M_1": clean(M_1[idx], 10),
         "M_2": clean((q_arr * M_1)[idx], 10),
         "M_c": clean(Mc[idx], 10),
+        "budget": mass_budget(Mc, ionized, B, M_ref, idx),
         "q": clean(q_arr[idx], 10),
         "norms": [clean(norms[i][idx]) for i in range(len(modes))],
         "fractions": [clean((norms[i] / Mc)[idx]) for i in range(len(modes))],
@@ -589,6 +682,18 @@ def data_payload(run, window_orbits, max_points):
         "theory": None if theory is None else {
             "mass": theory[0] / q0 ** 2, "power": -theory[1] / q0 ** 2},
     }
+
+
+def scalar_payload(payload):
+    """The data payload without per-mode series: what the Compare tab draws for each run."""
+    if not payload.get("ready"):
+        return payload
+    series = {k: v for k, v in payload["series"].items()
+              if not (isinstance(v, list) and v and isinstance(v[0], list))}
+    info = {k: payload["info"].get(k) for k in ("folder", "name", "evolving", "mu", "q0", "n0", "rows", "snapshots", "snapshot_t")}
+    pruning = payload.get("pruning")
+    return {"ready": True, "info": info, "series": series, "latest": payload["latest"], "radiative": payload["radiative"],
+            "pruning": None if pruning is None else {"count": pruning["count"]}}
 
 
 def load_snapshot(run, step):
@@ -621,22 +726,319 @@ def slice_geometry(run, r_plot, n_grid, plane="xy"):
     key = (float(r_plot), int(n_grid), len(run.r), plane)
     g = run.slice_geometry.get(key)
     if g is None:
-        r = run.r
         x = np.linspace(-r_plot, r_plot, n_grid)
         hh, vv = (a.ravel() for a in np.meshgrid(x, x, indexing="xy"))   # horizontal, vertical
         zero = np.zeros_like(hh)
-        X, Y, Z = {"xy": (hh, vv, zero), "zx": (hh, zero, vv), "zy": (zero, hh, vv)}[plane]
-        rr, phi = np.sqrt(X ** 2 + Y ** 2 + Z ** 2), np.arctan2(Y, X)
-        cos_t = np.where(rr > 0, Z / np.maximum(rr, 1e-300), 1.0)
-        inside = (rr >= r[0]) & (rr <= r[-1])
-        idx = np.clip(np.searchsorted(r, rr) - 1, 0, len(r) - 2)
-        w = np.clip((rr - r[idx]) / (r[idx + 1] - r[idx]), 0.0, 1.0)
-        weight = np.where(inside & (rr > 0), 1.0 / np.maximum(rr, 1e-300), 0.0)
-        g = {"x": x, "idx": idx, "w": w, "weight": weight, "phi": phi, "cos_t": cos_t, "eimphi": {}, "ytheta": {}}
+        g = point_tables(run.r, *{"xy": (hh, vv, zero), "zx": (hh, zero, vv), "zy": (zero, hh, vv)}[plane])
+        g["x"] = x
         if len(run.slice_geometry) > 4:
             run.slice_geometry.pop(next(iter(run.slice_geometry)))
         run.slice_geometry[key] = g
     return g
+
+
+def point_tables(r, X, Y, Z):
+    """Radial index/weight, 1/r (0 off the radial grid), cos(theta) and phi at points."""
+    rr, phi = np.sqrt(X ** 2 + Y ** 2 + Z ** 2), np.arctan2(Y, X)
+    cos_t = np.where(rr > 0, Z / np.maximum(rr, 1e-300), 1.0)
+    inside = (rr >= r[0]) & (rr <= r[-1])
+    idx = np.clip(np.searchsorted(r, rr) - 1, 0, len(r) - 2)
+    w = np.clip((rr - r[idx]) / (r[idx + 1] - r[idx]), 0.0, 1.0)
+    weight = np.where(inside & (rr > 0), 1.0 / np.maximum(rr, 1e-300), 0.0)
+    return {"idx": idx, "w": w, "weight": weight, "phi": phi, "cos_t": cos_t, "eimphi": {}, "ytheta": {}}
+
+
+def volume_geometry(run, r_plot, n):
+    """Interpolation tables for a cube of side 2 r_plot, n points a side, z-major."""
+    key = (float(r_plot), int(n), len(run.r))
+    g = run.volume_geometry.get(key)
+    if g is None:
+        x = np.linspace(-r_plot, r_plot, n)
+        Z, Y, X = (a.ravel() for a in np.meshgrid(x, x, x, indexing="ij"))
+        g = point_tables(run.r, X, Y, Z)
+        g["x"] = x
+        if len(run.volume_geometry) > 1:
+            run.volume_geometry.pop(next(iter(run.volume_geometry)))
+        run.volume_geometry[key] = g
+    return g
+
+
+def active_modes(modes, mode_set, radiative):
+    if mode_set == "radiative":
+        return {tuple(m) for m in radiative}
+    if mode_set == "bound":
+        return set(modes) - {tuple(m) for m in radiative}
+    return set(modes)
+
+
+def field_density(psi, modes, active, g, equator=False):
+    """|psi|^2 at the points of g: psi = sum U_LM(r)/r Y_LM(theta, phi), summed
+    per m first so each exp(i m phi) is applied once. equator: theta = pi/2."""
+    return np.abs(field_values(psi, modes, active, g, equator)) ** 2
+
+
+def field_values(psi, modes, active, g, equator=False):
+    """psi at the points of g (see field_density)."""
+    idx, w = g["idx"], g["w"]
+    by_m = {}
+    for i, (l, m) in enumerate(modes):
+        if (l, m) not in active:
+            continue
+        if equator:
+            Y = Y_equator(l, m)
+            if Y == 0.0:
+                continue
+        else:
+            if (l, m) not in g["ytheta"]:
+                g["ytheta"][(l, m)] = Y_theta(l, m, g["cos_t"]).astype(np.float32)
+            Y = g["ytheta"][(l, m)]
+        U = psi[i, idx] * (1 - w) + psi[i, idx + 1] * w
+        by_m[m] = by_m.get(m, 0) + Y * U
+    zz = np.zeros(idx.shape, dtype=complex)
+    for m, part in by_m.items():
+        if m not in g["eimphi"]:
+            g["eimphi"][m] = np.exp(1j * m * g["phi"]).astype(np.complex64)
+        zz += part * g["eimphi"][m]
+    return zz * g["weight"]
+
+
+# ----------------------------------------------------------------------------
+# Modes about each black hole: the field re-expanded in spherical harmonics
+# centred on the primary or the secondary.
+# ----------------------------------------------------------------------------
+
+def snapshot_orbit(run, step):
+    """(t, R, theta, q) when snapshot `step` was written (diagnostic row step-1)."""
+    cfg = run.config
+    with run.lock:
+        rows = run.update()
+        if 1 <= step <= rows:
+            row = step - 1
+            return tuple(float(run.tables[k].array()[row, 0]) for k in ("t", "R_orb", "theta_orb", "q"))
+    return 0.0, float(cfg["binary"]["R"]), 0.0, float(cfg["binary"]["q"])
+
+
+def black_hole_position(center, R, theta, q):
+    """Equatorial position of the primary (1) or the secondary (2) about the COM."""
+    if center == "primary":
+        d, ang = q / (1 + q) * R, theta
+    elif center == "secondary":
+        d, ang = R / (1 + q) * 1.0, theta + math.pi
+    else:
+        raise ValueError(f"Unknown centre {center!r}")
+    return np.array([d * math.cos(ang), d * math.sin(ang), 0.0])
+
+
+def angular_grid(l_max):
+    """Gauss-Legendre in cos(theta) on the upper hemisphere (the field is even
+    in z: every mode has even l - m) and uniform phi, both about twice what an
+    exact projection onto l <= l_max needs, which keeps the aliasing of higher
+    multipoles below 1e-3 of each mode's mass."""
+    nodes, weights = np.polynomial.legendre.leggauss(2 * l_max + 2)
+    up = nodes > 0
+    cos_t, w_t = nodes[up], 2.0 * weights[up]
+    n_phi = 2 * l_max + 2
+    phi = 2 * math.pi * np.arange(n_phi) / n_phi
+    C, F = (a.ravel() for a in np.meshgrid(cos_t, phi, indexing="ij"))
+    W = np.repeat(w_t, n_phi) * (2 * math.pi / n_phi)
+    S = np.sqrt(1.0 - C ** 2)
+    return np.stack([S * np.cos(F), S * np.sin(F), C], axis=1), C, F, W
+
+
+def project_about(field, modes, center, rho_max, d_rho, chunk=48):
+    """Masses sum_LM |U~_LM|^2 d rho of `field` re-expanded about `center`.
+
+    field(X, Y, Z) gives psi at points; U~_LM(rho) = rho <Y_LM|psi(center + rho n)>.
+    Returns (norm per mode, norm of the whole ball rho < rho_max)."""
+    l_max = max(l for l, _ in modes)
+    n_hat, C, F, W = angular_grid(l_max)
+    Ystar = np.stack([np.conj(Y_theta(l, m, C) * np.exp(1j * m * F)) * W for l, m in modes], axis=1)
+    rho = np.arange(1, int(rho_max / d_rho) + 1) * d_rho
+    norms, ball = np.zeros(len(modes)), 0.0
+    for a in range(0, len(rho), chunk):
+        rr = rho[a:a + chunk]
+        P = center[None, None, :] + rr[:, None, None] * n_hat[None, :, :]
+        values = field(P[..., 0].ravel(), P[..., 1].ravel(), P[..., 2].ravel()).reshape(len(rr), len(W))
+        U = rr[:, None] * (values @ Ystar)
+        norms += (np.abs(U) ** 2).sum(axis=0) * d_rho
+        ball += float(((np.abs(values) ** 2) @ W * rr ** 2).sum()) * d_rho
+    return norms, ball
+
+
+class ProjectionGeometry:
+    """Re-expansion about a hole at distance d from the COM, cached per hole.
+
+    The field is first rotated so the hole lies on the +z axis, where a
+    translation along z keeps each m separate: the azimuthal integral is then
+    exact and only a Gauss-Legendre integral over the polar angle about the
+    hole is left, for every radius rho. The modes found there are rotated back
+    to axes parallel to the COM frame. The rotations are computed numerically
+    from Y_lm, so they follow the solver's convention, and the orbital phase
+    only multiplies each COM mode by exp(i m phase): one geometry serves every
+    snapshot of a fixed orbit."""
+
+    def __init__(self, r, modes, d, rho_max, d_rho, beta_nodes=None):
+        self.modes = modes
+        self.L = L = max(l for l, _ in modes)
+        self.full = [(l, m) for l in range(L + 1) for m in range(-l, l + 1)]
+        self.d_rho = d_rho
+        self.rho = np.arange(1, int(rho_max / d_rho) + 1) * d_rho
+        nb = beta_nodes or 4 * (L + 1)
+        cb, self.wb = np.polynomial.legendre.leggauss(nb)
+        RR, CB = np.meshgrid(self.rho, cb, indexing="ij")          # (radius, polar node) about the hole
+        rr = np.sqrt(RR ** 2 + d * d + 2 * RR * d * CB).ravel()
+        cos_t = ((d + RR * CB).ravel() / np.maximum(rr, 1e-300))
+        # Point-major float32 tables: gathering whole rows of the modes is
+        # what makes a snapshot cheap.
+        # what makes a snapshot cheap. The linear interpolation in r is folded
+        # into the angular factors: psi_m(p) = sum (U[i] lo + U[i+1] hi).
+        self.idx = np.clip(np.searchsorted(r, rr) - 1, 0, len(r) - 2)
+        w = np.clip((rr - r[self.idx]) / (r[self.idx + 1] - r[self.idx]), 0.0, 1.0)[:, None]
+        inv_r = np.where((rr > 0) & (rr <= r[-1]), 1.0 / np.maximum(rr, 1e-300), 0.0)
+        Yt = (Y_theta_table(self.full, cos_t) * inv_r).T
+        self.lo = np.ascontiguousarray(Yt * (1 - w), dtype=np.float32)
+        self.hi = np.ascontiguousarray(Yt * w, dtype=np.float32)
+        self.Yb = Y_theta_table(self.full, cb).astype(np.float64) * self.wb       # about the hole, weighted
+        m_full = np.array([m for _, m in self.full])
+        self.by_m = [np.where(m_full == m)[0] for m in range(-L, L + 1)]
+        # Sums the modes of each m: (all modes) x (m = -L..L).
+        self.sum_m = np.stack([(m_full == m).astype(np.complex64) for m in range(-L, L + 1)], axis=1)
+        # Rotation taking e_z to e_x: A[l][m, m'] = <Y_lm | Y_lm'(Q n)>.
+        self.A = rotation_blocks(L, np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]))
+        self.where = {lm: i for i, lm in enumerate(modes)}
+        self.nbytes = self.lo.nbytes + self.hi.nbytes + self.idx.nbytes
+
+    def project(self, psi, phase):
+        """(norm per mode of `modes`, norm of the ball) about the hole for COM modes psi."""
+        L, Nr = self.L, psi.shape[1]
+        G, k = np.zeros((len(self.full), Nr), dtype=complex), 0
+        for l in range(L + 1):
+            Ul = np.zeros((2 * l + 1, Nr), dtype=complex)
+            for m in range(-l, l + 1):
+                if (l, m) in self.where:
+                    Ul[m + l] = psi[self.where[(l, m)]] * np.exp(1j * m * phase)
+            G[k:k + 2 * l + 1] = self.A[l] @ Ul
+            k += 2 * l + 1
+        GT = np.ascontiguousarray(G.T, dtype=np.complex64)
+        # The exp(i m phi) part of psi at every point, one column per m, in
+        # blocks of points that stay in cache.
+        Hm = np.empty((len(self.idx), self.sum_m.shape[1]), dtype=np.complex64)
+        for a in range(0, len(self.idx), 512):
+            i = self.idx[a:a + 512]
+            Hm[a:a + 512] = (GT[i] * self.lo[a:a + 512] + GT[i + 1] * self.hi[a:a + 512]) @ self.sum_m
+        Hm = Hm.astype(complex)
+        n_rho, nb = len(self.rho), len(self.wb)
+        Gt, ball = np.zeros((len(self.full), n_rho), dtype=complex), 0.0
+        for j, sel in enumerate(self.by_m):
+            H = Hm[:, j].reshape(n_rho, nb)
+            Gt[sel] = 2 * math.pi * self.rho[None, :] * (self.Yb[sel] @ H.T)
+            ball += 2 * math.pi * float(((np.abs(H) ** 2) @ self.wb * self.rho ** 2).sum()) * self.d_rho
+        norms_full, k = np.zeros(len(self.full)), 0
+        for l in range(L + 1):
+            # Back to axes parallel to the COM frame; the phase drops out of |.|^2.
+            Hl = self.A[l].conj().T @ Gt[k:k + 2 * l + 1]
+            norms_full[k:k + 2 * l + 1] = (np.abs(Hl) ** 2).sum(axis=1) * self.d_rho
+            k += 2 * l + 1
+        index = {lm: i for i, lm in enumerate(self.full)}
+        return np.array([norms_full[index[lm]] for lm in self.modes]), ball
+
+
+def rotation_blocks(L, Q):
+    """A[l][m, m'] = integral of conj(Y_lm(n)) Y_lm'(Q n) over the sphere, by quadrature."""
+    n = 2 * L + 4
+    c, wc = np.polynomial.legendre.leggauss(n)
+    phi = 2 * math.pi * np.arange(2 * n) / (2 * n)
+    C, F = (a.ravel() for a in np.meshgrid(c, phi, indexing="ij"))
+    W = np.repeat(wc, 2 * n) * (math.pi / n)
+    S = np.sqrt(1.0 - C ** 2)
+    QN = np.stack([S * np.cos(F), S * np.sin(F), C], axis=1) @ Q.T
+    cq, fq = np.clip(QN[:, 2], -1.0, 1.0), np.arctan2(QN[:, 1], QN[:, 0])
+    blocks = []
+    for l in range(L + 1):
+        ms = range(-l, l + 1)
+        Y = np.stack([Y_theta(l, m, C) * np.exp(1j * m * F) for m in ms])
+        YQ = np.stack([Y_theta(l, m, cq) * np.exp(1j * m * fq) for m in ms])
+        blocks.append((np.conj(Y) * W) @ YQ.T)
+    return blocks
+
+
+def projection_geometry(run, center, d, rho_max):
+    """The cached geometry for a hole at distance d (kept for the two holes)."""
+    key = (center, round(d, 9), round(rho_max, 9))
+    g = run.projection_geometry.get(key)
+    if g is None:
+        g = ProjectionGeometry(run.r, run.modes, d, rho_max, float(run.r[1] - run.r[0]))
+        stale = [k for k in run.projection_geometry if k[0] == center]
+        for k in stale:     # an evolving orbit: keep only the latest per hole
+            del run.projection_geometry[k]
+        run.projection_geometry[key] = g
+    return g
+
+
+def snapshot_field(run, psi):
+    """psi(X, Y, Z) of a snapshot, from its modes about the COM."""
+    every = set(run.modes)
+    return lambda X, Y, Z: field_values(psi, run.modes, every, point_tables(run.r, X, Y, Z))
+
+
+def centred_modes(run, step, center):
+    """Mass per mode about one black hole at snapshot `step`, cached per run."""
+    key = (step, center)
+    hit = run.projection_cache.get(key)
+    if hit is not None:
+        return hit
+    t, R, theta, q = snapshot_orbit(run, step)
+    pos = black_hole_position(center, R, theta, q)
+    d, phase = float(np.hypot(pos[0], pos[1])), math.atan2(pos[1], pos[0])
+    # The ball about the hole inside the extraction sphere, where M_c is measured.
+    r_ex = min(float(run.config.get("simulation", {}).get("r_ex", 1000.0)), float(run.r[-1]))
+    mu = run.config["atom"]["mu"]
+    norms, ball = projection_geometry(run, center, d, r_ex - d).project(load_snapshot(run, step), phase)
+    out = {"t": t, "R": R, "masses": norms * mu, "ball": ball * mu}
+    run.projection_cache[key] = out
+    return out
+
+
+def projection_payload(run, center, budget=3.0):
+    """Mass per mode about one black hole at every snapshot. Snapshots not yet
+    projected within `budget` seconds are left for the next request."""
+    if center not in ("primary", "secondary"):
+        raise ValueError(f"Unknown centre {center!r}")
+    steps = run.snapshot_steps()
+    start, done = time.time(), []
+    for step in steps:
+        if (step, center) not in run.projection_cache and time.time() - start > budget:
+            break
+        try:
+            done.append((step, centred_modes(run, step, center)))
+        except ValueError:    # snapshot still being written
+            break
+    masses = np.array([p["masses"] for _, p in done]).reshape(len(done), len(run.modes))
+    ball = np.array([p["ball"] for _, p in done])
+    return {
+        "center": center, "steps": [s for s, _ in done], "t": [p["t"] for _, p in done],
+        "R": [p["R"] for _, p in done], "ball": clean(ball),
+        "masses": [clean(masses[:, i]) for i in range(len(run.modes))],
+        # The ball's mass outside the modes evolved about the COM (l > l_max).
+        "higher": clean(np.maximum(ball - masses.sum(axis=1), 0.0)),
+        "remaining": len(steps) - len(done),
+    }
+
+
+def volume_payload(run, step, r_plot, n, mode_set, radiative):
+    key = (step, float(r_plot), int(n), mode_set, json.dumps(sorted(map(list, radiative))))
+    hit = run.volume_cache.get(key)
+    if hit is not None:
+        run.volume_cache.move_to_end(key)
+        return hit
+    psi = load_snapshot(run, step)
+    g = volume_geometry(run, r_plot, n)
+    density = field_density(psi, run.modes, active_modes(run.modes, mode_set, radiative), g)
+    out = {"step": step, "n": int(n), "extent": float(r_plot), "density_f32": f32_b64(density)}
+    run.volume_cache[key] = out
+    while len(run.volume_cache) > 8:
+        run.volume_cache.popitem(last=False)
+    return out
 
 
 def f32_b64(a):
@@ -690,33 +1092,8 @@ def _snapshot_payload(run, step, r_plot, n_grid, mode_set, radiative, plane="xy"
     if plane not in PLANES:
         raise ValueError(f"Unknown plane {plane!r}")
     g = slice_geometry(run, r_plot, n_grid, plane)
-    x, idx, w = g["x"], g["idx"], g["w"]
-    if mode_set == "radiative":
-        active = {tuple(m) for m in radiative}
-    elif mode_set == "bound":
-        active = set(modes) - {tuple(m) for m in radiative}
-    else:
-        active = set(modes)
-    by_m = {}
-    for i, (l, m) in enumerate(modes):
-        if (l, m) not in active:
-            continue
-        if plane == "xy":
-            Y = Y_equator(l, m)
-            if Y == 0.0:
-                continue
-        else:
-            if (l, m) not in g["ytheta"]:
-                g["ytheta"][(l, m)] = Y_theta(l, m, g["cos_t"])
-            Y = g["ytheta"][(l, m)]
-        U = psi[i, idx] * (1 - w) + psi[i, idx + 1] * w
-        by_m[m] = by_m.get(m, 0) + Y * U
-    zz = np.zeros(idx.shape, dtype=complex)
-    for m, part in by_m.items():
-        if m not in g["eimphi"]:
-            g["eimphi"][m] = np.exp(1j * m * g["phi"])
-        zz += part * g["eimphi"][m]
-    density = (np.abs(zz * g["weight"]) ** 2).reshape(len(x), len(x))
+    x = g["x"]
+    density = field_density(psi, modes, active_modes(modes, mode_set, radiative), g, plane == "xy").reshape(len(x), len(x))
 
     return {
         "step": step, "t": t_s, "R": R_s, "theta": th_s, "q": q_s,
@@ -955,7 +1332,10 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/data":
                 run = self.run_from(qs)
                 window = float(qs.get("window", ["0"])[0] or 0)
-                self.send(200, json.dumps(data_payload(run, window, self.max_points)))
+                payload = data_payload(run, window, self.max_points)
+                if qs.get("scalars", ["0"])[0] == "1":
+                    payload = scalar_payload(payload)
+                self.send(200, json.dumps(payload))
             elif url.path == "/api/snapshot":
                 run = self.run_from(qs)
                 step = int(qs["step"][0])
@@ -965,6 +1345,16 @@ class Handler(BaseHTTPRequestHandler):
                 plane = qs.get("plane", ["xy"])[0]
                 radiative = json.loads(qs.get("radiative", ["[]"])[0])
                 self.send(200, json.dumps(snapshot_payload(run, step, r_plot, n_grid, mode_set, radiative, plane)))
+            elif url.path == "/api/volume":
+                run = self.run_from(qs)
+                step = int(qs["step"][0])
+                r_plot = float(qs.get("rplot", ["200"])[0])
+                n = max(24, min(128, int(qs.get("n", ["64"])[0])))
+                radiative = json.loads(qs.get("radiative", ["[]"])[0])
+                self.send(200, json.dumps(volume_payload(run, step, r_plot, n, qs.get("set", ["all"])[0], radiative)))
+            elif url.path == "/api/projection":
+                run = self.run_from(qs)
+                self.send(200, json.dumps(projection_payload(run, qs.get("center", ["primary"])[0])))
             elif url.path == "/api/download":
                 run = self.run_from(qs)
                 step = qs.get("step", [""])[0]

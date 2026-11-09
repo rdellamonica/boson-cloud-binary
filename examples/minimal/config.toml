@@ -5,6 +5,9 @@
 [grid]
 N = 1000            # radial nodes
 L = 1000.0          # outer radius
+# type = "stretched" # fine spacing inside r_core, `stretch` times coarser outside
+# r_core = 400.0    # default 4 n^2 / mu^2
+# stretch = 4.0     # e.g. N = 1300, L = 4000 keeps the spacing of 1 inside r_core
 
 [binary]
 q = 0.1             # mass ratio M2/M1
@@ -25,6 +28,8 @@ save_every = 50          # snapshot interval in steps
 l_max = 4                # largest retained multipole
 r_ex = 800.0             # flux extraction radius
 ramp_periods = 2.0       # startup ramp of the orbital frequency and companion
+orbit_delay_periods = 0.0 # with evolve_orbit: fixed-orbit hold after the ramp
+orbit_ramp_periods = 1.0 # with evolve_orbit: back-reaction switch-on after the hold
 epsilon = 0.0
 evolve_orbit = false     # keep the orbit fixed
 absorption = true        # s-wave absorbers on the black holes

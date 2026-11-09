@@ -36,7 +36,7 @@ Eigen::VectorXcd run_case(bool absorb, double smear, double q, double radius,
     for (int step = 1; step <= 40; ++step) {
         const Eigen::VectorXcd previous = cn.psi;
         cn.step(step);
-        require(cn.psi.allFinite() && Eigen::MatrixXcd(cn.H).allFinite(),
+        require(cn.psi.allFinite() && Eigen::MatrixXcd(cn.H()).allFinite(),
                 "Empty or unresolved absorber produced nonfinite values");
         require(cn.R == radius && cn.M1 == 1.0 && cn.M2 == q &&
                 cn.R1 == r1 && cn.R2 == r2 && cn.P == period && cn.dt == dt,

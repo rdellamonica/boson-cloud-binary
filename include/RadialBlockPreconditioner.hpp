@@ -75,6 +75,48 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Factorise @p blocks tridiagonal blocks given entry by entry.
+     *
+     * @p entry(b, i, lower, diagonal, upper) sets row @c i of block @c b;
+     * @c lower of the first row and @c upper of the last are ignored.
+     */
+    template<class Entry>
+    RadialBlockPreconditioner& factorizeBlocks(Eigen::Index blocks, const Entry& entry)
+    {
+        if (block_size_ < 1 || blocks < 0)
+            throw std::invalid_argument("Invalid radial preconditioner block dimensions");
+        inverse_diagonal_.resize(blocks * block_size_);
+        lower_.resize(blocks * block_size_);
+        upper_.resize(blocks * block_size_);
+        int failed = 0;
+#pragma omp parallel for schedule(static) reduction(|:failed) if(blocks >= 8)
+        for (Eigen::Index b = 0; b < blocks; ++b)
+        {
+            const Eigen::Index start = b * block_size_;
+            for (int i = 0; i < block_size_; ++i)
+            {
+                const Eigen::Index row = start + i;
+                Scalar lower, diagonal, upper;
+                entry(b, i, lower, diagonal, upper);
+                lower_[row] = i > 0 ? lower : Scalar(0);
+                upper_[row] = i + 1 < block_size_ ? upper : Scalar(0);
+                Scalar pivot = diagonal;
+                if (i > 0)
+                    pivot -= lower_[row] * inverse_diagonal_[row - 1] * upper_[row - 1];
+                if (std::abs(pivot) == 0.0 || !std::isfinite(std::abs(pivot)))
+                {
+                    failed = 1;
+                    inverse_diagonal_[row] = 0.0;
+                }
+                else
+                    inverse_diagonal_[row] = Scalar(1) / pivot;
+            }
+        }
+        info_ = failed ? Eigen::NumericalIssue : Eigen::Success;
+        return *this;
+    }
+
     /// Apply the inverse of the block diagonal (called by Eigen).
     template<class Rhs, class Dest>
     void _solve_impl(const Rhs& rhs, Dest& x) const

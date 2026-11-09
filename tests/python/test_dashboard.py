@@ -199,6 +199,17 @@ def test_pruning_payload(dash, folder):
         assert (p["now"], p["total"], p["changes"], p["ever"]) == (3, len(MODES), 2, 3), f"summary {p}"
 
 
+def test_scalar_payload(dash, folder):
+    # The Compare tab's light payload: scalar series only, same samples.
+    full = dash.data_payload(dash.get_run(folder), 0, 4000)
+    light = dash.scalar_payload(full)
+    assert light["ready"] and light["info"]["folder"] == full["info"]["folder"], "scalar payload info"
+    for key in ("t", "R", "Omega", "M_c", "total_mass_flux", "p_bin", "E_s"):
+        assert light["series"][key] == full["series"][key], f"scalar series {key}"
+    assert not any(isinstance(v, list) and v and isinstance(v[0], list) for v in light["series"].values()), \
+        "per-mode series left in the scalar payload"
+
+
 def test_default_dt(dash):
     # Without dt the solver starts at P0 / steps_per_period; the setup table shows that value.
     cfg = {"binary": {"q": 0.5, "R": 20.0}, "simulation": {"steps_per_period": 32, "num_periods": 2}}
@@ -239,6 +250,60 @@ def test_snapshot_payload(dash, folder):
         pass
     else:
         raise AssertionError("an unknown plane was accepted")
+
+
+def test_projection(dash, folder):
+    run = dash.get_run(folder)
+    psi = dash.load_snapshot(run, 10)
+    dr = float(run.r[1] - run.r[0])
+    # About the COM the re-expansion gives back the saved modes.
+    norms, ball = dash.project_about(dash.snapshot_field(run, psi), run.modes, np.zeros(3), 40.0, dr)
+    direct = (np.abs(psi[:, (run.r > 0) & (run.r <= 40.0)]) ** 2).sum(axis=1) * dr
+    assert np.allclose(norms, direct, rtol=1e-6), f"COM projection {norms} against {direct}"
+    assert abs(ball / norms.sum() - 1) < 1e-6, "the ball holds more than the modes about the COM"
+    # A Gaussian centred off the origin, carried by modes up to l = 8 about the
+    # COM, is almost purely l = 0 about its own centre.
+    modes = [(l, m) for l in range(9) for m in range(-l, l + 1, 2)]
+    a, width = np.array([3.0, 2.0, 0.0]), 6.0
+    gauss = lambda X, Y, Z: np.exp(-((X - a[0]) ** 2 + (Y - a[1]) ** 2 + Z ** 2) / (2 * width ** 2)) + 0j
+    n_hat, C, F, W = dash.angular_grid(8)
+    Ystar = np.stack([np.conj(dash.Y_theta(l, m, C) * np.exp(1j * m * F)) * W for l, m in modes], axis=1)
+    P = run.r[:, None, None] * n_hat[None]
+    U = run.r[:, None] * (gauss(*(P[..., k].ravel() for k in range(3))).reshape(len(run.r), len(W)) @ Ystar)
+    gauss_field = lambda X, Y, Z: dash.field_values(U.T, modes, set(modes), dash.point_tables(run.r, X, Y, Z))
+    shifted, _ = dash.project_about(gauss_field, modes, a, 30.0, dr)
+    assert shifted[0] / shifted.sum() > 0.9999, f"l = 0 holds only {shifted[0] / shifted.sum()}"
+    # The cached geometry (rotate, translate along z, rotate back) agrees with
+    # projecting the field directly about the hole. With l_max = 2 the field
+    # about a hole has much power above l_max, so both are resolved finely
+    # enough that aliasing does not separate them.
+    t, R, theta, q = dash.snapshot_orbit(run, 10)
+    coarse = dash.angular_grid
+    dash.angular_grid = lambda l_max: coarse(40)
+    try:
+        for center in ("primary", "secondary"):
+            pos = dash.black_hole_position(center, R, theta, q)
+            d = float(np.hypot(pos[0], pos[1]))
+            direct, ball_direct = dash.project_about(dash.snapshot_field(run, psi), run.modes, pos, 40.0 - d, dr)
+            fast, ball_fast = dash.ProjectionGeometry(run.r, run.modes, d, 40.0 - d, dr, beta_nodes=160).project(
+                psi, math.atan2(pos[1], pos[0]))
+            assert np.allclose(fast, direct, rtol=1e-3), f"{center}: {fast} against {direct}"
+            assert abs(ball_fast / ball_direct - 1) < 1e-4, f"{center}: ball {ball_fast} against {ball_direct}"
+    finally:
+        dash.angular_grid = coarse
+    # Every snapshot about each hole; the second request comes from the cache.
+    for center in ("primary", "secondary"):
+        out = dash.projection_payload(run, center)
+        assert out["steps"] == [0, 10, 20] and out["remaining"] == 0, f"projected steps {out['steps']}"
+        assert len(out["masses"]) == len(MODES) and len(out["masses"][0]) == 3, "projection shape"
+        assert all(h >= 0 for h in out["higher"]), "negative mass above l_max"
+        assert dash.projection_payload(run, center, budget=0.0)["remaining"] == 0, "projections are not cached"
+    try:
+        dash.projection_payload(run, "tertiary")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an unknown centre was accepted")
 
 
 def test_zip_export(dash, root, folder):
@@ -284,6 +349,8 @@ def test_http_endpoints(dash, root, folder):
         assert status == 200 and json.loads(body)["ready"], "/api/data is not ready"
         status, body = get(f"/api/snapshot?run={quote(folder)}&step=10&rplot=30&grid=64")
         assert status == 200 and json.loads(body)["step"] == 10, "/api/snapshot returned the wrong step"
+        status, body = get(f"/api/projection?run={quote(folder)}&center=secondary")
+        assert status == 200 and json.loads(body)["center"] == "secondary", "/api/projection failed"
         # A folder outside the served root must be refused, with the error in the body.
         try:
             status, body = get("/api/data?run=" + quote(os.path.dirname(root)))
@@ -313,10 +380,12 @@ def main():
                  lambda: test_data_payload(dash, folder),
                  lambda: test_pruning_payload(dash, folder),
                  lambda: test_default_dt(dash),
+                 lambda: test_scalar_payload(dash, folder),
                  lambda: test_snapshot_payload(dash, folder),
+                 lambda: test_projection(dash, folder),
                  lambda: test_zip_export(dash, root, folder),
                  lambda: test_http_endpoints(dash, root, folder)]
-        names = ["discovery", "data payload", "pruning payload", "default dt", "snapshot payload", "zip export", "http endpoints"]
+        names = ["discovery", "data payload", "pruning payload", "default dt", "scalar payload", "snapshot payload", "projection", "zip export", "http endpoints"]
         for name, test in zip(names, tests):
             try:
                 test()

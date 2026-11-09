@@ -25,6 +25,7 @@ from scipy.special import lpmv, gammaln
 from sympy.physics.wigner import wigner_d
 
 from gravatom.context import Context
+from radial_grid import radial_grid, write_modesbin_header
 from gravatom.gravitational_atom import BoundState
 
 try:
@@ -145,7 +146,7 @@ print(f"  Secondary: (n,l,m)=({n2},{l2},{m2}), epsilon={epsilon_2}")
 # GRID / MODES
 # ======================================================================
 
-r_arr = np.linspace(0.0, box_size, N)
+r_arr = radial_grid(config)
 r_arr[0] = r0
 
 modes = [(ell, emm) for ell in range(L_max + 1) for emm in range(-ell, ell + 1)]
@@ -529,9 +530,10 @@ def save_modes_binary(filename, U_dict):
     """
     MODESBIN format:
       magic      : 8 bytes "MODESBIN"
-      version    : int32
+      version    : int32 (2)
       Nr         : int64
       Nmodes     : int64
+      r          : Nr little-endian float64 (radial nodes)
 
       then for each sorted (l,m):
         l        : int32
@@ -551,10 +553,7 @@ def save_modes_binary(filename, U_dict):
             raise ValueError("All radial profiles must have the same length.")
 
     with open(filename, "wb") as f:
-        f.write(b"MODESBIN")
-        f.write(struct.pack("<i", 1))
-        f.write(struct.pack("<q", Nr))
-        f.write(struct.pack("<q", Nmodes))
+        write_modesbin_header(f, r_arr, Nmodes)
 
         for (l, m), profile in mode_items:
             profile = np.asarray(profile, dtype=np.complex128)

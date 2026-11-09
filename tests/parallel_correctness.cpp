@@ -131,7 +131,7 @@ Eigen::VectorXcd test_evolution(int threads, int scenario, bool ilut)
     cn.initialize();
     const Reference first = reference(cn, 0.0, ramp_periods, absorb, smear);
     require((Eigen::MatrixXcd(cn.H0)-first.h0).norm() < 1e-12, "Stationary Hamiltonian mismatch");
-    require((Eigen::MatrixXcd(cn.V1)-first.v1).norm() < 1e-12, "Initial potential mismatch");
+    require((Eigen::MatrixXcd(cn.V1())-first.v1).norm() < 1e-12, "Initial potential mismatch");
     if (scenario == 2) {
         cn.build_cap(0.8, 0.01, 3);
         cn.build_damping_mask(0.8, 0.01, 3);
@@ -164,10 +164,10 @@ Eigen::VectorXcd test_evolution(int threads, int scenario, bool ilut)
     cn.theta = old_theta;
     cn.Omega = old_omega;
     cn.run(2, 60.0);
-    require((Eigen::MatrixXcd(cn.V1)-next.v1).norm() < 1e-12, "V1 reference mismatch");
-    require((Eigen::MatrixXcd(cn.V2)-next.v2).norm() < 1e-12, "V2 reference mismatch");
-    require((Eigen::MatrixXcd(cn.dVdt)-next.dvdt).norm() < 1e-12, "Potential derivative mismatch");
-    require((Eigen::MatrixXcd(cn.H)-h).norm() < 1e-12, "Full Hamiltonian reference mismatch");
+    require((Eigen::MatrixXcd(cn.V1())-next.v1).norm() < 1e-12, "V1 reference mismatch");
+    require((Eigen::MatrixXcd(cn.V2())-next.v2).norm() < 1e-12, "V2 reference mismatch");
+    require((Eigen::MatrixXcd(cn.dVdt())-next.dvdt).norm() < 1e-12, "Potential derivative mismatch");
+    require((Eigen::MatrixXcd(cn.H())-h).norm() < 1e-12, "Full Hamiltonian reference mismatch");
     if (absorb) {
         require(next.absorption.norm() > 0, "Fixture's absorber is not resolved");
         const Eigen::VectorXcd probe = expected;

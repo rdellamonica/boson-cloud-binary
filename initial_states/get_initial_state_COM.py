@@ -31,6 +31,7 @@ from scipy.integrate import quad
 from sympy.physics.wigner import wigner_d
 
 from gravatom.context import Context
+from radial_grid import radial_grid, write_modesbin_header
 from gravatom.gravitational_atom import BoundState
 
 try:
@@ -136,7 +137,7 @@ print("Atomic states")
 print(f"  Primary:   (n,l,m) = ({n1},{l1},{m1}), epsilon = {epsilon_1}")
 print(f"  Secondary: (n,l,m) = ({n2},{l2},{m2}), epsilon = {epsilon_2}")
 
-r_arr = np.linspace(0.0, box_size, N)
+r_arr = radial_grid(config)
 r_arr[0] = r0
 
 modes = [
@@ -355,10 +356,7 @@ def save_modes_binary(filename, U_dict):
     with open(filename, "wb") as f:
 
         # header
-        f.write(b"MODESBIN")
-        f.write(struct.pack("<i", 1))
-        f.write(struct.pack("<q", Nr))
-        f.write(struct.pack("<q", Nmodes))
+        write_modesbin_header(f, r_arr, Nmodes)
 
         # modes
         for (l, m), profile in mode_items:

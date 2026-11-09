@@ -58,14 +58,14 @@ void check_evolution(double offset, bool absorb, int threads)
     initial /= std::sqrt(initial.squaredNorm()*cn.dr);
     cn.set_initial_state_full(initial);
     cn.initialize();
-    require(cn.V2.norm()==0 && cn.dVdt.norm()==0,"Isolated run retains a companion or binary forcing");
+    require(cn.V2().norm()==0 && cn.dVdt().norm()==0,"Isolated run retains a companion or binary forcing");
     require(cn.M1==1 && cn.M2==0 && cn.q==0 && cn.Omega==0 && !cn.evolve_orbit,
             "Isolated BH configuration is not stationary and mass-1");
     // For any displacement d, the potential monopole is -mu/max(r,d).
     for (int i=1; i<cn.Nr-1; ++i)
-        require(std::abs(cn.V.coeff(i,i)+cn.mu/std::max(cn.r[i],std::abs(offset))) < 1e-12,
+        require(std::abs(cn.V().coeff(i,i)+cn.mu/std::max(cn.r[i],std::abs(offset))) < 1e-12,
                 "Isolated potential monopole has the wrong mass or displacement");
-    const SparseComplex h=cn.H;
+    const SparseComplex h=cn.H();
     const double initial_norm=cn.psi.squaredNorm(), theta=cn.theta;
     cn.run(1,30);
     cn.t.resize(9);
@@ -77,7 +77,7 @@ void check_evolution(double offset, bool absorb, int threads)
         const double predicted=cn.dt*midpoint.dot(cn.apply_sink(midpoint)).real();
         require(std::abs(measured-predicted) < 1e-9*initial_norm,
                 "Isolated norm loss does not match the discrete CN absorption balance");
-        require((cn.H-h).norm()<1e-13 && cn.theta==theta && cn.phase==0 && cn.Omega==0,
+        require((cn.H()-h).norm()<1e-13 && cn.theta==theta && cn.phase==0 && cn.Omega==0,
                 "Isolated geometry or Hamiltonian changed with time");
         require(cn.R1==std::abs(offset) && cn.M1==1 && cn.M2==0,"BH moved or accreted in isolated mode");
     }

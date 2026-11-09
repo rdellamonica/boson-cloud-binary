@@ -117,6 +117,8 @@ nav a {
   display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 4px; color: var(--text-secondary); border: 1px solid transparent;
   text-decoration: none; font-weight: 500; position: relative; transition: background .18s var(--ease), color .18s var(--ease);
 }
+/* Setup is a tab of the Overview, so it sits indented under it. */
+nav a.sub { margin-left: 22px; padding-top: 5px; padding-bottom: 5px; font-size: .94em; }
 nav a svg.i { color: var(--text-muted); transition: color .18s; }
 nav a:hover { background: var(--surface-3); color: var(--text-primary); }
 nav a.active { background: var(--raised); color: var(--text-primary); font-weight: 600; border-color: var(--border); box-shadow: var(--shadow-sm); }
@@ -476,6 +478,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: f
   nav { flex-direction: row; }
   nav a { white-space: nowrap; padding: 7px 10px; }
   nav a.active::before { display: none; }
+  nav a.sub { margin-left: 0; font-size: inherit; padding: 7px 10px; }
 }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) {
@@ -556,6 +559,95 @@ html { scroll-padding-top: 52px; }
 .inpgroup .unit { padding-right: 10px; font-size: 12px; color: var(--text-muted); }
 .slicectl .ctl { gap: 6px; font-size: 12px; color: var(--text-muted); }
 .slicectl .ctl sub { font-size: 75%; }
+/* 3D cloud: WebGL volume rendering on a dark stage, controls on the side. */
+.sechead .beta { font-size: 10px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 3px; }
+.vol-grid { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 18px; }
+.vol-view { position: relative; min-height: 560px; background: radial-gradient(ellipse at 50% 45%, #1a1b1f, #0b0c0e 75%); border-radius: 4px; overflow: hidden; touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none; outline: none; }
+.vol-view:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
+.vol-view.dragging { cursor: grabbing; }
+.vol-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vol-status { position: absolute; left: 12px; top: 10px; font: 500 11.5px var(--mono); color: rgba(255,255,255,.72); pointer-events: none; }
+.vol-hint { position: absolute; left: 12px; bottom: 10px; font-size: 11.5px; color: rgba(255,255,255,.45); pointer-events: none; }
+.vol-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; }
+.vol-views { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; padding: 2px; background: rgba(255,255,255,.06); border-radius: 4px; }
+.vbtn, .vol-views button { height: 26px; min-width: 26px; display: grid; place-items: center; padding: 0 6px; font: 600 13px var(--font); color: rgba(255,255,255,.78); background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 4px; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+.vbtn.wide { font-size: 11.5px; font-weight: 500; padding: 0 9px; }
+.vbtn .i { width: 13px; height: 13px; }
+.vbtn:hover, .vol-views button:hover { color: #fff; border-color: var(--accent); }
+.vbtn[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+.vol-views button { background: transparent; border-color: transparent; font-size: 11.5px; font-weight: 500; padding: 0 8px; }
+.vol-nogl { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.7); font-size: 13px; padding: 20px; text-align: center; }
+.vol-nogl[hidden] { display: none; }
+.vol-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+#cloud3d .sechead > .switch { margin-left: auto; font-size: 12.5px; }
+#cloud3d.vol-off > .card { display: none; }
+.vctl { display: flex; flex-direction: column; gap: 7px; }
+.vctl .seg { align-self: flex-start; }
+.vctl .inpgroup { align-self: flex-start; }
+.vctl input[type=range] { width: 100%; flex: none; }
+.vctl input[type=range]:disabled { opacity: .4; }
+.vlab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.vlab em { font-style: normal; font-weight: 500; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.vol-cbar { height: 10px; border-radius: 2px; }
+.vol-cbar-l { display: flex; justify-content: space-between; font: 500 11px var(--mono); color: var(--text-muted); margin-top: -2px; }
+@media (max-width: 900px) { .vol-grid { grid-template-columns: minmax(0, 1fr); } .vol-view { min-height: 420px; } }
+@media (max-width: 640px) { .vol-view { min-height: 340px; } .vol-hint { display: none; } .vol-status { top: 44px; } }
+
+/* Simulation tabs: one per open run, plus Compare, as the last row of the top bar. */
+.simtabs { flex: 1 0 100%; display: flex; align-items: stretch; gap: 2px; margin: 0 -20px -8px; padding: 0 20px 0 14px; min-height: 38px; border-top: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.simtabs::-webkit-scrollbar { display: none; }
+.st-list { display: flex; align-items: stretch; gap: 2px; min-width: 0; }
+.st-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; max-width: 260px; padding: 0 6px 0 10px; font: 500 12.5px var(--font); color: var(--text-muted); background: none; border: 0; cursor: pointer; white-space: nowrap; transition: color .15s; }
+.st-tab:hover { color: var(--text-primary); }
+.st-tab[aria-selected="true"] { color: var(--text-primary); }
+.st-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 0; height: 2px; background: var(--accent); }
+.st-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.st-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.st-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.st-grp { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; max-width: 110px; flex: none; margin-right: -3px; }
+.st-x { width: 20px; height: 20px; display: grid; place-items: center; border: 0; border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.st-x .i { width: 12px; height: 12px; }
+.st-tab:hover .st-x, .st-tab[aria-selected="true"] .st-x, .st-x:focus-visible { opacity: 1; }
+.st-x:hover { background: var(--surface-3); color: var(--text-primary); }
+.st-add { align-self: center; width: 26px; height: 26px; display: grid; place-items: center; margin-left: 2px; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer; }
+.st-add .i { width: 14px; height: 14px; }
+.st-add:hover { color: var(--text-primary); border-color: var(--border); background: var(--surface-2); }
+.st-sp { flex: 1 1 auto; min-width: 12px; }
+.st-cmp .i { width: 14px; height: 14px; }
+.st-cmp[aria-selected="true"] .i { color: var(--accent); }
+.st-cmp .n { font: 600 10.5px var(--mono); color: var(--text-muted); background: var(--surface-2); border-radius: 3px; padding: 1px 5px; }
+.rp-nt { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; flex: none; }
+.rp-nt .i { width: 13px; height: 13px; }
+.rp-opt.active .rp-nt, .rp-nt:focus-visible { opacity: 1; }
+.rp-nt:hover { color: var(--accent); border-color: var(--border); background: var(--surface-1); }
+.rp-pop.newtab .rp-list { box-shadow: inset 0 2px 0 var(--accent); }
+
+/* Compare: the flagged quantities of every open simulation. */
+.app.comparing main > :not(#compare) { display: none !important; }
+#compare[hidden] { display: none; }
+.cmp-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.cmp-pick .lab { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-right: 4px; }
+.cmp-pick .chip[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+.cmp-runs { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+.cmp-runs span { display: inline-flex; align-items: center; gap: 6px; }
+.cmp-runs .pp { color: var(--text-muted); }
+.cmp-none { height: 100%; display: grid; place-items: center; color: var(--text-muted); font-size: 12.5px; }
+.cmp-empty { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; background: var(--surface-1); }
+.cmp-row { display: grid; gap: 0 12px; }
+.cmp-cell { min-width: 0; }
+.cmp-cap { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); padding: 0 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cmp-cell .plot { height: 280px; }
+.cmp-wide { grid-column: 1 / -1; }
+.cmp-tag { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; margin-left: 2px; }
+.cmp-pick .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 6px; }
+.cmp-slicectl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.cmp-slicectl input[type=range] { width: 160px; }
+.cmp-slicectl .tread { font: 500 11.5px var(--mono); color: var(--text-muted); min-width: 92px; }
+.cmp-slicectl input[type=range]:disabled, .cmp-slicectl .tread.off { opacity: .4; }
+.cmp-slice .plot { height: 360px; }
+.cmp-slice .cmp-row { gap: 0 32px; }
+.cmp-cap .meta { margin-left: auto; font: 500 11px var(--mono); color: var(--text-muted); }
+
 /* Colormap picker for the slice: a swatch button and a listbox of ramps. */
 .cmpick { position: relative; display: inline-flex; }
 .cm-btn { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 9px 0 6px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text-primary); cursor: pointer;
@@ -680,6 +772,7 @@ html { scroll-padding-top: 52px; }
     <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
     <symbol id="i-orbit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><path d="M20.2 9.8A9 9 0 1 1 14.2 3.8"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></symbol>
     <symbol id="i-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m14.3 8 5.7 9.9M9.7 8h11.4M7.4 12l5.7-9.9M9.7 16 4 6.1M14.3 16H2.9M16.6 12l-5.7 9.9"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
@@ -708,6 +801,9 @@ html { scroll-padding-top: 52px; }
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-compare" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><path d="M5.5 15l2-3 2 2M16.5 13l2-4 2 3"/></symbol>
+    <symbol id="i-newtab" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M2 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" opacity=".45"/></symbol>
     <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
@@ -731,12 +827,13 @@ html { scroll-padding-top: 52px; }
     <nav id="nav">
       <div class="label">Sections</div>
       <a href="#overview" class="active"><svg class="i"><use href="#i-grid"/></svg>Overview</a>
+      <a href="#setup" class="sub"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
       <a href="#ionization"><svg class="i"><use href="#i-zap"/></svg>Ionization</a>
       <a href="#orbit"><svg class="i"><use href="#i-orbit"/></svg>Orbit &amp; masses</a>
       <a href="#modes"><svg class="i"><use href="#i-layers"/></svg>Modes &amp; energies</a>
       <a href="#pruning"><svg class="i"><use href="#i-sliders"/></svg>Mode pruning</a>
       <a href="#snapshot"><svg class="i"><use href="#i-aperture"/></svg>Snapshot</a>
-      <a href="#setup"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
+      <a href="#cloud3d"><svg class="i"><use href="#i-cube"/></svg>3D cloud</a>
     </nav>
     <div class="runinfo" id="runinfo"></div>
   </aside>
@@ -770,7 +867,7 @@ html { scroll-padding-top: 52px; }
         </select></div>
       <div class="field"><svg class="i"><use href="#i-timer"/></svg>
         <select id="refresh" aria-label="Refresh interval">
-          <option value="5">Every 5 s</option><option value="15" selected>Every 15 s</option><option value="60">Every 60 s</option>
+          <option value="1">Every 1 s</option><option value="5">Every 5 s</option><option value="15" selected>Every 15 s</option><option value="60">Every 60 s</option>
         </select></div>
       <button class="iconbtn" id="pause" title="Pause auto-refresh" aria-label="Pause auto-refresh"><svg class="i"><use href="#i-pause"/></svg></button>
       <button class="iconbtn" id="download" title="Download diagnostics (.zip)" aria-label="Download diagnostics"><svg class="i"><use href="#i-download"/></svg><span class="dlpct" id="dlPct"></span></button>
@@ -779,9 +876,22 @@ html { scroll-padding-top: 52px; }
       <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
       <button class="iconbtn" id="theme" title="Switch light / dark" aria-label="Switch theme"><svg class="i"><use href="#i-moon"/></svg></button>
       <div class="progress" id="progress"></div>
+      <div class="simtabs" id="simtabs">
+        <div class="st-list" id="stList" role="tablist" aria-label="Open simulations"></div>
+        <button type="button" class="st-add" id="stAdd" title="Open a simulation in a new tab" aria-label="Open a simulation in a new tab"><svg class="i"><use href="#i-plus"/></svg></button>
+        <div class="st-sp"></div>
+        <button type="button" class="st-tab st-cmp" id="stCompare" role="tab" aria-selected="false" title="Compare the open simulations"><svg class="i"><use href="#i-compare"/></svg>Compare<span class="n" id="stCount"></span></button>
+      </div>
     </div>
 
     <main>
+      <section id="compare" hidden>
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-compare"/></svg></div><h2>Compare</h2><span id="cmpNote">the open simulations, one colour per tab</span>
+          <div class="sechead-actions"><div class="seg sm" id="cmpLayout" data-value="overlay" role="group" aria-label="Comparison layout"><button data-v="overlay">Overlay</button><button data-v="side">Side by side</button></div></div></div>
+        <div class="cmp-pick" id="cmpPick" role="group" aria-label="Quantities to compare"><span class="lab">Quantities</span></div>
+        <div class="cmp-runs" id="cmpRuns"></div>
+        <div id="cmpBody"></div>
+      </section>
       <div class="pagehead" id="overview">
         <div><h1 id="runTitle">Live run</h1><p id="runPath">Waiting for data…</p><div class="badges" id="badges"></div></div>
       </div>
@@ -805,7 +915,7 @@ html { scroll-padding-top: 52px; }
         <div class="grid">
           <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-trend"/></svg></div><div><h3>Ionization rate</h3><p class="sub">−q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub> per mode, total, and Tomaselli et al. (2023)</p></div><div class="actions"><button class="chip sq" data-expand="pMass" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMass"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-flame"/></svg></div><div><h3>Ionization power</h3><p class="sub">q⁻² (M/M<sub>c</sub>) P<sub>ion</sub> per mode and total, initial mode excluded. Log scale shows |P<sub>ion</sub>| for every mode, so small contributions separate; pick R as the x-axis for P<sub>ion</sub> against R.</p></div><div class="actions"><button class="chip" data-log="pPower" title="Log scale of |P_ion|, all modes">log</button><button class="chip sq" data-expand="pPower" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pPower"></div><div class="skeleton"></div></div>
-          <div class="card reveal" style="--c: var(--s7)"><div class="head"><div class="ic"><svg class="i"><use href="#i-wave"/></svg></div><div><h3>Binary power</h3><p class="sub">P<sub>bin</sub> instantaneous, rolling average, and the ionization power −Σ(T + ε j/μ)</p></div><div class="actions"><button class="chip sq" data-expand="pBin" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pBin"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s7)"><div class="head"><div class="ic"><svg class="i"><use href="#i-wave"/></svg></div><div><h3>Binary power</h3><p class="sub" id="pBinSub">P<sub>bin</sub> instantaneous, rolling average, and the ionization power −Σ(T + ε j/μ)</p></div><div class="actions"><button class="chip" data-log="pBin" title="Log scale of the absolute values">log</button><button class="chip" data-log="pBinGW" title="Divide every curve by the quadrupole GW power (32/5) M₁²M₂²(M₁+M₂)/R⁵">÷ P<sub>GW</sub></button><button class="chip sq" data-expand="pBin" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pBin"></div><div class="skeleton"></div></div>
         </div>
       </section>
 
@@ -814,6 +924,7 @@ html { scroll-padding-top: 52px; }
         <div class="grid">
           <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-ruler"/></svg></div><div><h3>Orbital separation</h3><p class="sub">R (M)</p></div><div class="actions"><button class="chip sq" data-expand="pR" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pR"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div><h3>Cloud mass</h3><p class="sub">M<sub>c</sub> inside r<sub>ex</sub></p></div><div class="actions"><button class="chip sq" data-expand="pMc" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMc"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mass budget</h3><p class="sub" id="pBudgetSub">Fractions of the initial mass inside r<sub>ex</sub>: residual, ionized through r<sub>ex</sub>, absorbed by the black holes</p></div><div class="actions"><button class="chip on" data-log="pBudget" title="Log scale of the absolute values">log</button><button class="chip sq" data-expand="pBudget" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pBudget"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s3)"><div class="head"><div class="ic"><svg class="i"><use href="#i-scale"/></svg></div><div><h3>Binary masses</h3><p class="sub">M<sub>1</sub>, M<sub>2</sub> and q, log scale</p></div><div class="actions"><button class="chip sq" data-expand="pMasses" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMasses"></div><div class="skeleton"></div></div>
         </div>
       </section>
@@ -821,10 +932,9 @@ html { scroll-padding-top: 52px; }
       <section id="modes">
         <div class="sechead"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><h2>Modes &amp; energies</h2><span>hover a curve to identify its mode</span></div>
         <div class="grid">
-          <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-bars"/></svg></div><div><h3>Mass per mode</h3><p class="sub">M<sub>c</sub><sup>LM</sup></p></div><div class="actions"><button class="chip on" data-log="pNorms">log</button><button class="chip sq" data-expand="pNorms" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pNorms"></div><div class="skeleton"></div></div>
-          <div class="card reveal" style="--c: var(--s5)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mode fractions</h3><p class="sub">|c<sub>LM</sub>|² = M<sub>c</sub><sup>LM</sup> / M<sub>c</sub></p></div><div class="actions"><button class="chip" data-log="pFrac">log</button><button class="chip sq" data-expand="pFrac" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pFrac"></div><div class="skeleton"></div></div>
-          <div class="card reveal" style="--c: var(--s8)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Cloud energy</h3><p class="sub">E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6</p></div><div class="actions"><button class="chip sq" data-expand="pEs" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEs"></div><div class="skeleton"></div></div>
-          <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Energy per mode</h3><p class="sub">E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup>, dashed: levels; fixed orbit adds ε<sub>b</sub> + gΩ</p></div><div class="actions"><button class="chip sq" data-expand="pEmodes" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEmodes"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s1)"><div class="head"><div class="ic"><svg class="i"><use href="#i-bars"/></svg></div><div><h3>Mass per mode</h3><p class="sub" id="pNormsSub">M<sub>c</sub><sup>LM</sup></p></div><div class="actions"><div class="seg sm" id="centerNorms" data-value="com" role="group" aria-label="Expansion centre" title="Modes about the centre of mass, or the field re-expanded about one black hole (from the snapshots)"><button data-v="com">COM</button><button data-v="primary">Primary</button><button data-v="secondary">Secondary</button></div><button class="chip on" data-log="pNorms">log</button><button class="chip sq" data-expand="pNorms" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pNorms"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s5)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mode fractions</h3><p class="sub" id="pFracSub">|c<sub>LM</sub>|² = M<sub>c</sub><sup>LM</sup> / M<sub>c</sub></p></div><div class="actions"><div class="seg sm" id="centerFrac" data-value="com" role="group" aria-label="Expansion centre" title="Modes about the centre of mass, or the field re-expanded about one black hole (from the snapshots)"><button data-v="com">COM</button><button data-v="primary">Primary</button><button data-v="secondary">Secondary</button></div><button class="chip" data-log="pFrac">log</button><button class="chip sq" data-expand="pFrac" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pFrac"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s8)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Cloud energy</h3><p class="sub" id="pEsSub">E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6</p></div><div class="actions"><button class="chip" data-log="eModes" title="Show the energy of every mode">per mode</button><button class="chip sq" data-expand="pEs" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pEs"></div><div class="skeleton"></div></div>
         </div>
       </section>
 
@@ -885,6 +995,50 @@ html { scroll-padding-top: 52px; }
         </div>
       </section>
 
+      <section id="cloud3d">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-cube"/></svg></div><h2>3D cloud</h2><span class="beta">Experimental</span><span>|ψ|² in a cube around the centre of mass, at the snapshot on the timeline</span><label class="switch" title="Turn the 3D view off to skip loading and rendering the volume"><input type="checkbox" id="volOn" checked><i></i>Show</label></div>
+        <div class="card reveal">
+          <div class="vol-grid">
+            <div class="vol-view" id="volView" tabindex="0" aria-label="3D view of the cloud: drag to rotate, Ctrl or ⌘ + scroll to zoom">
+              <canvas id="volGL"></canvas><canvas id="volOverlay"></canvas>
+              <div class="vol-status" id="volStatus">Scroll here to load the 3D view</div>
+              <div class="vol-tools">
+                <button class="vbtn" id="volSpin" title="Rotate automatically" aria-pressed="false"><svg class="i"><use href="#i-refresh"/></svg></button>
+                <button class="vbtn" id="volZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                <button class="vbtn" id="volZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+                <button class="vbtn wide" id="volReset" title="Reset the view (double-click)">Reset</button>
+                <button class="vbtn" id="volPng" title="Save the view as PNG" aria-label="Save the view as PNG"><svg class="i"><use href="#i-download"/></svg></button>
+              </div>
+              <div class="vol-views" id="volViews"><button data-view="iso">3D</button><button data-view="top">Top</button><button data-view="side">Side</button><button data-view="front">Front</button></div>
+              <div class="vol-hint">Drag to rotate · Ctrl/⌘ + scroll or pinch to zoom · double-click to reset</div>
+              <div class="vol-nogl" id="volNoGL" hidden>This browser has no WebGL 2, which the 3D view needs.</div>
+            </div>
+            <div class="vol-side">
+              <div class="vctl"><div class="vlab"><span>Box half-width</span></div>
+                <label class="inpgroup"><input type="number" id="volR" value="100" min="1" step="10"><span class="unit">M</span></label></div>
+              <div class="vctl"><div class="vlab"><span>Resolution</span><em>points a side</em></div>
+                <div class="seg sm" id="volRes" data-value="64" role="group" aria-label="3D resolution"><button data-v="48">48³</button><button data-v="64">64³</button><button data-v="96">96³</button></div></div>
+              <div class="vctl"><div class="vlab"><span>Modes</span></div>
+                <div class="seg sm" id="volSet" data-value="all" role="group" aria-label="Modes in 3D view"><button data-v="all">All</button><button data-v="bound">Bound</button><button data-v="radiative">Radiative</button></div></div>
+              <div class="vctl"><div class="vlab"><span>Scale</span><em id="volScaleNote"></em></div>
+                <div class="seg sm" id="volScale" data-value="lin" role="group" aria-label="3D colour scale"><button data-v="lin">Lin</button><button data-v="log">Log</button></div></div>
+              <div class="vctl"><div class="vlab"><span>Style</span><em id="volStyleNote"></em></div>
+                <div class="seg sm" id="volStyle" data-value="smooth" role="group" aria-label="3D rendering style"><button data-v="smooth">Smooth</button><button data-v="layers">Layers</button></div></div>
+              <div class="vctl"><div class="vlab"><span>Layers</span><em id="volLayersV"></em></div>
+                <input type="range" id="volLayers" min="3" max="16" value="8" aria-label="Number of iso-density layers"></div>
+              <div class="vctl"><div class="vlab"><span>Opacity</span><em id="volOpacityV"></em></div>
+                <input type="range" id="volOpacity" min="0" max="100" value="55" aria-label="Opacity"></div>
+              <div class="vctl"><div class="vlab"><span>Cut below</span><em id="volThreshV"></em></div>
+                <input type="range" id="volThresh" min="0" max="90" value="6" aria-label="Cut below this fraction of the colour range"></div>
+              <div class="vctl"><div class="vlab"><span>Colours</span><em>slice colormap</em></div>
+                <div class="vol-cbar" id="volCbar"></div><div class="vol-cbar-l"><span id="volLo"></span><span id="volHi"></span></div></div>
+              <label class="switch"><input type="checkbox" id="volBinary" checked><i></i>Binary and orbit</label>
+              <label class="switch"><input type="checkbox" id="volBox" checked><i></i>Box and axes</label>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <footer><svg class="i"><use href="#i-info"/></svg><span>Curves are decimated to a few thousand evenly spaced samples; narrow the window for full time resolution. Drag a box to zoom (a horizontal or vertical drag zooms one axis), use the pan button (or Shift-drag) to pan, Ctrl/⌘ + scroll or pinch to zoom at the cursor, double-click to reset. Click legend entries to hide modes, double-click to isolate one; with many modes the legend has one scrollable column per l, and clicking an l header toggles the whole column. Expand any chart with its corner button.</span></footer>
     </main>
   </div>
@@ -898,7 +1052,7 @@ const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
 const DASHES = ['solid', 'dot', 'dash', 'longdash', 'dashdot', 'longdashdot'];
-let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false }, prevTiles: {}, cmap: 'ember', cmapRev: false };
+let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false, eModes: false, pBinGW: false, pBin: false, pBudget: true }, prevTiles: {}, cmap: 'ember', cmapRev: false };
 
 // Segmented controls keep their value in data-value, like a select.
 const val = (id) => { const el = $(id); return el.dataset.value !== undefined ? el.dataset.value : el.value; };
@@ -934,13 +1088,16 @@ function xValues(s) {
 }
 
 // Plots of individual modes: hovering a curve names that curve and thickens it.
-const MODE_PLOTS = new Set(['pMass', 'pPower', 'pNorms', 'pFrac', 'pEmodes', 'pRadial', 'pActive']);
+const MODE_PLOTS = new Set(['pMass', 'pPower', 'pNorms', 'pFrac', 'pRadial', 'pActive']);
 const charts = {};
 
 // Traces and layout keep a Plotly-like shape; this maps them onto the d3 charts.
 function draw(id, traces, layout = {}) {
   const el = $(id);
-  if (!charts[id]) charts[id] = new D3Charts.LineChart(el, { hover: MODE_PLOTS.has(id) ? 'closest' : 'x', legend: traces.some(t => t.showlegend !== false) });
+  const hover = layout.hover || (MODE_PLOTS.has(id) || id.startsWith('cmp') ? 'closest' : 'x'), legend = traces.some(t => t.showlegend !== false);
+  if (charts[id] && legend && !charts[id].legend) { charts[id].destroy(); delete charts[id]; }
+  if (!charts[id]) charts[id] = new D3Charts.LineChart(el, { hover, legend, groupLegend: id.startsWith('cmp_') });
+  charts[id].opts.hover = hover;
   const xa = layout.xaxis || {}, ya = layout.yaxis || {};
   const yLog = ya.type === 'log';
   const labels = {};
@@ -949,7 +1106,7 @@ function draw(id, traces, layout = {}) {
     name: t.name, x: t.x, y: t.y, color: t.line.color, width: t.line.width, dash: t.line.dash,
     legend: t.showlegend !== false,
   }));
-  const hlines = (layout.shapes || []).map(sh => ({ y: sh.y0, color: sh.line.color, dash: sh.line.dash, width: sh.line.width, label: labels[sh.y0] }));
+  const hlines = (layout.shapes || []).map(sh => ({ y: sh.y0, color: sh.line.color, dash: sh.line.dash, width: sh.line.width, label: labels[sh.y0], hoverLabel: sh.hoverLabel, inRange: sh.inRange }));
   let yRange = ya.range ? ya.range.slice() : null;
   if (yRange && yLog && ya.rangeIsLog) yRange = yRange.map(v => Math.pow(10, v));
   charts[id].update({
@@ -961,8 +1118,39 @@ function draw(id, traces, layout = {}) {
   const card = el.closest('.card'); if (card) card.classList.add('loaded');
 }
 
-function hline(y, color, dash = 'dot', width = 1) {
-  return { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, dash, width } };
+function hline(y, color, dash = 'dot', width = 1, hoverLabel) {
+  return { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: { color, dash, width }, hoverLabel };
+}
+
+function renderBudget(d, xaxis, line, ink, muted) {
+  const b = d.series.budget, el = document.getElementById('pBudgetSub');
+  if (!b) return;
+  const bLog = !!state.logs.pBudget;
+  const v = (y) => (bLog && y ? y.map(x => (x === null ? null : Math.abs(x))) : y);
+  const last = (y) => { for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const pct = (x) => (x === null ? '–' : Math.abs(x) >= 1e-3 ? (100 * x).toFixed(Math.abs(x) >= 0.1 ? 2 : 3) + '%' : (100 * x).toExponential(2) + '%');
+  const tr = [
+    line(v(b.residual), 'residual (inside r_ex)', { color: css('--s1'), width: 2 }),
+    line(v(b.ionized), 'ionized (through r_ex)', { color: css('--s2'), width: 1.8 }),
+    line(v(b.absorbed), b.inferred ? 'absorbed (inferred)' : 'absorbed', { color: css('--s7'), width: 1.8, dash: b.inferred ? 'dash' : undefined }),
+  ];
+  if (!b.inferred && b.absorbed_2 && b.absorbed_2.some(x => x)) {
+    tr.push(line(v(b.absorbed_1), 'absorbed by M₁', { color: css('--s7'), width: 1, dash: 'dot' }));
+    tr.push(line(v(b.absorbed_2), 'absorbed by M₂', { color: css('--s3'), width: 1, dash: 'dot' }));
+  }
+  if (b.pruned) tr.push(line(v(b.pruned), 'dropped by pruning', { color: muted, width: 1.2, dash: 'dash' }));
+  if (b.total) tr.push(line(b.total, 'sum', { color: ink, width: 1, dash: 'dash' }));
+  let yB = { title: { text: bLog ? '|fraction of initial mass|' : 'fraction of initial mass' } };
+  if (bLog) {
+    let peak = 0;
+    tr.forEach(t => (t.y || []).forEach(x => { if (x > peak) peak = x; }));
+    yB = Object.assign(yB, { type: 'log' }, peak > 0 ? { range: [Math.log10(peak) - 10, Math.log10(peak) + 0.2], rangeIsLog: true } : {});
+  }
+  draw('pBudget', tr, { xaxis, yaxis: yB });
+  el.innerHTML = `Fractions of the initial mass inside r<sub>ex</sub>. Now: residual ${pct(last(b.residual))}, ionized ${pct(last(b.ionized))}, absorbed ${pct(last(b.absorbed))}`
+    + (b.pruned ? `, pruned ${pct(last(b.pruned))}` : '')
+    + (b.total ? `; the sum stays at 1 to ${(Math.abs(last(b.total) - 1)).toExponential(1)}` : '; absorbed is the remainder (run without mass_budget.txt)')
+    + (bLog ? '. Log scale shows absolute values; ionized is negative while mass flows in through r<sub>ex</sub>' : '');
 }
 
 function render() {
@@ -997,12 +1185,33 @@ function render() {
   }
   draw('pPower', tp, { xaxis, yaxis: yP, shapes: shapesP });
 
-  // Binary power
-  draw('pBin', [
-    line(s.p_bin_inst, 'instantaneous', { color: muted, width: 1, dash: 'dot' }),
-    line(s.p_bin, 'rolling average', { color: css('--s1'), width: 1.8 }),
-    line(s.p_out, 'outgoing flux + binding energy', { color: css('--s7'), width: 1.4 }),
-  ], { xaxis, yaxis: { title: { text: 'P<sub>bin</sub>' } } });
+  // Binary power, optionally relative to the binary's GW power
+  const gw = !!state.logs.pBinGW && Array.isArray(s.p_gw);
+  const bLog = !!state.logs.pBin;
+  const perGW = (y) => {
+    if (gw && y) y = y.map((v, i) => (v === null || !s.p_gw[i] ? null : v / s.p_gw[i]));
+    return bLog && y ? y.map(v => (v === null ? null : Math.abs(v))) : y;
+  };
+  document.getElementById('pBinSub').innerHTML = gw
+    ? 'P<sub>bin</sub> / P<sub>GW</sub>, with P<sub>GW</sub> = (32/5) M<sub>1</sub>²M<sub>2</sub>²(M<sub>1</sub>+M<sub>2</sub>)/R⁵: instantaneous, rolling average, and the ionization power. 1 means the cloud drains the orbit as fast as gravitational waves'
+    : 'P<sub>bin</sub> instantaneous, rolling average, and the ionization power −Σ(T + ε j/μ)';
+  const tb = [
+    line(perGW(s.p_bin_inst), 'instantaneous', { color: muted, width: 1, dash: 'dot' }),
+    line(perGW(s.p_bin), 'rolling average', { color: css('--s1'), width: 1.8 }),
+    line(perGW(s.p_out), 'outgoing flux + binding energy', { color: css('--s7'), width: 1.4 }),
+  ];
+  let yB = { title: { text: bLog ? (gw ? '|P<sub>bin</sub> / P<sub>GW</sub>|' : '|P<sub>bin</sub>|') : (gw ? 'P<sub>bin</sub> / P<sub>GW</sub>' : 'P<sub>bin</sub>') } };
+  if (bLog) {
+    // The startup ramp starts from zero, so show 8 decades below the peak.
+    let peak = 0;
+    tb.forEach(t => (t.y || []).forEach(v => { if (v > peak) peak = v; }));
+    yB = Object.assign(yB, { type: 'log' }, peak > 0 ? { range: [Math.log10(peak) - 8, Math.log10(peak) + 0.3], rangeIsLog: true } : {});
+  }
+  draw('pBin', tb, { xaxis, yaxis: yB,
+       shapes: gw ? [Object.assign(hline(1, muted, 'dash', 0.8, 'P<sub>bin</sub> = P<sub>GW</sub>'), { inRange: false })] : [] });
+
+  // Mass budget: residual + ionized + absorbed (+ pruned) = 1
+  renderBudget(d, xaxis, line, ink, muted);
 
   // Orbit and masses
   draw('pR', [line(s.R, 'R', { color: css('--s1'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'R (M)' } } });
@@ -1014,24 +1223,97 @@ function render() {
   ], { xaxis, yaxis: { title: { text: 'mass' }, type: 'log' } });
 
   // Modes
-  draw('pNorms', modes.map((m, i) => line(s.norms[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: 'M<sub>c</sub><sup>LM</sup>' }, type: state.logs.pNorms ? 'log' : 'linear' } });
-  draw('pFrac', modes.map((m, i) => line(s.fractions[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: '|c<sub>LM</sub>|²' }, type: state.logs.pFrac ? 'log' : 'linear' } });
+  renderModeShares(d, X, xaxis, line);
 
-  const levelShapes = d.levels.map(lv => hline(lv.E, lv.n < 4 ? muted : css('--grid'), 'dash', lv.n < 4 ? 1 : 0.8));
+  // Cloud energy, optionally with the energy of every mode. Levels above n = 3
+  // are unlabelled and named on hover, like the ε_b + gΩ lines of a fixed orbit.
+  const perMode = !!state.logs.eModes;
+  const levelShapes = d.levels.map(lv => lv.n < 4 ? hline(lv.E, muted, 'dash', 1) : hline(lv.E, css('--grid'), 'dash', 0.8, `n = ${lv.n}`));
   levelShapes.push(hline(0, muted, 'dot', 1));
   const levelAnn = d.levels.filter(lv => lv.n < 4).map(lv => ({ xref: 'paper', x: 0.005, y: lv.E, yanchor: 'bottom', xanchor: 'left', text: `n = ${lv.n}`, showarrow: false, font: { size: 10, color: muted } }));
-  draw('pEs', [line(s.E_s, 'E_s / M_c', { color: css('--s8'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'E<sub>s</sub> / M<sub>c</sub>' } }, shapes: levelShapes, annotations: levelAnn });
-
-  const eShapes = levelShapes.slice();
-  const E1 = d.levels[0].E;
-  let yrange = [1.3 * E1, -0.6 * E1];
-  if (!d.info.evolving && isFinite(d.latest.Omega)) {
-    for (let g = -5; g < 5; g++) eShapes.push(hline(d.eps_b + g * d.latest.Omega, css('--s8'), 'dash', 0.6));
-    yrange = [1.1 * (d.eps_b - 4 * d.latest.Omega), 1.1 * (d.eps_b + 4 * d.latest.Omega)].sort((a, b) => a - b);
+  const total = line(s.E_s, 'E<sub>s</sub> / M<sub>c</sub>', { color: css('--s8'), width: 2.4 }, { showlegend: perMode });
+  if (!perMode) {
+    draw('pEs', [total], { xaxis, yaxis: { title: { text: 'E<sub>s</sub> / M<sub>c</sub>' } }, shapes: levelShapes, annotations: levelAnn, hover: 'x' });
+  } else {
+    const eShapes = levelShapes.slice();
+    if (!d.info.evolving && isFinite(d.latest.Omega)) {
+      // Drawn where they fall inside the curves' range; they do not widen it.
+      for (let g = -5; g < 5; g++) eShapes.push(Object.assign(hline(d.eps_b + g * d.latest.Omega, css('--s8'), 'dash', 0.6, g ? `ε<sub>b</sub> ${g < 0 ? '−' : '+'} ${Math.abs(g) === 1 ? '' : Math.abs(g)}Ω` : 'ε<sub>b</sub>'), { inRange: false }));
+    }
+    draw('pEs', [total, ...modes.map((m, i) => line(s.E_modes[i], modeName(m), modeStyle(m)))],
+      { xaxis, yaxis: { title: { text: 'E<sup>LM</sup> / M<sup>LM</sup>' } }, shapes: eShapes, annotations: levelAnn, hover: 'closest' });
   }
-  draw('pEmodes', modes.map((m, i) => line(s.E_modes[i], modeName(m), modeStyle(m))), { xaxis, yaxis: { title: { text: 'E<sup>LM</sup> / M<sup>LM</sup>' }, range: yrange }, shapes: eShapes, annotations: levelAnn });
+  $('pEsSub').innerHTML = perMode
+    ? 'E<sub>s</sub> / M<sub>c</sub> and E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup> per mode, dashed: levels' + (d.info.evolving ? '' : '; fixed orbit adds ε<sub>b</sub> + gΩ')
+    : 'E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6';
 
   renderPruning(d, X, xaxis, line);
+}
+
+// Mass per mode and mode fractions, about the COM (every row) or about one
+// black hole (the snapshots re-expanded by the server, see /api/projection).
+const proj = { cache: new Map(), loading: null, timer: null };
+const CENTER_NAME = { primary: 'primary', secondary: 'secondary' };
+function setCenter(v) {
+  ['centerNorms', 'centerFrac'].forEach(id => { if (val(id) !== v) $(id).setValue(v); });
+  render();
+}
+async function loadProjection(force = false) {
+  const center = val('centerNorms'), run = state.run;
+  if (center === 'com' || !run) return;
+  const key = run + '\u0000' + center;
+  if (proj.loading === key || (!force && proj.cache.has(key) && !proj.cache.get(key).remaining)) return;
+  proj.loading = key;
+  try {
+    const p = await fetchJSON(`/api/projection?run=${encodeURIComponent(run)}&center=${center}`);
+    proj.cache.set(key, p);
+    // The server projects for a few seconds per request; ask for the rest.
+    clearTimeout(proj.timer);
+    if (p.remaining) proj.timer = setTimeout(() => loadProjection(true), 200);
+  } catch (e) { proj.cache.set(key, { error: e.message }); }
+  finally { if (proj.loading === key) proj.loading = null; }
+  if (state.run === run && val('centerNorms') === center) render();
+}
+function renderModeShares(d, X, xaxis, line) {
+  const s = d.series, modes = d.info.modes, center = val('centerNorms');
+  const yNorms = { title: { text: 'M<sub>c</sub><sup>LM</sup>' }, type: state.logs.pNorms ? 'log' : 'linear' };
+  const yFrac = { title: { text: '|c<sub>LM</sub>|²' }, type: state.logs.pFrac ? 'log' : 'linear' };
+  if (center === 'com') {
+    $('pNormsSub').innerHTML = 'M<sub>c</sub><sup>LM</sup>';
+    $('pFracSub').innerHTML = '|c<sub>LM</sub>|² = M<sub>c</sub><sup>LM</sup> / M<sub>c</sub>';
+    draw('pNorms', modes.map((m, i) => line(s.norms[i], modeName(m), modeStyle(m))), { xaxis, yaxis: yNorms });
+    draw('pFrac', modes.map((m, i) => line(s.fractions[i], modeName(m), modeStyle(m))), { xaxis, yaxis: yFrac });
+    return;
+  }
+  const p = proj.cache.get(state.run + '\u0000' + center);
+  if (!p || p.error || !p.steps.length) {
+    const text = p && p.error ? 'Could not project the snapshots: ' + p.error
+      : p ? 'No snapshots to project yet' : `Projecting the snapshots about the ${CENTER_NAME[center]}…`;
+    ['pNorms', 'pFrac'].forEach(id => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } $(id).innerHTML = `<div class="cmp-none">${esc(text)}</div>`; $(id).closest('.card').classList.add('loaded'); });
+    loadProjection();
+    return;
+  }
+  // Snapshot times onto the x-axis in use, through the time series.
+  const tx = (t) => {
+    const T = s.t, xs = X.x;
+    if (X.x === s.t) return t;
+    let j = 0; while (j < T.length - 2 && T[j + 1] < t) j++;
+    const a = T[j], b = T[j + 1], w = b > a ? Math.min(1, Math.max(0, (t - a) / (b - a))) : 0;
+    return xs[j] === null || xs[j + 1] === null ? null : xs[j] + w * (xs[j + 1] - xs[j]);
+  };
+  const x = p.t.map(tx), pt = (y, name, style) => ({ x, y, name, type: 'scatter', mode: 'lines', line: style });
+  const higher = { color: css('--text-muted'), width: 1.4, dash: 'dash' };
+  const L = Math.max(...modes.map(m => m[0]));
+  const frac = (y) => y.map((v, k) => (v === null || !(p.ball[k] > 0) ? null : v / p.ball[k]));
+  const pos = (y) => y.map(v => (v > 0 ? v : null));
+  const where = ` about the ${CENTER_NAME[center]}, from ${p.steps.length}${p.remaining ? ` of ${p.steps.length + p.remaining}` : ''} snapshots`;
+  $('pNormsSub').innerHTML = 'M<sub>c</sub><sup>LM</sup>' + where + `; dashed: l > ${L}`;
+  $('pFracSub').innerHTML = 'Share of the mass within r<sub>ex</sub>' + where;
+  draw('pNorms', [...modes.map((m, i) => pt(p.masses[i], modeName(m), modeStyle(m))), pt(pos(p.higher), `l > ${L}`, higher)],
+    { xaxis, yaxis: yNorms, hover: 'closest' });
+  draw('pFrac', [...modes.map((m, i) => pt(frac(p.masses[i]), modeName(m), modeStyle(m))), pt(pos(frac(p.higher)), `l > ${L}`, higher)],
+    { xaxis, yaxis: yFrac, hover: 'closest' });
+  if (p.remaining) loadProjection();
 }
 
 // Mode pruning: one bar per mode where it is evolved, at height L + k/(L+1)
@@ -1165,7 +1447,10 @@ async function fetchJSON(url) {
 }
 
 async function refresh() {
-  if (!state.run) return;
+  if (tabs.compare) { await refreshCompare(); restartProgress(); return; }
+  // At short intervals a slow read could overlap the next tick; skip that tick instead.
+  if (!state.run || state.fetching) return;
+  state.fetching = true;
   const btn = $('refreshNow'); btn.classList.add('spin');
   try {
     const d = await fetchJSON(`/api/data?run=${encodeURIComponent(state.run)}&window=${val('window')}`);
@@ -1173,7 +1458,9 @@ async function refresh() {
     if (!d.ready) showError('Waiting for the first diagnostic rows…', 'Starting');
     renderTiles(); renderStatus(); render();
     updateSnapshotControls();
+    loadProjection(true);   // new snapshots of a running simulation
   } catch (e) { showError(e.message, 'Could not read the run'); }
+  finally { state.fetching = false; }
   setTimeout(() => btn.classList.remove('spin'), 300);
   restartProgress();
 }
@@ -1316,7 +1603,7 @@ function initInfoTips() {
   const pairs = [
     ...[...document.querySelectorAll('.card .head p.sub')].map(c => [c.parentElement.querySelector('h3'), c]),
     ...[...document.querySelectorAll('.subhead p')].map(c => [c.parentElement.querySelector('h4'), c]),
-    ...[...document.querySelectorAll('.sechead > span')].map(c => [c.parentElement.querySelector('h2'), c]),
+    ...[...document.querySelectorAll('.sechead > span:not(.beta)')].map(c => [c.parentElement.querySelector('h2'), c]),
   ];
   pairs.forEach(([title, cap], i) => {
     if (!title || !cap.textContent.trim()) return;
@@ -1450,22 +1737,26 @@ function drawSnapshot(sn, lockRange) {
   draw('pRadial', tr, { xaxis: { title: { text: 'r (M)' } }, yaxis: { title: { text: '|U<sub>LM</sub>|²' }, type: 'log', exponentformat: 'power' }, uirevision: state.run + 'radial' });
 
   const log = val('sliceScale') === 'log';
+  if (!charts.pSlice) charts.pSlice = new D3Charts.HeatmapChart($('pSlice'));
+  charts.pSlice.update(sliceSpec(sn, log, lockRange, lockRange ? ` · locked to step ${state.lock.step}` : ''));
+  volSnap(sn);
+}
+// Heatmap spec of a snapshot's slice, with the two holes projected onto its plane.
+function sliceSpec(sn, log, zDomain, note = '') {
   const q = sn.q, R = sn.R, th = sn.theta;
   // Binary positions (in the z = 0 plane) projected onto the slice plane.
   const plane = sn.plane || 'xy', proj = (x, y) => plane === 'xy' ? [x, y] : plane === 'zx' ? [x, 0] : [y, 0];
   const p1 = proj(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th));
   const p2 = proj(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI));
   const [hAx, vAx] = { xy: ['x', 'y'], zx: ['x', 'z'], zy: ['y', 'z'] }[plane];
-  const ramp = cmapRamp(state.cmap, state.cmapRev);
-  if (!charts.pSlice) charts.pSlice = new D3Charts.HeatmapChart($('pSlice'));
-  charts.pSlice.update({
-    z: sliceZ(sn, log), zDomain: lockRange || null, ramp, extent: [sn.x[0], sn.x[sn.x.length - 1]],
-    xLabel: `${hAx} (M)`, yLabel: `${vAx} (M)`, zLabel: (log ? 'log₁₀|ψ|²' : '|ψ|²') + (lockRange ? ` · locked to step ${state.lock.step}` : ''),
+  return {
+    z: sliceZ(sn, log), zDomain: zDomain || null, ramp: cmapRamp(state.cmap, state.cmapRev), extent: [sn.x[0], sn.x[sn.x.length - 1]],
+    xLabel: `${hAx} (M)`, yLabel: `${vAx} (M)`, zLabel: (log ? 'log₁₀|ψ|²' : '|ψ|²') + note,
     markers: [
       { x: p1[0], y: p1[1], color: css('--s1'), filled: true, name: 'primary' },
       { x: p2[0], y: p2[1], color: css('--s1'), filled: false, name: 'companion' },
     ],
-  });
+  };
 }
 
 // ---------- Auto-refresh with a progress line ----------
@@ -1508,6 +1799,7 @@ function initNav() {
     const next = state.topTab === 'setup' ? 'overview' : 'setup';
     setTopTab(next); $(next === 'setup' ? 'tabSetup' : 'tabOverview').focus();
   });
+  document.querySelectorAll('#nav a').forEach(a => a.addEventListener('click', () => { if (tabs.compare) selectTab(tabs.active); }));
   document.querySelectorAll('#nav a[href="#overview"], #nav a[href="#setup"]').forEach(a => a.addEventListener('click', (e) => {
     e.preventDefault(); setTopTab(a.getAttribute('href').slice(1), true);
   }));
@@ -1519,7 +1811,7 @@ function initNav() {
       links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
     });
   }, { rootMargin: '-40% 0px -55% 0px' });
-  ['overview', 'ionization', 'orbit', 'modes', 'snapshot'].forEach(id => obs.observe($(id)));
+  ['overview', 'ionization', 'orbit', 'modes', 'snapshot', 'cloud3d'].forEach(id => obs.observe($(id)));
   // The overview is short, so it owns the top of the page explicitly.
   const top = () => { if (window.scrollY < 120) links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + state.topTab)); };
   window.addEventListener('scroll', top, { passive: true }); setTimeout(top, 50);
@@ -1586,7 +1878,7 @@ function cmActive(i, scroll = 'nearest') {
 function setCmap(name, rev = state.cmapRev) {
   if (name === state.cmap && rev === state.cmapRev) return;
   state.cmap = name; state.cmapRev = rev;
-  renderCmap(); saveSettings();
+  renderCmap(); saveSettings(); volLut(); renderCompare();
   state.snapLoaded = null; updateSnapshotControls();
 }
 function openCmap() {
@@ -1618,12 +1910,326 @@ function initCmap() {
   renderCmap();
 }
 
+// ---------- Simulation tabs ----------
+// Each tab holds one run; the page shows the active tab's run as before (the
+// run picker changes that tab's run, or opens a new tab). Compare shows the
+// flagged quantities of every open run. Colours follow the tab, not its order.
+const TAB_MAX = 8;
+const tabs = { list: [], active: 0, compare: false };
+const runInfo = (folder) => (rp.runs || []).find(r => r.folder === folder) || { folder, name: folder.split('/').pop(), group: '' };
+const tabColor = (t) => css(SLOTS[t.slot % SLOTS.length]);
+const runLabel = (r) => (r.group ? r.group + ' / ' : '') + r.name;
+function newSlot() {
+  for (let k = 0; ; k++) if (!tabs.list.some(t => t.slot === k)) return k;
+}
+function initTabs(saved, runs) {
+  const known = new Set(runs.map(r => r.folder));
+  const list = (Array.isArray(saved.tabs) ? saved.tabs : []).filter((f, i, a) => known.has(f) && a.indexOf(f) === i).slice(0, TAB_MAX);
+  if (!list.length) list.push(state.run);
+  tabs.list = list.map((run, slot) => ({ run, slot }));
+  let i = tabs.list.findIndex(t => t.run === state.run);
+  if (i < 0) { i = Number.isInteger(saved.tabActive) && saved.tabActive < list.length ? saved.tabActive : 0; tabs.list[i].run = state.run; }
+  tabs.active = i;
+  $('stAdd').onclick = () => { if (rp.open) closePicker(false); rp.newTab = true; $('rpPop').classList.add('newtab'); openPicker(); };
+  $('stCompare').onclick = () => selectCompare();
+  $('stList').addEventListener('click', (e) => {
+    const tab = e.target.closest('.st-tab'); if (!tab) return;
+    if (e.target.closest('.st-x')) closeTab(+tab.dataset.i); else selectTab(+tab.dataset.i);
+  });
+  $('stList').addEventListener('auxclick', (e) => { const tab = e.target.closest('.st-tab'); if (tab && e.button === 1) closeTab(+tab.dataset.i); });
+  $('simtabs').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const all = [...$('simtabs').querySelectorAll('[role=tab]')], cur = all.indexOf(document.activeElement);
+    if (cur < 0) return;
+    const next = all[(cur + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length];
+    next.focus(); next.click();
+  });
+  initCompare();
+  renderTabs();
+}
+function renderTabs() {
+  $('stList').innerHTML = tabs.list.map((t, i) => {
+    const r = runInfo(t.run), on = !tabs.compare && i === tabs.active;
+    return `<div class="st-tab" role="tab" tabindex="${on ? 0 : -1}" data-i="${i}" aria-selected="${on}" title="${esc(r.folder)}">`
+      + `<span class="st-dot" style="background:${tabColor(t)}"></span>`
+      + (r.group ? `<span class="st-grp">${esc(r.group)} /</span>` : '') + `<span class="st-name">${esc(r.name)}</span>`
+      + (tabs.list.length > 1 ? `<button type="button" class="st-x" tabindex="-1" title="Close tab" aria-label="Close tab"><svg class="i"><use href="#i-x"/></svg></button>` : '')
+      + '</div>';
+  }).join('');
+  $('stCompare').setAttribute('aria-selected', String(tabs.compare));
+  $('stCompare').tabIndex = tabs.compare ? 0 : -1;
+  $('stCount').textContent = tabs.list.length;
+  $('stAdd').hidden = tabs.list.length >= TAB_MAX;
+}
+// Show the run of tab i (leaving Compare).
+function selectTab(i) {
+  const t = tabs.list[i]; if (!t) return;
+  const wasCompare = tabs.compare;
+  tabs.active = i; tabs.compare = false;
+  $('compare').hidden = true; document.querySelector('.app').classList.remove('comparing');
+  renderTabs(); saveSettings();
+  const sel = $('run');
+  if (sel.value !== t.run) { sel.value = t.run; syncPicker(); sel.dispatchEvent(new Event('change')); }
+  else if (wasCompare) { refresh(); window.scrollTo({ top: 0 }); }
+}
+function openTab(run) {
+  const have = tabs.list.findIndex(t => t.run === run);
+  if (have >= 0) { if (tabs.compare) renderCompare(); else selectTab(have); return; }
+  if (tabs.list.length >= TAB_MAX) { showError(`At most ${TAB_MAX} tabs: close one first.`, 'Too many tabs'); return; }
+  tabs.list.push({ run, slot: newSlot() });
+  if (tabs.compare) { renderTabs(); saveSettings(); refreshCompare(); }
+  else selectTab(tabs.list.length - 1);
+}
+function closeTab(i) {
+  if (tabs.list.length < 2) return;
+  const [gone] = tabs.list.splice(i, 1);
+  cmp.data.delete(gone.run);
+  if (tabs.compare) {
+    if (i < tabs.active || tabs.active >= tabs.list.length) tabs.active = Math.max(0, tabs.active - 1);
+    renderTabs(); saveSettings(); renderCompare(); return;
+  }
+  if (i < tabs.active) tabs.active--;
+  else if (i === tabs.active) { selectTab(Math.min(i, tabs.list.length - 1)); return; }
+  renderTabs(); saveSettings();
+}
+function selectCompare() {
+  if (tabs.compare) return;
+  tabs.compare = true; stopPlay();
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  $('compare').hidden = false; document.querySelector('.app').classList.add('comparing');
+  renderTabs(); saveSettings();
+  window.scrollTo({ top: 0 });
+  renderCompare(); refreshCompare();
+}
+
+// ---------- Compare ----------
+// y(s, d): the quantity from a run's series s and payload d (null if the run has none).
+const CMP_Q = [
+  { k: 'M_c', t: 'Cloud mass', y: 'M<sub>c</sub>', f: (s) => s.M_c },
+  { k: 'M_c_rel', t: 'Cloud mass fraction', y: 'M<sub>c</sub> / M<sub>c,0</sub>', f: (s, d) => d.latest.M_c0 ? s.M_c.map(v => v === null ? null : v / d.latest.M_c0) : null },
+  { k: 'R', t: 'Orbital separation', y: 'R (M)', f: (s) => s.R },
+  { k: 'Omega', t: 'Orbital frequency', y: 'Ω', f: (s) => s.Omega || null },
+  { k: 'rate', t: 'Ionization rate', y: 'q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub>', f: (s) => s.total_mass_flux },
+  { k: 'power', t: 'Ionization power', y: 'q⁻² (M/M<sub>c</sub>) P<sub>ion</sub>', f: (s) => s.total_energy_flux },
+  { k: 'p_bin', t: 'Binary power', y: 'P<sub>bin</sub>, rolling average', f: (s) => s.p_bin },
+  { k: 'E_s', t: 'Cloud energy', y: 'E<sub>s</sub> / M<sub>c</sub>', f: (s) => s.E_s },
+  { k: 'M_1', t: 'Primary mass', y: 'M<sub>1</sub>', f: (s) => s.M_1 },
+  { k: 'M_2', t: 'Companion mass', y: 'M<sub>2</sub>', f: (s) => s.M_2 },
+  { k: 'q', t: 'Mass ratio', y: 'q', f: (s) => s.q },
+  { k: 'active', t: 'Evolved modes', y: 'active modes (pruning)', f: (s, d) => d.pruning ? d.pruning.count : null },
+  // Per mode (one panel per run): g(s, d) gives [mode index, y] pairs, plus the total where it means something.
+  { k: 'norms', t: 'Mass per mode', y: 'M<sub>c</sub><sup>LM</sup>', modes: true, g: (s, d) => d.info.modes.map((m, i) => [i, s.norms[i]]) },
+  { k: 'fractions', t: 'Mode fractions', y: '|c<sub>LM</sub>|²', modes: true, g: (s, d) => d.info.modes.map((m, i) => [i, s.fractions[i]]) },
+  { k: 'mode_rate', t: 'Ionization rate per mode', y: 'q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub>', modes: true, g: (s, d) => d.selected.map(i => [i, s.mass_flux[i]]), total: (s) => s.total_mass_flux },
+  { k: 'mode_power', t: 'Ionization power per mode', y: 'q⁻² (M/M<sub>c</sub>) P<sub>ion</sub>', modes: true, g: (s, d) => d.selected.map(i => [i, s.energy_flux[i]]), total: (s) => s.total_energy_flux },
+  { k: 'slice', t: 'Density slice', y: '|ψ|² through the centre of mass', slice: true },
+];
+const cmpQ = (k) => CMP_Q.find(q => q.k === k);
+const cmpSide = (q) => q.modes || q.slice || val('cmpLayout') === 'side';
+const cmp = { q: ['M_c', 'R'], log: { norms: true, fractions: true }, data: new Map(), busy: false, sig: null, snaps: new Map(), sliceWant: null, hidden: {} };
+function initCompare() {
+  $('cmpPick').insertAdjacentHTML('beforeend', CMP_Q.map((q, i) => (q.modes && !CMP_Q[i - 1].modes ? '<span class="sep"></span>' : '')
+    + `<button type="button" class="chip" data-q="${q.k}" aria-pressed="false"${q.modes || q.slice ? ' title="Always side by side, one panel per simulation"' : ''}>${q.t}</button>`).join(''));
+  $('cmpPick').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-q]'); if (!b) return;
+    const k = b.dataset.q;
+    cmp.q = cmp.q.includes(k) ? cmp.q.filter(x => x !== k) : CMP_Q.map(q => q.k).filter(x => x === k || cmp.q.includes(x));
+    saveSettings();
+    // Per-mode quantities need the full payloads.
+    if (cmpQ(k).modes && cmp.q.includes(k) && [...cmp.data.values()].some(d => d.ready && !d.series.norms)) refreshCompare();
+    renderCompare();
+  });
+  $('cmpBody').addEventListener('click', (e) => {
+    const lg = e.target.closest('[data-cmplog]'), ex = e.target.closest('[data-cmpexp]'), sh = e.target.closest('#cmpSliceShared');
+    if (sh) { cmp.sliceShared = !cmp.sliceShared; saveSettings(); renderCompare(); return; }
+    if (lg) { const k = lg.dataset.cmplog; cmp.log[k] = !cmp.log[k]; saveSettings(); renderCompare(); }
+    else if (ex) openModal(ex.dataset.cmpexp);
+  });
+}
+// Light payloads (no per-mode series) for every open tab, fetched together.
+async function refreshCompare() {
+  if (cmp.busy) return;
+  cmp.busy = true;
+  const btn = $('refreshNow'); btn.classList.add('spin');
+  const runs = tabs.list.map(t => t.run), light = !cmp.q.some(k => cmpQ(k).modes) ? 1 : 0;
+  const got = await Promise.all(runs.map(run => fetchJSON(`/api/data?run=${encodeURIComponent(run)}&window=${val('window')}&scalars=${light}`).catch(e => ({ error: e.message }))));
+  runs.forEach((run, i) => cmp.data.set(run, got[i]));
+  cmp.busy = false;
+  setTimeout(() => btn.classList.remove('spin'), 300);
+  const bad = got.map((d, i) => d.error ? `${runInfo(runs[i]).name}: ${d.error}` : null).filter(Boolean);
+  if (bad.length) showError(bad.join('\n'), 'Could not read a run');
+  if (tabs.compare) renderCompare();
+}
+// A y range covering every trace (padded), so side-by-side panels read alike.
+function sharedRange(traces, log) {
+  let lo = Infinity, hi = -Infinity;
+  traces.forEach(tr => tr.y.forEach(v => { if (v !== null && isFinite(v) && (!log || v > 0)) { if (v < lo) lo = v; if (v > hi) hi = v; } }));
+  if (!(lo <= hi)) return null;
+  if (log) { const a = Math.log10(lo), b = Math.log10(hi), pad = Math.max(0.05 * (b - a), 0.05); return [Math.pow(10, a - pad), Math.pow(10, b + pad)]; }
+  const pad = hi > lo ? 0.05 * (hi - lo) : Math.abs(hi) * 0.05 || 1;
+  return [lo - pad, hi + pad];
+}
+
+// ---------- Compare: density slices ----------
+// One slice per run, at its latest snapshot or at the snapshot nearest a common
+// time. Radius, resolution, modes and colormap follow the Snapshot section.
+function sliceCtl() {
+  return `<div class="cmp-slicectl">
+    <div class="seg sm" id="cmpPlane" data-value="${cmp.plane || 'xy'}" role="group" aria-label="Slice plane"><button data-v="xy">xy</button><button data-v="zx">zx</button><button data-v="zy">zy</button></div>
+    <div class="seg sm" id="cmpSliceScale" data-value="${cmp.sliceScale || 'lin'}" role="group" aria-label="Slice scale"><button data-v="lin">Lin</button><button data-v="log">Log</button></div>
+    <div class="seg sm" id="cmpSliceAt" data-value="${cmp.sliceAt || 'latest'}" role="group" aria-label="Which snapshot"><button data-v="latest">Latest</button><button data-v="time">Same t</button></div>
+    <input type="range" id="cmpSliceT" min="0" max="1000" value="${cmp.sliceT !== undefined ? cmp.sliceT : 1000}" aria-label="Time of the compared snapshots"><span class="tread" id="cmpSliceTV"></span>
+    <button type="button" class="chip${cmp.sliceShared !== false ? ' on' : ''}" id="cmpSliceShared" title="One colour scale for every panel">same colours</button></div>`;
+}
+function initSliceCtl() {
+  const set = (k) => () => { cmp[k] = val({ plane: 'cmpPlane', sliceScale: 'cmpSliceScale', sliceAt: 'cmpSliceAt' }[k]); saveSettings(); renderCompare(); };
+  initSeg('cmpPlane', set('plane')); initSeg('cmpSliceScale', set('sliceScale')); initSeg('cmpSliceAt', set('sliceAt'));
+  $('cmpSliceT').addEventListener('input', () => { cmp.sliceT = +$('cmpSliceT').value; renderCompare(); });
+  $('cmpSliceT').addEventListener('change', saveSettings);
+}
+function cmpSnap(run, d, step) {
+  const plane = cmp.plane || 'xy';
+  const key = [run, step, plane, $('rplot').value, $('grid').value, val('modeSet')].join('|');
+  let p = cmp.snaps.get(key);
+  if (!p) {
+    const rad = encodeURIComponent(JSON.stringify(d.radiative || []));
+    p = fetchJSON(`/api/snapshot?run=${encodeURIComponent(run)}&step=${step}&rplot=${$('rplot').value}&grid=${$('grid').value}&set=${val('modeSet')}&plane=${plane}&radiative=${rad}`).then(decodeSnap);
+    p.catch(() => cmp.snaps.delete(key));
+    cmp.snaps.set(key, p);
+    while (cmp.snaps.size > 24) cmp.snaps.delete(cmp.snaps.keys().next().value);
+  }
+  return p;
+}
+async function renderCompareSlices(open, cell) {
+  const q = cmpQ('slice'), at = cmp.sliceAt || 'latest', log = (cmp.sliceScale || 'lin') === 'log';
+  // The common time runs up to the earliest of the runs' last snapshots.
+  const tLast = open.map(o => o.d && o.d.ready ? (o.d.info.snapshot_t || []).filter(v => v !== null).slice(-1)[0] : undefined).filter(v => v !== undefined);
+  const tMax = tLast.length ? Math.min(...tLast) : 0, tWant = tMax * (cmp.sliceT !== undefined ? cmp.sliceT : 1000) / 1000;
+  if ($('cmpSliceT')) {
+    $('cmpSliceT').disabled = at !== 'time';
+    $('cmpSliceTV').classList.toggle('off', at !== 'time');
+    $('cmpSliceTV').textContent = `t = ${fmt(tWant, 4)} M`;
+  }
+  const pick = (d) => {
+    const steps = d.info.snapshots || [], ts = d.info.snapshot_t || [];
+    if (!steps.length) return null;
+    if (at === 'latest') return steps.length - 1;
+    let best = 0;
+    ts.forEach((v, i) => { if (v !== null && Math.abs(v - tWant) < Math.abs(ts[best] - tWant)) best = i; });
+    return best;
+  };
+  const want = open.map(({ t, d }) => { const i = d && d.ready ? pick(d) : null; return i === null ? null : { run: t.run, d, step: d.info.snapshots[i] }; });
+  const token = cmp.sliceWant = want.map(w => w ? w.step : '-').join() + log + (cmp.sliceShared !== false) + (cmp.plane || 'xy');
+  want.forEach((w, i) => { if (!w) cmpNone(cell(q, i), !open[i].d ? 'loading…' : 'no snapshots yet'); });
+  const snaps = await Promise.all(want.map(w => w ? cmpSnap(w.run, w.d, w.step).catch(e => ({ error: e.message })) : null));
+  if (cmp.sliceWant !== token || !tabs.compare) return;   // superseded
+  let dom = null;
+  if (cmp.sliceShared !== false) {
+    snaps.forEach(sn => { const r = sn && !sn.error ? sliceRange(sn, log) : null; if (r) dom = dom ? [Math.min(dom[0], r[0]), Math.max(dom[1], r[1])] : r.slice(); });
+  }
+  snaps.forEach((sn, i) => {
+    const id = cell(q, i);
+    if (!sn) return;
+    if (sn.error) { cmpNone(id, 'could not load: ' + sn.error); return; }
+    if (!$(id)) return;
+    if (!charts[id] || !(charts[id] instanceof D3Charts.HeatmapChart)) { $(id).innerHTML = ''; charts[id] = new D3Charts.HeatmapChart($(id)); }
+    charts[id].update(sliceSpec(sn, log, dom));
+    $(id + '_m').textContent = `step ${want[i].step} · t = ${fmt(sn.t, 5)} M`;
+  });
+}
+
+// A plot with nothing to draw says why (and is rebuilt as a chart once it has data).
+function cmpNone(id, text) {
+  delete charts[id];
+  $(id).classList.remove('d3chart');
+  $(id).innerHTML = `<div class="cmp-none">${esc(text)}</div>`;
+}
+function renderCompare() {
+  if (!tabs.compare) return;
+  $('cmpPick').querySelectorAll('[data-q]').forEach(b => b.setAttribute('aria-pressed', String(cmp.q.includes(b.dataset.q))));
+  const side = val('cmpLayout') === 'side';
+  const open = tabs.list.map(t => ({ t, r: runInfo(t.run), d: cmp.data.get(t.run) }));
+  const params = (p) => !p || p.q === undefined ? '' : ` · q ${pnum(p.q)} · μ ${pnum(p.mu)} · M<sub>c</sub> ${pnum(p.M_c)} · R<sub>0</sub> ${pnum(p.R0)} M · ${p.counter ? 'counter' : 'co'}-rotating${p.evolving ? '' : ', fixed orbit'}${p.absorption ? ', absorption' : ''}`;
+  $('cmpRuns').innerHTML = open.map(({ t, r, d }) => `<span><span class="st-dot" style="background:${tabColor(t)}"></span>${r.group ? `<span class="st-grp">${esc(r.group)} /</span>` : ''}<b>${esc(r.name)}</b><span class="pp">${params(r.params)}${!d ? ' · loading…' : d.error ? ' · unreadable' : !d.ready ? ' · no rows yet' : ''}</span></span>`).join('');
+  $('cmpNote').textContent = tabs.list.length < 2 ? 'open more simulations with + to compare them' : `${tabs.list.length} simulations, one colour per tab`;
+  const body = $('cmpBody');
+  if (!cmp.q.length) { cmp.sig = null; body.innerHTML = '<div class="cmp-empty">Pick the quantities to compare above.</div>'; return; }
+  // Rebuild the cards only when their layout changes; otherwise redraw in place.
+  const sig = [side, cmp.q.join(), tabs.list.map(t => t.run + ':' + t.slot).join()].join('|');
+  const cell = (q, i) => `cmp_${q.k}_${i}`;
+  const flagged = cmp.q.map(cmpQ), overlaid = flagged.filter(q => !cmpSide(q)), panels = flagged.filter(cmpSide);
+  if (cmp.sig !== sig) {
+    Object.keys(charts).filter(k => k.startsWith('cmp_')).forEach(k => delete charts[k]);
+    const actions = (q, exp) => `<div class="actions"><button class="chip${cmp.log[q.k] ? ' on' : ''}" data-cmplog="${q.k}" title="Log scale">log</button>${exp ? `<button class="chip sq" data-cmpexp="${exp}" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button>` : ''}</div>`;
+    const head = (q, exp) => `<div class="head"><div><h3>${q.t}</h3><p class="sub">${q.y}</p></div>${q.slice ? sliceCtl() : actions(q, exp)}</div>`;
+    const panelCard = (q) => `<div class="card loaded${q.slice ? ' cmp-slice' : ''}">${head(q)}<div class="cmp-row" style="grid-template-columns: repeat(${Math.min(open.length, 4)}, minmax(0, 1fr))">`
+      + open.map(({ t, r }, i) => `<div class="cmp-cell"><div class="cmp-cap"><span class="st-dot" style="background:${tabColor(t)}"></span>${esc(runLabel(r))}<span class="meta" id="${cell(q, i)}_m"></span></div><div class="plot" id="${cell(q, i)}"></div></div>`).join('')
+      + '</div></div>';
+    body.innerHTML = (overlaid.length ? `<div class="grid">${overlaid.map((q, n, all) => `<div class="card loaded${all.length % 2 && n === all.length - 1 ? ' cmp-wide' : ''}">${head(q, 'cmp_' + q.k)}<div class="plot" id="cmp_${q.k}"></div></div>`).join('')}</div>` : '')
+      + panels.map(panelCard).join('');
+    if (panels.some(q => q.slice)) initSliceCtl();
+    cmp.sig = sig;
+  }
+  const traceOf = ({ t, r, d }, q) => {
+    if (!d || !d.ready) return null;
+    const y = q.f(d.series, d); if (!y) return null;
+    const X = xValues(d.series);
+    return { X, trace: { x: X.x, y: cmp.log[q.k] ? y.map(v => v > 0 ? v : null) : y, name: runLabel(r), line: { color: tabColor(t), width: 1.8 } } };
+  };
+  const anyX = open.map(o => o.d && o.d.ready ? xValues(o.d.series) : null).find(Boolean) || { title: 't (M)' };
+  const xaxis = { title: { text: anyX.title }, autorange: anyX.reversed ? 'reversed' : true };
+  const uirev = 'cmp' + val('xaxis') + sig;
+  // Per mode: every mode of the run (as in the Modes section), plus the total.
+  const modeTraces = ({ d }, q, log) => {
+    if (!d || !d.ready || !d.series.norms) return null;
+    const X = xValues(d.series), pos = (y) => log ? y.map(v => v > 0 ? v : null) : y, modes = d.info.modes;
+    const tr = q.g(d.series, d).map(([i, y]) => ({ x: X.x, y: pos(y), name: modeName(modes[i]), line: modeStyle(modes[i]) }));
+    if (q.total) tr.push({ x: X.x, y: pos(q.total(d.series)), name: 'Total', line: { color: css('--text-primary'), width: 1.8 } });
+    return tr;
+  };
+  for (const k of cmp.q) {
+    const q = cmpQ(k), log = !!cmp.log[k];
+    if (q.slice) { renderCompareSlices(open, cell); continue; }
+    const yaxis = { title: { text: q.y }, type: log ? 'log' : 'linear' };
+    if (q.modes) {
+      const sets = open.map(o => modeTraces(o, q, log));
+      const range = sharedRange(sets.flat().filter(Boolean), log);
+      sets.forEach((tr, i) => {
+        if (!tr || !tr.length) { cmpNone(cell(q, i), !open[i].d ? 'loading…' : open[i].d.ready && !open[i].d.series.norms ? 'loading the modes…' : 'not available for this run'); return; }
+        const id = cell(q, i), fresh = !charts[id];
+        draw(id, tr, { xaxis, yaxis: Object.assign({}, yaxis, range ? { range } : {}), uirevision: uirev });
+        // Hiding a mode in one panel hides it in the others of the row.
+        charts[id].opts.onHidden = (hidden) => {
+          cmp.hidden[k] = hidden;
+          open.forEach((_, j) => { const c = charts[cell(q, j)]; if (j !== i && c && c.setHidden) c.setHidden(hidden); });
+        };
+        if (fresh && cmp.hidden[k]) charts[id].setHidden(cmp.hidden[k]);
+      });
+      continue;
+    }
+    const items = open.map(o => traceOf(o, q));
+    if (!side) {
+      const tr = items.filter(Boolean).map(it => it.trace);
+      if (tr.length) draw('cmp_' + k, tr, { xaxis, yaxis, uirevision: uirev });
+      else cmpNone('cmp_' + k, open.some(o => !o.d) ? 'loading…' : 'none of the open runs has this quantity');
+      continue;
+    }
+    // Side by side: one plot per run on a common y range.
+    const range = sharedRange(items.filter(Boolean).map(it => it.trace), log);
+    items.forEach((it, i) => {
+      if (it) draw(cell(q, i), [Object.assign(it.trace, { showlegend: false })], { xaxis, yaxis: Object.assign({}, yaxis, range ? { range } : {}), uirevision: uirev });
+      else cmpNone(cell(q, i), !open[i].d ? 'loading…' : 'not available for this run');
+    });
+  }
+}
+
 // ---------- Remembered settings ----------
 // The controls' choices live in one cookie (a year, this host only), so a
 // reload or the next session opens the dashboard as it was left.
 const COOKIE = 'bcb_dashboard';
-const SEGS = ['xaxis', 'modeSet', 'sliceScale', 'slicePlane', 'tlSpeed'];
+const SEGS = ['xaxis', 'modeSet', 'sliceScale', 'slicePlane', 'tlSpeed', 'volRes', 'volSet', 'volScale', 'volStyle', 'cmpLayout', 'centerNorms', 'centerFrac'];
 const SELECTS = ['window', 'refresh', 'grid'];
+const INPUTS = ['volR', 'volOpacity', 'volThresh', 'volLayers'], CHECKS = ['follow', 'volBinary', 'volBox', 'volOn'];
 function loadSettings() {
   try {
     const m = document.cookie.match(new RegExp('(?:^|; )' + COOKIE + '=([^;]*)'));
@@ -1636,8 +2242,12 @@ function saveSettings() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const s = { theme: document.documentElement.dataset.theme || '', logs: state.logs, cmap: state.cmap, cmapRev: state.cmapRev,
-      follow: $('follow').checked, tab: state.topTab, run: state.run };
+      tab: state.topTab, run: state.run, tabs: tabs.list.map(t => t.run), tabActive: tabs.active, compare: tabs.compare,
+      cmpQ: cmp.q, cmpLog: Object.keys(cmp.log).filter(k => cmp.log[k]),
+      cmpSlice: { plane: cmp.plane, scale: cmp.sliceScale, at: cmp.sliceAt, t: cmp.sliceT, shared: cmp.sliceShared } };
     SEGS.forEach(id => s[id] = val(id));
+    INPUTS.forEach(id => s[id] = $(id).value);
+    CHECKS.forEach(id => s[id] = $(id).checked);
     SELECTS.forEach(id => s[id] = $(id).value);
     if (state.rplotSet) s.rplot = $('rplot').value;
     try { document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify(s))}; max-age=31536000; path=/; SameSite=Lax`; } catch (e) { /* cookies blocked */ }
@@ -1653,27 +2263,442 @@ function applySettings(s) {
   if (typeof s.cmapRev === 'boolean') state.cmapRev = s.cmapRev;
   SEGS.forEach(id => { if (id !== 'xaxis' && s[id] !== undefined && $(id).querySelector(`button[data-v="${s[id]}"]`)) $(id).setValue(s[id]); });
   SELECTS.forEach(id => { if (s[id] !== undefined && [...$(id).options].some(o => o.value === s[id])) $(id).value = s[id]; });
-  if (typeof s.follow === 'boolean') $('follow').checked = s.follow;
+  CHECKS.forEach(id => { if (typeof s[id] === 'boolean') $(id).checked = s[id]; });
+  INPUTS.forEach(id => { if (s[id] !== undefined && s[id] !== '' && isFinite(+s[id]) && +s[id] >= +($(id).min || 0)) $(id).value = s[id]; });
+  volLabels();
   if (s.tab === 'setup') setTopTab('setup');
+  if (Array.isArray(s.cmpQ)) cmp.q = s.cmpQ.filter(k => CMP_Q.some(q => q.k === k));
+  if (Array.isArray(s.cmpLog)) { cmp.log = {}; s.cmpLog.forEach(k => (cmp.log[k] = true)); }
+  if (s.cmpSlice && typeof s.cmpSlice === 'object') {
+    const c = s.cmpSlice;
+    if (['xy', 'zx', 'zy'].includes(c.plane)) cmp.plane = c.plane;
+    if (['lin', 'log'].includes(c.scale)) cmp.sliceScale = c.scale;
+    if (['latest', 'time'].includes(c.at)) cmp.sliceAt = c.at;
+    if (c.t >= 0 && c.t <= 1000) cmp.sliceT = +c.t;
+    if (typeof c.shared === 'boolean') cmp.sliceShared = c.shared;
+  }
 }
 // Any change to a control is saved; the handlers that act on it run as before.
 function watchSettings() {
   SEGS.forEach(id => $(id).addEventListener('click', (e) => { if (e.target.closest('button')) saveSettings(); }));
-  [...SELECTS, 'follow', 'run'].forEach(id => $(id).addEventListener('change', saveSettings));
+  [...SELECTS, ...INPUTS, ...CHECKS, 'run'].forEach(id => $(id).addEventListener('change', saveSettings));
   $('rplot').addEventListener('change', () => { state.rplotSet = true; saveSettings(); });
   document.querySelectorAll('[data-log], #theme, #tabOverview, #tabSetup, #nav a').forEach(b => b.addEventListener('click', saveSettings));
+}
+
+// ---------- 3D cloud (experimental) ----------
+// |psi|^2 on an n^3 grid from /api/volume, ray-marched in a WebGL 2 fragment
+// shader: front-to-back emission and absorption through a 3D texture, coloured
+// with the slice colormap. The binary, the orbit and the box are drawn on a 2D
+// canvas on top with the same camera. Only fetched while the section is in view.
+const vol = { gl: null, prog: null, tex: null, lut: null, n: 0, data: null, max: 0, extent: 1, step: null, sn: null,
+  cam: { yaw: -0.75, pitch: 0.42, dist: 5.4 }, anim: null, visible: false, want: null, busy: false, cache: new Map(), spin: false, raf: 0, float: false };
+const VOL_VS = `#version 300 es
+in vec2 p; out vec2 ndc;
+void main() { ndc = p; gl_Position = vec4(p, 0.0, 1.0); }`;
+const VOL_FS = `#version 300 es
+precision highp float; precision highp sampler3D;
+uniform sampler3D uVol; uniform sampler2D uLut; uniform mat4 uInv;
+uniform float uOpacity, uCut, uSteps, uLayers, uTexel;
+uniform int uMode;   // 0: smooth emission-absorption, 1: glowing iso-density layers
+in vec2 ndc; out vec4 o;
+void main() {
+  vec4 a = uInv * vec4(ndc, -1.0, 1.0), b = uInv * vec4(ndc, 1.0, 1.0);
+  vec3 ro = a.xyz / a.w, rd = normalize(b.xyz / b.w - ro);
+  vec3 inv = 1.0 / rd, t0 = (-1.0 - ro) * inv, t1 = (1.0 - ro) * inv;
+  vec3 lo = min(t0, t1), hi = max(t0, t1);
+  float tn = max(max(lo.x, lo.y), max(lo.z, 0.0)), tf = min(min(hi.x, hi.y), hi.z);
+  if (tf <= tn) discard;
+  float dt = 3.4641 / uSteps;
+  float t = tn + dt * fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);   // jitter hides slicing rings
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 1024; i++) {
+    if (t > tf || acc.a > 0.985) break;
+    float v = texture(uVol, (ro + rd * t) * 0.5 + 0.5).r;
+    if (v > uCut) {
+      float s = (v - uCut) / (1.0 - uCut);
+      vec3 c = texture(uLut, vec2(s, 0.5)).rgb;
+      if (uMode == 0) {
+        float al = 1.0 - exp(-uOpacity * s * dt);
+        acc.rgb += (1.0 - acc.a) * al * c; acc.a += (1.0 - acc.a) * al;
+      } else {
+        // Soft shells at evenly spaced levels of s over a faint glow. A shell
+        // is brightest where the ray grazes it, so nested surfaces read as rims.
+        float f = fract(s * uLayers) - 0.5, shell = exp(-50.0 * f * f);
+        float rim = 0.0;
+        if (shell > 0.02) {
+          vec3 q = (ro + rd * t) * 0.5 + 0.5, h = vec3(uTexel, 0.0, 0.0);
+          vec3 g = vec3(texture(uVol, q + h.xyy).r - texture(uVol, q - h.xyy).r,
+                        texture(uVol, q + h.yxy).r - texture(uVol, q - h.yxy).r,
+                        texture(uVol, q + h.yyx).r - texture(uVol, q - h.yyx).r);
+          float gn = length(g);
+          rim = gn > 1e-6 ? 1.0 - abs(dot(g / gn, rd)) : 0.0;
+        }
+        float k = 0.02 * s + shell * (0.1 + 0.9 * rim * rim * rim) * (0.3 + 0.7 * s);
+        float al = 1.0 - exp(-uOpacity * k * dt);
+        acc.rgb += (1.0 - acc.a) * al * c * (0.7 + 1.3 * shell * rim); acc.a += (1.0 - acc.a) * al * 0.8;
+      }
+    }
+    t += dt;
+  }
+  if (uMode == 1) {   // additive glow: soft-clip the brightness (keeping the hue), and keep alpha at least as bright
+    float peak = max(acc.r, max(acc.g, acc.b));
+    if (peak > 0.0) acc.rgb *= (1.0 - exp(-1.5 * peak)) / peak;
+    acc.a = max(acc.a, max(acc.r, max(acc.g, acc.b)));
+  }
+  o = acc;   // premultiplied
+}`;
+// Small column-major 4x4 helpers.
+const m4 = {
+  mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  persp(fov, asp, n, f) { const t = 1 / Math.tan(fov / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); },
+  look(e, c, u) {
+    const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm = (v) => { const l = Math.hypot(...v); return v.map(x => x / l); };
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const z = nrm(sub(e, c)), x = nrm(cross(u, z)), y = cross(z, x);
+    return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]);
+  },
+  inv(m) {
+    const a = m, o = new Float32Array(16);
+    o[0] = a[5]*a[10]*a[15]-a[5]*a[11]*a[14]-a[9]*a[6]*a[15]+a[9]*a[7]*a[14]+a[13]*a[6]*a[11]-a[13]*a[7]*a[10];
+    o[4] = -a[4]*a[10]*a[15]+a[4]*a[11]*a[14]+a[8]*a[6]*a[15]-a[8]*a[7]*a[14]-a[12]*a[6]*a[11]+a[12]*a[7]*a[10];
+    o[8] = a[4]*a[9]*a[15]-a[4]*a[11]*a[13]-a[8]*a[5]*a[15]+a[8]*a[7]*a[13]+a[12]*a[5]*a[11]-a[12]*a[7]*a[9];
+    o[12] = -a[4]*a[9]*a[14]+a[4]*a[10]*a[13]+a[8]*a[5]*a[14]-a[8]*a[6]*a[13]-a[12]*a[5]*a[10]+a[12]*a[6]*a[9];
+    o[1] = -a[1]*a[10]*a[15]+a[1]*a[11]*a[14]+a[9]*a[2]*a[15]-a[9]*a[3]*a[14]-a[13]*a[2]*a[11]+a[13]*a[3]*a[10];
+    o[5] = a[0]*a[10]*a[15]-a[0]*a[11]*a[14]-a[8]*a[2]*a[15]+a[8]*a[3]*a[14]+a[12]*a[2]*a[11]-a[12]*a[3]*a[10];
+    o[9] = -a[0]*a[9]*a[15]+a[0]*a[11]*a[13]+a[8]*a[1]*a[15]-a[8]*a[3]*a[13]-a[12]*a[1]*a[11]+a[12]*a[3]*a[9];
+    o[13] = a[0]*a[9]*a[14]-a[0]*a[10]*a[13]-a[8]*a[1]*a[14]+a[8]*a[2]*a[13]+a[12]*a[1]*a[10]-a[12]*a[2]*a[9];
+    o[2] = a[1]*a[6]*a[15]-a[1]*a[7]*a[14]-a[5]*a[2]*a[15]+a[5]*a[3]*a[14]+a[13]*a[2]*a[7]-a[13]*a[3]*a[6];
+    o[6] = -a[0]*a[6]*a[15]+a[0]*a[7]*a[14]+a[4]*a[2]*a[15]-a[4]*a[3]*a[14]-a[12]*a[2]*a[7]+a[12]*a[3]*a[6];
+    o[10] = a[0]*a[5]*a[15]-a[0]*a[7]*a[13]-a[4]*a[1]*a[15]+a[4]*a[3]*a[13]+a[12]*a[1]*a[7]-a[12]*a[3]*a[5];
+    o[14] = -a[0]*a[5]*a[14]+a[0]*a[6]*a[13]+a[4]*a[1]*a[14]-a[4]*a[2]*a[13]-a[12]*a[1]*a[6]+a[12]*a[2]*a[5];
+    o[3] = -a[1]*a[6]*a[11]+a[1]*a[7]*a[10]+a[5]*a[2]*a[11]-a[5]*a[3]*a[10]-a[9]*a[2]*a[7]+a[9]*a[3]*a[6];
+    o[7] = a[0]*a[6]*a[11]-a[0]*a[7]*a[10]-a[4]*a[2]*a[11]+a[4]*a[3]*a[10]+a[8]*a[2]*a[7]-a[8]*a[3]*a[6];
+    o[11] = -a[0]*a[5]*a[11]+a[0]*a[7]*a[9]+a[4]*a[1]*a[11]-a[4]*a[3]*a[9]-a[8]*a[1]*a[7]+a[8]*a[3]*a[5];
+    o[15] = a[0]*a[5]*a[10]-a[0]*a[6]*a[9]-a[4]*a[1]*a[10]+a[4]*a[2]*a[9]+a[8]*a[1]*a[6]-a[8]*a[2]*a[5];
+    const det = a[0] * o[0] + a[1] * o[4] + a[2] * o[8] + a[3] * o[12];
+    return o.map(v => v / det);
+  },
+};
+const VOL_LOG_DECADES = 8;
+// Decades on the log scale: 8 in the smooth style; in the layered one, only
+// those the data spans (down to its 1st percentile), so every shell is used.
+function volDecades() {
+  if (val('volStyle') !== 'layers' || !vol.data) return VOL_LOG_DECADES;
+  const d = vol.data, k = Math.max(1, Math.floor(d.length / 20000)), pos = [];
+  for (let i = 0; i < d.length; i += k) if (d[i] > 0) pos.push(d[i]);
+  if (!pos.length || !vol.max) return VOL_LOG_DECADES;
+  pos.sort((a, b) => a - b);
+  return Math.min(VOL_LOG_DECADES, Math.max(1, Math.log10(vol.max / pos[Math.floor(0.01 * pos.length)])));
+}
+function volInitGL() {
+  const c = $('volGL'), gl = c.getContext('webgl2', { premultipliedAlpha: true, alpha: true, preserveDrawingBuffer: false, antialias: false });
+  if (!gl) { $('volNoGL').hidden = false; $('volStatus').textContent = ''; return false; }
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, VOL_VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, VOL_FS)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(p, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  vol.float = !!gl.getExtension('OES_texture_float_linear');   // filterable float volume, else 8 bit
+  vol.gl = gl; vol.prog = p;
+  vol.tex = gl.createTexture(); vol.lut = gl.createTexture();
+  c.addEventListener('webglcontextlost', (e) => { e.preventDefault(); vol.gl = null; });
+  return true;
+}
+// Map the raw density to [0, 1] (linear, or 8 decades of log) and upload it.
+function volUpload() {
+  const gl = vol.gl; if (!gl || !vol.data) return;
+  const n = vol.n, d = vol.data, out = vol.float ? new Float32Array(d.length) : new Uint8Array(d.length);
+  const log = val('volScale') === 'log', mx = vol.max || 1, dec = vol.decades = volDecades(), l1 = Math.log10(mx), l0 = l1 - dec;
+  for (let i = 0; i < d.length; i++) {
+    let s = d[i] > 0 ? (log ? (Math.log10(d[i]) - l0) / dec : d[i] / mx) : 0;
+    s = s < 0 ? 0 : s > 1 ? 1 : s;
+    out[i] = vol.float ? s : Math.round(255 * s);
+  }
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, vol.tex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, vol.float ? gl.R32F : gl.R8, n, n, n, 0, gl.RED, vol.float ? gl.FLOAT : gl.UNSIGNED_BYTE, out);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE]])
+    gl.texParameteri(gl.TEXTURE_3D, k, v);
+  volLabels();
+}
+function volLut() {
+  const ramp = cmapRamp(state.cmap, state.cmapRev);
+  $('volCbar').style.background = cmapCss(state.cmap, state.cmapRev);
+  const gl = vol.gl; if (!gl) return;
+  const color = d3.scaleLinear().domain(ramp.map(r => r[0])).range(ramp.map(r => r[1])).interpolate(d3.interpolateRgb);
+  const px = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i++) { const c = d3.rgb(color(i / 255)); px.set([c.r, c.g, c.b, 255], 4 * i); }
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, vol.lut);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  volDraw();
+}
+const volOpacity = () => 0.4 * Math.pow(10, 2.6 * (+$('volOpacity').value) / 100);   // 0.4 … 160 per box width
+const volCut = () => (+$('volThresh').value) / 100;
+// Colour-bar labels: the density at the cut and at the top of the scale.
+function volLabels() {
+  const cut = volCut(), log = val('volScale') === 'log', mx = vol.max;
+  $('volOpacityV').textContent = $('volOpacity').value + '%';
+  $('volThreshV').textContent = Math.round(100 * cut) + '%';
+  const dec = vol.decades || VOL_LOG_DECADES;
+  $('volScaleNote').textContent = log ? `${+dec.toFixed(1)} decades` : '';
+  const layers = val('volStyle') === 'layers';
+  $('volLayers').disabled = !layers;
+  $('volLayersV').textContent = layers ? `${$('volLayers').value} shells` : 'with Layers style';
+  $('volStyleNote').textContent = layers ? 'iso-density shells' : '';
+  ['volOpacity', 'volThresh', 'volLayers'].forEach(id => $(id).style.setProperty('--p', (100 * ($(id).value - $(id).min) / ($(id).max - $(id).min)) + '%'));
+  if (!mx) { $('volLo').textContent = $('volHi').textContent = ''; return; }
+  const lo = log ? mx * Math.pow(10, -dec * (1 - cut)) : mx * cut;
+  const f = (v) => v ? D3Charts.fmtNum(v, 2).replace(/<sup>(.*?)<\/sup>/, (m, e) => e.replace(/./g, c => ({ '-': '⁻', '−': '⁻' }[c] || '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c] || c))) : '0';
+  $('volLo').textContent = f(lo); $('volHi').textContent = f(mx);
+}
+function volCamera(w, h) {
+  const { yaw, pitch, dist } = vol.cam;
+  const eye = [dist * Math.cos(pitch) * Math.cos(yaw), dist * Math.cos(pitch) * Math.sin(yaw), dist * Math.sin(pitch)];
+  const up = Math.abs(Math.cos(pitch)) < 1e-4 ? [Math.cos(yaw + Math.PI), Math.sin(yaw + Math.PI), 0] : [0, 0, 1];
+  return m4.mul(m4.persp(30 * Math.PI / 180, w / h, 0.05, 50), m4.look(eye, [0, 0, 0], up));
+}
+function volDraw() {
+  if (vol.raf || !vol.on) return;
+  vol.raf = requestAnimationFrame((now) => {
+    vol.raf = 0; const moving = volTween(now); volRender();
+    if (vol.spin && vol.visible) vol.cam.yaw += 0.004;
+    if (moving || (vol.spin && vol.visible)) volDraw();
+  });
+}
+function volRender() {
+  const view = $('volView'), c = $('volGL'), ov = $('volOverlay');
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5), w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  for (const cv of [c, ov]) if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const vp = volCamera(w, h), gl = vol.gl;
+  if (gl) {
+    gl.viewport(0, 0, c.width, c.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (vol.data) {
+      gl.useProgram(vol.prog);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, vol.tex);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, vol.lut);
+      const u = (k) => gl.getUniformLocation(vol.prog, k);
+      gl.uniform1i(u('uVol'), 0); gl.uniform1i(u('uLut'), 1);
+      gl.uniformMatrix4fv(u('uInv'), false, m4.inv(vp));
+      gl.uniform1f(u('uOpacity'), volOpacity()); gl.uniform1f(u('uCut'), volCut());
+      gl.uniform1f(u('uSteps'), Math.min(640, Math.max(160, 3 * vol.n)) * (val('volStyle') === 'layers' ? 1.5 : 1));
+      gl.uniform1i(u('uMode'), val('volStyle') === 'layers' ? 1 : 0);
+      gl.uniform1f(u('uLayers'), +$('volLayers').value); gl.uniform1f(u('uTexel'), 1 / vol.n);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+  }
+  volOverlay(ov, vp, w, h, dpr);
+}
+// Box edges, axis labels, the orbit and the two black holes, projected with the camera.
+function volOverlay(ov, vp, w, h, dpr) {
+  const ctx = ov.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const P = (x, y, z) => {
+    const v = [x, y, z, 1], o = [0, 0, 0, 0];
+    for (let i = 0; i < 4; i++) o[i] = vp[i] * v[0] + vp[4 + i] * v[1] + vp[8 + i] * v[2] + vp[12 + i];
+    return [(o[0] / o[3] + 1) / 2 * w, (1 - o[1] / o[3]) / 2 * h, o[3]];
+  };
+  const line = (a, b) => { const p = P(...a), q = P(...b); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); };
+  if ($('volBox').checked) {
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1;
+    for (const a of [-1, 1]) for (const b of [-1, 1]) { line([-1, a, b], [1, a, b]); line([a, -1, b], [a, 1, b]); line([a, b, -1], [a, b, 1]); }
+    ctx.strokeStyle = 'rgba(255,255,255,.38)';
+    ctx.font = `600 12px ${css('--font')}`; ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [lab, e] of [['x', [1, 0, 0]], ['y', [0, 1, 0]], ['z', [0, 0, 1]]]) {
+      line([0, 0, 0], e.map(v => v * 1.0));
+      const t = P(...e.map(v => v * 1.14)); ctx.fillText(lab, t[0], t[1]);
+    }
+    ctx.font = `500 11px ${css('--mono')}`; ctx.fillStyle = 'rgba(255,255,255,.45)';
+    const t = P(1, -1, -1), s = P(1.06, -1.06, -1.08); ctx.textAlign = 'left';
+    ctx.fillText(`±${pnum(vol.extent)} M`, Math.max(t[0], s[0]) + 4, Math.max(t[1], s[1]) + 4);
+  }
+  const sn = vol.sn;
+  if ($('volBinary').checked && sn && vol.data) {
+    const q = sn.q, R = sn.R / vol.extent, th = sn.theta;
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.beginPath();
+    for (let k = 0; k <= 96; k++) {   // the companion's orbit about the centre of mass
+      const a = 2 * Math.PI * k / 96, p = P(R / (1 + q) * Math.cos(a), R / (1 + q) * Math.sin(a), 0);
+      k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+    const col = css('--s1');
+    const dot = (x, y, filled) => {
+      if (Math.abs(x) > 1 || Math.abs(y) > 1) return;
+      const p = P(x, y, 0);
+      ctx.beginPath(); ctx.arc(p[0], p[1], 5.5, 0, 2 * Math.PI);
+      if (filled) { ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+      else { ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.stroke(); }
+    };
+    dot(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th), true);
+    dot(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI), false);
+  }
+}
+const volParams = () => [state.run, $('volR').value, val('volRes'), val('volSet'), JSON.stringify((state.data && state.data.radiative) || [])].join('|');
+// The snapshot on the timeline changed (or a control did): fetch its volume
+// once nothing is in flight, keeping only the latest request.
+function volSnap(sn) {
+  if (sn) vol.sn = sn;
+  if (!vol.sn || !vol.gl || !vol.on) return;
+  vol.want = { step: vol.sn.step, key: volParams() + '|' + vol.sn.step };
+  if (vol.visible) volFetch();
+}
+async function volFetch() {
+  if (vol.busy || !vol.want) return;
+  const want = vol.want;
+  if (vol.loaded === want.key) return;
+  vol.busy = true;
+  let payload = vol.cache.get(want.key);
+  try {
+    if (!payload) {
+      $('volStatus').textContent = `loading step ${want.step}…`;
+      const rad = encodeURIComponent(JSON.stringify((state.data && state.data.radiative) || []));
+      const raw = await fetchJSON(`/api/volume?run=${encodeURIComponent(state.run)}&step=${want.step}&rplot=${$('volR').value}&n=${val('volRes')}&set=${val('volSet')}&radiative=${rad}`);
+      const d = decodeF32(raw.density_f32);
+      let mx = 0; for (let i = 0; i < d.length; i++) if (d[i] > mx) mx = d[i];
+      payload = { n: raw.n, extent: raw.extent, data: d, max: mx, step: raw.step };
+      vol.cache.set(want.key, payload);
+      while (vol.cache.size > 6) vol.cache.delete(vol.cache.keys().next().value);
+    }
+    Object.assign(vol, { n: payload.n, extent: payload.extent, data: payload.data, max: payload.max, step: payload.step });
+    vol.loaded = want.key;
+    volUpload(); volDraw();
+    $('volStatus').textContent = `step ${payload.step} · ${payload.n}³ · t = ${fmt(vol.sn.t, 6)} M`;
+  } catch (e) { $('volStatus').textContent = 'could not load: ' + e.message; }
+  vol.busy = false;
+  if (vol.want && vol.want.key !== vol.loaded) volFetch();
+}
+const VOL_VIEWS = { iso: { yaw: -0.75, pitch: 0.42 }, top: { yaw: -Math.PI / 2, pitch: Math.PI / 2 - 1e-3 }, side: { yaw: -Math.PI / 2, pitch: 0 }, front: { yaw: 0, pitch: 0 } };
+const volClampDist = (d) => Math.min(14, Math.max(1.2, d));
+// Eased camera move for the view and zoom buttons; drag, wheel, pinch and keys stay direct and cancel it.
+function volAnimate(to, ms = 500) {
+  const from = { ...vol.cam }, goal = { ...(vol.anim ? vol.anim.goal : from), ...to };
+  goal.yaw = from.yaw + Math.atan2(Math.sin(goal.yaw - from.yaw), Math.cos(goal.yaw - from.yaw));   // shortest way round
+  vol.anim = matchMedia('(prefers-reduced-motion: reduce)').matches ? null : { from, goal, ms, t0: performance.now() };
+  if (!vol.anim) Object.assign(vol.cam, goal);
+  volDraw();
+}
+function volTween(now) {
+  const a = vol.anim; if (!a) return false;
+  const x = Math.min(1, Math.max(0, (now - a.t0) / a.ms)), e = x < 0.5 ? 4 * x * x * x : 1 - (2 - 2 * x) ** 3 / 2;
+  vol.cam.yaw = a.from.yaw + (a.goal.yaw - a.from.yaw) * e;
+  vol.cam.pitch = a.from.pitch + (a.goal.pitch - a.from.pitch) * e;
+  vol.cam.dist = a.from.dist * (a.goal.dist / a.from.dist) ** e;   // geometric, so zoom speed feels even
+  if (x < 1) return true;
+  vol.anim = null; return false;
+}
+function volSetView(v) { volAnimate({ ...VOL_VIEWS[v], ...(v === 'iso' ? { dist: 5.4 } : {}) }); }
+function volZoomTo(f) { volAnimate({ dist: volClampDist((vol.anim ? vol.anim.goal : vol.cam).dist * f) }, 300); }
+function volZoom(f) { vol.anim = null; vol.cam.dist = volClampDist(vol.cam.dist * f); volDraw(); }
+function initVolume() {
+  initSeg('volRes', () => volSnap()); initSeg('volSet', () => volSnap());
+  initSeg('volScale', () => { volUpload(); volDraw(); });
+  // Shells are evenly spaced in the colour scale, which spreads them over the
+  // whole cloud only on the log scale: switch to it when the style is chosen.
+  initSeg('volStyle', () => {
+    if (val('volStyle') === 'layers' && val('volScale') === 'lin') { $('volScale').setValue('log'); saveSettings(); }
+    volUpload(); volLabels(); volDraw();
+  });
+  ['volOpacity', 'volThresh', 'volLayers'].forEach(id => $(id).addEventListener('input', () => { volLabels(); volDraw(); }));
+  $('volR').addEventListener('change', () => volSnap());
+  ['volBinary', 'volBox'].forEach(id => $(id).addEventListener('change', volDraw));
+  $('volOn').addEventListener('change', () => volSetOn($('volOn').checked));
+  volLabels();
+}
+// Turn the 3D view on or off. Off, the section collapses to its header, the
+// loaded volumes are dropped and nothing is fetched or drawn; WebGL is only
+// set up the first time the view is on.
+function volSetOn(on) {
+  vol.on = on;
+  $('cloud3d').classList.toggle('vol-off', !on);
+  if (!on) {
+    if (vol.raf) { cancelAnimationFrame(vol.raf); vol.raf = 0; }
+    vol.cache.clear(); vol.data = null; vol.loaded = null; vol.want = null; vol.visible = false;
+    return;
+  }
+  if (!vol.started) { startVolume(); return; }
+  $('volStatus').textContent = 'Scroll here to load the 3D view';
+  volSnap(); volDraw();   // the visibility observer fetches once the view is on screen
+}
+// GL, pointer and visibility wiring; needs d3 (for the colormap), so it runs once the charts are ready.
+function startVolume() {
+  vol.on = $('volOn').checked;
+  $('cloud3d').classList.toggle('vol-off', !vol.on);
+  if (!vol.on || vol.started) return;
+  vol.started = true;
+  const view = $('volView');
+  $('volCbar').style.background = cmapCss(state.cmap, state.cmapRev);
+  try { if (!volInitGL()) return; } catch (e) { $('volStatus').textContent = 'WebGL error: ' + e.message; return; }
+  volLut();
+  const ptrs = new Map(); let pinch = 0;
+  view.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    view.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); view.classList.add('dragging');
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); }
+    e.preventDefault();
+  });
+  view.addEventListener('pointermove', (e) => {
+    const prev = ptrs.get(e.pointerId); if (!prev) return;
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch) volZoom(pinch / d); pinch = d; return;
+    }
+    vol.anim = null;
+    vol.cam.yaw -= (e.clientX - prev[0]) * 0.008;
+    vol.cam.pitch = Math.max(-Math.PI / 2 + 1e-3, Math.min(Math.PI / 2 - 1e-3, vol.cam.pitch + (e.clientY - prev[1]) * 0.008));
+    volDraw();
+  });
+  const up = (e) => { ptrs.delete(e.pointerId); pinch = 0; if (!ptrs.size) view.classList.remove('dragging'); };
+  view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+  view.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); volZoom(Math.exp(e.deltaY * (e.deltaMode ? 0.05 : 0.002))); }, { passive: false });
+  view.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) volSetView('iso'); });
+  view.addEventListener('keydown', (e) => {
+    const k = { ArrowLeft: [0.1, 0], ArrowRight: [-0.1, 0], ArrowUp: [0, 0.1], ArrowDown: [0, -0.1] }[e.key];
+    if (k) { e.preventDefault(); vol.anim = null; vol.cam.yaw += k[0]; vol.cam.pitch = Math.max(-1.57, Math.min(1.57, vol.cam.pitch + k[1])); volDraw(); }
+    else if (e.key === '+' || e.key === '=') volZoom(0.85); else if (e.key === '-') volZoom(1 / 0.85);
+  });
+  $('volZoomIn').onclick = () => volZoomTo(0.8); $('volZoomOut').onclick = () => volZoomTo(1.25);
+  $('volReset').onclick = () => volSetView('iso');
+  $('volViews').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) volSetView(b.dataset.view); });
+  $('volSpin').onclick = () => { vol.spin = !vol.spin; $('volSpin').setAttribute('aria-pressed', String(vol.spin)); volDraw(); };
+  $('volPng').onclick = volPng;
+  new ResizeObserver(volDraw).observe(view);
+  vol.io = new IntersectionObserver((es) => {   // kept on vol so it is not collected
+    vol.visible = es[es.length - 1].isIntersecting;
+    if (vol.visible) { if (!vol.sn) $('volStatus').textContent = 'waiting for a snapshot…'; volSnap(); volDraw(); }
+  }, { rootMargin: '200px' }).observe(view);
+}
+function volPng() {
+  volRender();   // the drawing buffer is only valid within the same task
+  const c = $('volGL'), ov = $('volOverlay'), out = document.createElement('canvas');
+  out.width = c.width; out.height = c.height;
+  const ctx = out.getContext('2d');
+  const g = ctx.createRadialGradient(out.width / 2, out.height * 0.45, 0, out.width / 2, out.height * 0.45, Math.max(out.width, out.height) * 0.75);
+  g.addColorStop(0, '#1a1b1f'); g.addColorStop(1, '#0b0c0e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(c, 0, 0); ctx.drawImage(ov, 0, 0);
+  out.toBlob((blob) => {
+    const href = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href, download: exportName($('volView'), '3D cloud', vol.step) + '.png' });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(href), 10000);
+  }, 'image/png');
 }
 
 // ---------- Plot downloads ----------
 // File names say which run and plot: q, R0, M_c, co/counter, then the card
 // title (and the snapshot step and plane for the snapshot plots).
-function exportName(el) {
+function exportName(el, title = null, step = undefined) {
   const slug = (v) => String(v).normalize('NFKD').replace(/[^\w.+-]+/g, '_').replace(/^_+|_+$/g, '');
   const run = (rp.runs || []).find(r => r.folder === state.run) || {}, p = run.params;
   const tag = p && p.q !== undefined ? `q${pnum(p.q)}_R${pnum(p.R0)}_Mc${pnum(p.M_c)}_${p.counter ? 'counter' : 'co'}` : (run.name || 'run');
   const card = el.closest('.subcard, .card');
-  const title = el.closest('#modal') ? $('modalTitle').textContent : card ? (card.querySelector('h4, h3') || {}).textContent || el.id : el.id;
-  let extra = '';
+  title = title || (el.closest('#modal') ? $('modalTitle').textContent : card ? (card.querySelector('h4, h3') || {}).textContent || el.id : el.id);
+  let extra = step !== undefined && step !== null ? `_step${step}` : '';
   if (el.closest('#snapshot')) { const st = shownStep(); extra = (st !== undefined ? `_step${st}` : '') + (el.id === 'pSlice' ? `_${val('slicePlane')}` : ''); }
   return slug(`${tag}_${title}${extra}`);
 }
@@ -1749,7 +2774,7 @@ function renderPicker() {
       <span class="cb" role="checkbox" aria-checked="${on}" aria-label="Select for download"><svg class="i"><use href="#i-check"/></svg></span>
       <span class="nm">${esc(r.name)}</span>
       ${runParams(r.params)}
-      <span class="end">${r.folder === newest ? '<span class="tag">Newest</span>' : ''}<svg class="i ck"><use href="#i-check"/></svg></span></div>`;
+      <span class="end">${r.folder === newest ? '<span class="tag">Newest</span>' : ''}<button type="button" class="rp-nt" title="Open in a new tab (Ctrl/⌘-click)" aria-label="Open in a new tab"><svg class="i"><use href="#i-newtab"/></svg></button><svg class="i ck"><use href="#i-check"/></svg></span></div>`;
   };
   const showHeads = !(groups.size === 1 && groups.has(''));
   $('rpList').innerHTML = runs.length ? [...groups].map(([g, list]) =>
@@ -1779,10 +2804,14 @@ function openPicker() {
 function closePicker(focusBtn = true) {
   if (!rp.open) return;
   rp.open = false; $('rpPop').hidden = true; $('rpBtn').setAttribute('aria-expanded', 'false');
+  rp.newTab = false; $('rpPop').classList.remove('newtab');
   if (focusBtn) $('rpBtn').focus({ preventScroll: true });
 }
-function pickRun(v) {
+// newTab (or the Compare tab being open) opens the run in a tab of its own.
+function pickRun(v, newTab = false) {
+  newTab = newTab || rp.newTab || tabs.compare;
   closePicker();
+  if (newTab) { if (v) openTab(v); return; }
   const sel = $('run');
   if (!v || v === sel.value) return;
   sel.value = v; syncPicker();
@@ -1796,12 +2825,14 @@ function initPicker() {
   $('rpList').addEventListener('mousemove', (e) => { const o = e.target.closest('.rp-opt'); if (o && !o.classList.contains('active')) setActive(rp.items.indexOf(o), 'none'); });
   $('rpList').addEventListener('click', (e) => {
     const cb = e.target.closest('.cb'), gh = e.target.closest('.rp-gh'), o = e.target.closest('.rp-opt');
-    if (cb && o) toggleChecked([o.dataset.v], !rp.checked.has(o.dataset.v));
+    if (e.target.closest('.rp-nt') && o) pickRun(o.dataset.v, true);
+    else if (cb && o) toggleChecked([o.dataset.v], !rp.checked.has(o.dataset.v));
     else if (gh) {   // the folder header ticks or clears every (visible) run in it
       const list = rp.items.filter(e => (rp.runs.find(r => r.folder === e.dataset.v) || {}).group === gh.dataset.g).map(e => e.dataset.v);
       toggleChecked(list, !list.every(f => rp.checked.has(f)));
-    } else if (o) pickRun(o.dataset.v);
+    } else if (o) pickRun(o.dataset.v, e.ctrlKey || e.metaKey);
   });
+  $('rpList').addEventListener('auxclick', (e) => { const o = e.target.closest('.rp-opt'); if (o && e.button === 1) { e.preventDefault(); pickRun(o.dataset.v, true); } });
   $('rpClear').onclick = () => toggleChecked([...rp.checked], false);
   $('rpDl').onclick = downloadSelected;
   $('rpPop').addEventListener('keydown', (e) => {
@@ -1810,7 +2841,7 @@ function initPicker() {
     else if (e.key === 'Home' && e.target !== $('rpFilter')) { e.preventDefault(); setActive(0); }
     else if (e.key === 'End' && e.target !== $('rpFilter')) { e.preventDefault(); setActive(-1); }
     else if (e.key === ' ' && e.target !== $('rpFilter')) { e.preventDefault(); const o = rp.items[rp.active]; if (o) toggleChecked([o.dataset.v], !rp.checked.has(o.dataset.v)); }
-    else if (e.key === 'Enter') { e.preventDefault(); const o = rp.items[rp.active]; if (o) pickRun(o.dataset.v); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = rp.items[rp.active]; if (o) pickRun(o.dataset.v, e.ctrlKey || e.metaKey); }
     else if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
     else if (e.key === 'Tab') closePicker(false);
   });
@@ -1822,17 +2853,20 @@ async function pollRuns() {
 }
 
 async function init() {
-  initSeg('xaxis', render);
+  initSeg('xaxis', () => { render(); if (tabs.compare) renderCompare(); });
   initSeg('modeSet', updateSnapshotControls);
   initSeg('sliceScale', updateSnapshotControls);
   initSeg('slicePlane', updateSnapshotControls);
+  initSeg('cmpLayout', renderCompare);
+  initSeg('centerNorms', () => setCenter(val('centerNorms')));
+  initSeg('centerFrac', () => setCenter(val('centerFrac')));
   initTimeline();
   initInfoTips();
-  initNav(); initPicker();
+  initNav(); initPicker(); initVolume();
   const saved = loadSettings();
   applySettings(saved); setThemeIcon(); watchSettings(); state.restored = true;
   try { await window.chartsReady; } catch (e) { showError(e.message, 'Charts unavailable'); return; }
-  initCmap();
+  initCmap(); startVolume();
   D3Charts.exportName = exportName;
   D3Charts.onError = (e) => showError(e.message, 'Download failed');
   try {
@@ -1840,14 +2874,18 @@ async function init() {
     if (!runs.length) { showError('No simulation folders found.', 'Nothing to show'); return; }
     state.run = (runs.find(r => r.folder === saved.run) || runs[0]).folder;
     fillRuns(runs);
+    initTabs(saved, runs);
     setInterval(pollRuns, 30000);
   } catch (e) { showError(e.message); return; }
   await refresh();
+  if (saved.compare && tabs.list.length > 1) selectCompare();
   if (state.data && state.data.ready) {
     $('xaxis').setValue(['t', 'tP', 'R'].includes(saved.xaxis) ? saved.xaxis : state.data.info.evolving ? 't' : 'tP');
     const R = state.data.latest.R || 50;
     if (+saved.rplot > 0) { $('rplot').value = saved.rplot; state.rplotSet = true; }
     else $('rplot').value = Math.round(Math.min(2.5 * R, 16 / (state.data.info.mu ** 2)) / 10) * 10 || 200;
+    // The 3D box frames the initial cloud: 2.5 times its peak radius n²/μ².
+    if (!(+saved.volR > 0)) $('volR').value = Math.max(10, Math.round(Math.min(+$('rplot').value, 2.5 * (state.data.info.n0 || 2) ** 2 / state.data.info.mu ** 2) / 10) * 10);
     render(); state.snapLoaded = null; updateSnapshotControls();
   }
   schedule();
@@ -1902,8 +2940,9 @@ async function downloadSelected() {
   btn.classList.remove('busy'); updatePickerFoot();
 }
 $('download').onclick = downloadDiagnostics;
-$('run').onchange = () => { stopPlay(); state.lock = null; state.run = $('run').value; state.snapLoaded = null; state.prevTiles = {}; $('tiles').innerHTML = ''; refresh(); };
-$('window').onchange = refresh;
+$('run').onchange = () => { stopPlay(); state.lock = null; vol.sn = null; vol.data = null; vol.loaded = null; volDraw(); state.run = $('run').value; state.snapLoaded = null; state.prevTiles = {}; $('tiles').innerHTML = ''; refresh(); };
+$('run').addEventListener('change', () => { const t = tabs.list[tabs.active]; if (t && t.run !== $('run').value) { t.run = $('run').value; renderTabs(); saveSettings(); } });
+$('window').onchange = () => { cmp.data.clear(); refresh(); };
 $('refresh').onchange = schedule;
 $('refreshNow').onclick = () => { refresh(); schedule(); };
 $('pause').onclick = () => {
@@ -1921,9 +2960,10 @@ $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 $('toast').onclick = () => showError(null);
 $('theme').onclick = () => {
+  setTimeout(() => { renderTabs(); renderCompare(); });
   const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
-  setThemeIcon(); if (window.d3) renderCmap();
+  setThemeIcon(); if (window.d3) { renderCmap(); volLut(); }
   render(); state.snapLoaded = null; updateSnapshotControls();
 };
 init();

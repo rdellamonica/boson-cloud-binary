@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <sstream>
 
 namespace fs = std::filesystem;
 using test::close;
@@ -119,6 +120,54 @@ void accuracy_against_full_evolution()
     }
 }
 
+/// Total outgoing flux through r_ex at every step of a run in folder @p name.
+std::vector<double> total_flux(const std::string &name, double tolerance, double flux_tolerance, int steps,
+                               int *final_active)
+{
+    const fs::path root = fs::current_path() / name;
+    fs::create_directories(root);
+    const fs::path previous = fs::current_path();
+    fs::current_path(root);
+    auto cn = make(tolerance, true);
+    cn->prune_flux_tolerance = flux_tolerance;
+    cn->set_initial_state_full(initial_state(*cn));
+    cn->initialize();
+    cn->run(steps + 1, r_ex);
+    *final_active = cn->active_mode_count();
+    fs::current_path(previous);
+    std::ifstream in(test::simulation_folder(root) / "flux.txt");
+    std::vector<double> flux;
+    for (std::string line; std::getline(in, line);) {
+        std::istringstream row(line);
+        double sum = 0.0;
+        for (double v; row >> v;) sum += v;
+        flux.push_back(sum);
+    }
+    return flux;
+}
+
+void flux_in_the_selection()
+{
+    test::ScratchDir dir("flux_selection");
+    // At a coarse tolerance the norm alone leaves out modes that carry the
+    // outgoing flux; their share of it keeps them evolved.
+    int full_active = 0, norm_active = 0, flux_active = 0;
+    const std::vector<double> full = total_flux("full", 0.0, 0.0, 200, &full_active);
+    const std::vector<double> norm_only = total_flux("norm", 1e-4, 0.0, 200, &norm_active);
+    const std::vector<double> with_flux = total_flux("flux", 1e-4, 1e-4, 200, &flux_active);
+    require(full.size() == norm_only.size() && full.size() == with_flux.size(), "Flux files differ in length");
+    double scale = 0.0, norm_error = 0.0, flux_error = 0.0;
+    for (std::size_t i = 0; i < full.size(); ++i) {
+        scale = std::max(scale, std::abs(full[i]));
+        norm_error = std::max(norm_error, std::abs(norm_only[i] - full[i]));
+        flux_error = std::max(flux_error, std::abs(with_flux[i] - full[i]));
+    }
+    std::cout << "flux error: norm only " << norm_error / scale << " (" << norm_active << " modes), with flux "
+              << flux_error / scale << " (" << flux_active << " modes)" << std::endl;
+    require(flux_active >= norm_active, "The flux criterion switched modes off");
+    require(flux_error < norm_error, "The flux criterion did not improve the outgoing flux");
+}
+
 void conservation_with_pruning()
 {
     test::ScratchDir dir("conservation");
@@ -154,10 +203,12 @@ void switching_on_and_off()
     std::cout << "active modes: " << initial << " -> " << grown << std::endl;
     require(grown > initial, "No mode was switched on as the companion ramped in");
 
-    // A coarser tolerance switches the faint modes off at the next check and
-    // accounts for the mass they held.
+    // A coarser tolerance, without the flux share that keeps the radiating
+    // modes, switches the faint modes off at the next check and accounts for
+    // the mass they held.
     const double before = cn->mu * cn->dr * cn->psi.squaredNorm() + cn->pruned_mass();
     cn->prune_tolerance = 1e-3;
+    cn->prune_flux_tolerance = 0.0;
     for (; step <= 110; ++step) cn->step(step);
     require(cn->active_mode_count() < grown, "No mode was switched off");
     require(cn->pruned_mass() > 0.0, "Switched-off modes held no mass");
@@ -293,6 +344,7 @@ int main()
     return test::run_all(std::pair{"disabled by default", &disabled_by_default},
                          std::pair{"initial selection", &initial_selection},
                          std::pair{"accuracy against the full evolution", &accuracy_against_full_evolution},
+                         std::pair{"outgoing flux in the selection", &flux_in_the_selection},
                          std::pair{"mass conservation with pruning", &conservation_with_pruning},
                          std::pair{"switching modes on and off", &switching_on_and_off},
                          std::pair{"exact restart", &exact_restart},

@@ -46,7 +46,8 @@ int main(int argc, char** argv)
         state << cn.psi[i].real() << ' ' << cn.psi[i].imag() << '\n';
     std::ofstream matrices("matrices.txt");
     matrices << std::setprecision(17);
-    for (const auto* mat : {&cn.H0, &cn.V1, &cn.V2, &cn.V, &cn.dVdt, &cn.H, &cn.A, &cn.B})
+    const SparseComplex H0 = cn.H0, V1 = cn.V1(), V2 = cn.V2(), V = cn.V(), dVdt = cn.dVdt(), H = cn.H();
+    for (const SparseComplex* mat : {&H0, &V1, &V2, &V, &dVdt, &H})
         for (int row = 0; row < mat->rows(); ++row)
             for (int col = 0; col < mat->cols(); ++col) {
                 // Only dump small fixtures; do not distort the timed workload.

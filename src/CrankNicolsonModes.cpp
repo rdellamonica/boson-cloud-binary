@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 CrankNicolsonModes::CrankNicolsonModes(int Nr, double L, double dt_i, double epsilon, int l_max, double mu, double M_c, double q, double a, double R, bool counter, bool absorption, int save_every, double ramp_periods, double epsilon_smear, std::string config_file)
@@ -59,7 +60,7 @@ void CrankNicolsonModes::configure_isolated_black_hole(double x)
 {
     if (!std::isfinite(x) || std::abs(x) >= L)
         throw std::invalid_argument("The isolated BH must lie inside the radial domain");
-    if (A.rows() != 0)
+    if (operator_ready)
         throw std::logic_error("Configure the isolated BH before initialize()");
     isolated_black_hole = true;
     evolve_orbit = false;
@@ -79,22 +80,23 @@ void CrankNicolsonModes::initialize()
     std::cout << "Building cache of mode couplings..." << std::endl;
     build_coupling_cache();
 
-    std::cout << "Building sparse element caches..." << std::endl;
-    build_sparse_element_caches();
+    std::cout << "Building the coupling operator..." << std::endl;
+    build_active_operator();
 
     std::cout << "Building initial perturbation..." << std::endl;
     t_i = 0.0;
     build_time_dependent_perturbation(0.0);
 
-    std::cout << "Building sparse matrices for the Crank-Nicolson Method..." << std::endl;
+    std::cout << "Configuring the Crank-Nicolson solver..." << std::endl;
     build_CN_matrices();
 
     if (pruning_enabled())
     {
         if (prune_check_every < 1 || !(prune_tolerance < 1.0))
             throw std::invalid_argument("Pruning needs 0 < prune_tolerance < 1 and prune_check_every >= 1");
-        // Select the initial active set (a resumed run restores its own).
-        if (update_active_modes(prune_check_every * dt, true))
+        // Select the initial active set. A resumed run has no state yet at
+        // this point and restores its own set in resume().
+        if (psi.size() == static_cast<Eigen::Index>(Nr) * n_modes && update_active_modes(prune_check_every * dt, true))
             apply_active_set();
     }
 
@@ -111,6 +113,57 @@ void CrankNicolsonModes::build_grid()
     r.resize(Nr);
     for (int i = 0; i < Nr; i++)
         r(i) = epsilon + i * dr;
+    uniform_grid = true;
+    node_weight = Eigen::VectorXd::Constant(Nr, dr);
+}
+
+void CrankNicolsonModes::set_radial_grid(const Eigen::VectorXd &nodes)
+{
+    if (operator_ready)
+        throw std::logic_error("Set the radial grid before initialize()");
+    if (nodes.size() != Nr)
+        throw std::invalid_argument("The radial grid must have Nr nodes");
+    for (int i = 1; i < Nr; ++i)
+        if (!(nodes(i) > nodes(i - 1)))
+            throw std::invalid_argument("Radial nodes must increase");
+    r = nodes;
+    uniform_grid = false;
+    dr = (r.tail(Nr - 1) - r.head(Nr - 1)).minCoeff();
+    // Trapezoid weights: the measure in which the second difference is self-adjoint.
+    node_weight.resize(Nr);
+    node_weight(0) = 0.5 * (r(1) - r(0));
+    node_weight(Nr - 1) = 0.5 * (r(Nr - 1) - r(Nr - 2));
+    for (int i = 1; i < Nr - 1; ++i)
+        node_weight(i) = 0.5 * (r(i + 1) - r(i - 1));
+    std::cout << "Stretched radial grid: dr = " << dr << " near the centre, "
+              << r(Nr - 1) - r(Nr - 2) << " at r = " << r(Nr - 1) << std::endl;
+    build_stationary_hamiltonian();
+}
+
+int CrankNicolsonModes::node_at(double offset) const
+{
+    if (uniform_grid)
+        return static_cast<int>(std::floor(offset / dr));
+    return static_cast<int>(std::upper_bound(r.data(), r.data() + Nr, r(0) + offset) - r.data()) - 1;
+}
+
+dcomplex CrankNicolsonModes::radial_derivative(const dcomplex *u, int i) const
+{
+    if (uniform_grid)
+        return (u[i + 1] - u[i - 1]) / (2.0 * dr);
+    // Second-order three-point derivative on unequal spacings.
+    const double hm = r(i) - r(i - 1), hp = r(i + 1) - r(i);
+    return (-hp / (hm * (hm + hp))) * u[i - 1] + ((hp - hm) / (hm * hp)) * u[i] + (hm / (hp * (hm + hp))) * u[i + 1];
+}
+
+double CrankNicolsonModes::radial_norm2(const dcomplex *u, int first, int count) const
+{
+    if (uniform_grid)
+        return Eigen::Map<const Eigen::VectorXcd>(u + first, count).squaredNorm() * dr;
+    double sum = 0.0;
+    for (int i = first; i < first + count; ++i)
+        sum += node_weight(i) * std::norm(u[i]);
+    return sum;
 }
 
 void CrankNicolsonModes::build_modes()
@@ -183,12 +236,32 @@ void CrankNicolsonModes::step(int step_id)
 
     build_time_dependent_perturbation(t_i);
 
-    update_CN_values();
-
-    Eigen::VectorXcd rhs = B * psi;
+    // B psi with B = 1 - (i dt/2) H on the active modes.
+    const Eigen::VectorXcd state = gather_active(psi);
+    Eigen::VectorXcd rhs;
+    apply_hamiltonian(state, rhs, true);
+    rhs = state - (I * (0.5 * dt)) * rhs;
     if (sink_active)
-        rhs -= (0.25 * dt) * apply_sink(psi); // B_full = B - (dt/4) * Gamma
+        rhs -= (0.25 * dt) * gather_active(apply_sink(psi)); // B_full = B - (dt/4) * Gamma
     solve_CN(rhs);
+
+    // Binary power of this step: Omega_z times the torque of V(t_n+1) on the midpoint state.
+    // CN gives psi_n+1 - psi_n = -dt (iH + Gamma/2) psi_mid exactly, so this torque minus the
+    // sinks' absorbed L_z (also on psi_mid) is exactly the field's discrete Delta L_z / dt.
+    if (!isolated_black_hole)
+        p_bin_step = step_binary_power(0.5 * (psi_last + psi), 0.0);
+
+    // Mass taken up by the sinks over this step. With the rates at the
+    // midpoint state this is exactly the norm the CN step removes through them.
+    if (sink_active)
+    {
+        const Eigen::VectorXcd midpoint = 0.5 * (psi_last + psi);
+        absorbed_mass_1 += get_absorption_rate_1(midpoint) * dt;
+        absorbed_mass_2 += get_absorption_rate_2(midpoint) * dt;
+        Lz_abs_rate = absorbed_Lz_rate(midpoint);
+    }
+    else
+        Lz_abs_rate = 0.0;
 
     if (mask)
     {
@@ -202,27 +275,33 @@ void CrankNicolsonModes::step(int step_id)
     // The flux and snapshots use the post-mask endpoint state. Evaluate the
     // Schrodinger RHS on that same state, with the completed step's H(t_i).
     // The mask itself is a discrete damping operation, not part of this RHS.
-    const Eigen::VectorXcd dpsi_dt = schrodinger_rhs(psi);
+    // One H psi serves dpsi_dt and both energies.
+    const Eigen::VectorXcd Hpsi = hamiltonian_times(psi);
+    Eigen::VectorXcd dpsi_dt = -I * Hpsi;
+    if (sink_active)
+        dpsi_dt -= 0.5 * apply_sink(psi);
 
-    if (!isolated_black_hole && evolve_orbit && t_i > ramp_end_time())
+    if (!isolated_black_hole && evolve_orbit && t_i > orbit_start_time())
     {
         // The crossing step may contain both frozen and evolving time. Do not
         // apply orbital feedback to the part before the fixed activation time.
-        const double orbit_dt = t_i - std::max(step_start, ramp_end_time());
+        const double orbit_dt = t_i - std::max(step_start, orbit_start_time());
         update_time_dependent_increment(orbit_dt);
     }
 
     auto fluxes = get_flux(psi);
-    auto energy = get_energy(psi);
+    const double energy = restricted_expectation(psi, Hpsi, idx_ex);
 
     const std::vector<double> energy_flux = get_energy_flux(psi, dpsi_dt);
 
-    const double p_bin_last = get_binary_power(psi);
+    double p_bin_last = 0.0, dV_bin_dt = 0.0;
+    binary_power_terms(psi, &dpsi_dt, p_bin_last, dV_bin_dt);
 
     // A stationary BH has no orbital phase on which to average binary power.
-    p_bin = isolated_black_hole ? 0.0 : power_average.update(t_i, phase, p_bin_last);
-
-    double dV_bin_dt = get_dVexpectation_dt(psi, dpsi_dt);
+    // The holes take the absorbed L_z; for a circular orbit the orbit gets it at
+    // dE = Omega_z dL, so the power the orbit loses is reduced by Omega_z * Lz_abs_rate.
+    const double p_bin_orbit = p_bin_step - (counter ? -1.0 : 1.0) * Omega * Lz_abs_rate;
+    p_bin = isolated_black_hole ? 0.0 : power_average.update(t_i, phase, p_bin_orbit);
 
     write_quantity_line(R, R_file);
     write_quantity_line(theta, theta_file);
@@ -234,14 +313,18 @@ void CrankNicolsonModes::step(int step_id)
     write_quantity_line_modes(fluxes, flux_file);
     write_quantity_line(energy, energy_file);
     write_quantity_line(p_bin, p_bin_file);
-    write_quantity_line(p_bin_last, p_bin_inst_file);
+    write_quantity_line(p_bin_step, p_bin_inst_file);
+    if (Lz_abs_file.is_open())
+        write_quantity_line(Lz_abs_rate, Lz_abs_file);
     write_quantity_line(dV_bin_dt, d_V_bin_dt_file);
 
     auto norms = get_norms(psi);
     write_quantity_line_modes(norms, norms_file);
 
-    auto energies = get_energy_per_mode(psi);
+    auto energies = energy_per_mode(psi, Hpsi);
     write_quantity_line_modes(energies, energy_modes_file);
+    if (mass_budget_file.is_open())
+        write_quantity_line_modes({absorbed_mass_1, absorbed_mass_2, pruned_mass_total}, mass_budget_file);
 
     if (step_id % save_every == 0)
     {
@@ -265,6 +348,8 @@ void CrankNicolsonModes::run(int n_steps, double r_ex_)
     std::cout << "Output folder: " << output_folder << std::endl;
 
     open_diagnostics(std::ios::out);
+    mass_budget_file.open(output_folder + "/mass_budget.txt", std::ios::out);
+    Lz_abs_file.open(output_folder + "/Lz_absorbed_rate.txt", std::ios::out);
     if (pruning_enabled())
     {
         active_modes_file.open(output_folder + "/active_modes.txt", std::ios::out);
@@ -284,7 +369,7 @@ void CrankNicolsonModes::run(int n_steps, double r_ex_)
 void CrankNicolsonModes::set_extraction_radius(double r_ex_, int n_steps)
 {
     r_ex = r_ex_;
-    idx_ex = (int)std::floor(r_ex / dr);
+    idx_ex = node_at(r_ex);
 
     std::cout << "Computing fluxes at: " << r_ex_ << " [Index: " << idx_ex << "]" << std::endl;
 

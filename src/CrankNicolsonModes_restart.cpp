@@ -25,6 +25,8 @@ constexpr char checkpoint_magic[8] = {'G', 'M', 'C', 'K', 'P', 'T', '0', '1'};
 // Optional trailer with the active-mode set of a pruned run. Older checkpoints
 // end before it, and older readers ignore it.
 constexpr char active_set_magic[8] = {'A', 'C', 'T', 'I', 'V', 'E', '0', '1'};
+// Optional trailer after it with the cumulative absorbed masses.
+constexpr char budget_magic[8] = {'B', 'U', 'D', 'G', 'E', 'T', '0', '1'};
 
 template <class T>
 void write_pod(std::ostream &out, const T &value)
@@ -170,6 +172,9 @@ void CrankNicolsonModes::save_checkpoint(int step_id) const
         write_pod(out, count);
         out.write(active_modes.data(), static_cast<std::streamsize>(active_modes.size()));
         write_pod(out, pruned_mass_total);
+        out.write(budget_magic, sizeof(budget_magic));
+        write_pod(out, absorbed_mass_1);
+        write_pod(out, absorbed_mass_2);
 
         if (!out)
         {
@@ -238,6 +243,19 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
         if (!in)
             return false;
     }
+    double absorbed[2] = {0.0, 0.0};
+    bool has_budget = false;
+    if (in)
+    {
+        char budget[sizeof(budget_magic)];
+        in.read(budget, sizeof(budget));
+        if (in && std::memcmp(budget, budget_magic, sizeof(budget)) == 0)
+        {
+            read_pod(in, absorbed[0]);
+            read_pod(in, absorbed[1]);
+            has_budget = static_cast<bool>(in);
+        }
+    }
 
     t_i = values[0];
     theta = values[1];
@@ -256,6 +274,12 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
     power_average = average;
     checkpoint_active_modes = active;
     pruned_mass_total = pruned;
+    checkpoint_has_budget = has_budget;
+    if (has_budget)
+    {
+        absorbed_mass_1 = absorbed[0];
+        absorbed_mass_2 = absorbed[1];
+    }
     return true;
 }
 
@@ -273,6 +297,11 @@ void CrankNicolsonModes::reconstruct_state_from_diagnostics(int step_id)
     const std::vector<double> qs = read_column(f + "q.txt", step_id);
     const std::vector<double> p_bins = read_column(f + "p_bin.txt", step_id);
     const std::vector<double> p_bin_insts = read_column(f + "p_bin_inst.txt", step_id);
+    // The orbit was charged p_bin_inst - Omega_z * (absorbed L_z rate); older runs have no such file.
+    std::vector<double> Lz_rates(static_cast<std::size_t>(step_id), 0.0);
+    if (std::filesystem::exists(f + "Lz_absorbed_rate.txt"))
+        Lz_rates = read_column(f + "Lz_absorbed_rate.txt", step_id);
+    const double sense = counter ? -1.0 : 1.0;
 
     // Before step 1, Omega comes from build_time_dependent_perturbation(0).
     double Omega_previous = isolated_black_hole ? 0.0 : (ramp_end_time() > 0.0 ? 0.0 : Omega_0);
@@ -283,7 +312,7 @@ void CrankNicolsonModes::reconstruct_state_from_diagnostics(int step_id)
     {
         phase += Omega_previous * (times[k] - t_previous);
         if (!isolated_black_hole)
-            power_average.update(times[k], phase, p_bin_insts[k]);
+            power_average.update(times[k], phase, p_bin_insts[k] - sense * Omegas[k] * Lz_rates[k]);
         Omega_previous = Omegas[k];
         t_previous = times[k];
     }
@@ -304,8 +333,8 @@ void CrankNicolsonModes::reconstruct_state_from_diagnostics(int step_id)
     p_bin = p_bins[last];
 
     // update_time_dependent_increment sets P and switches to dt = P/steps_per_period once
-    // the ramp ends; before that both keep their initial values.
-    if (!isolated_black_hole && evolve_orbit && t_i > ramp_end_time())
+    // the orbit starts evolving; before that both keep their initial values.
+    if (!isolated_black_hole && evolve_orbit && t_i > orbit_start_time())
     {
         P = 2.0 * M_PI / Omega;
         dt = P / steps_per_period;
@@ -393,6 +422,24 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
         ends.push_back(line_ends(folder + "/" + name));
         complete_rows = std::min(complete_rows, ends.back().size());
     }
+    // mass_budget.txt is absent in runs written before it existed.
+    const std::string budget_path = folder + "/mass_budget.txt";
+    const bool has_budget_file = fs::exists(budget_path);
+    std::vector<std::uintmax_t> budget_ends;
+    if (has_budget_file)
+    {
+        budget_ends = line_ends(budget_path);
+        complete_rows = std::min(complete_rows, budget_ends.size());
+    }
+
+    const std::string Lz_path = folder + "/Lz_absorbed_rate.txt";
+    const bool has_Lz_file = fs::exists(Lz_path);
+    std::vector<std::uintmax_t> Lz_ends;
+    if (has_Lz_file)
+    {
+        Lz_ends = line_ends(Lz_path);
+        complete_rows = std::min(complete_rows, Lz_ends.size());
+    }
 
     // Latest snapshot that is complete and has all of its diagnostic rows.
     std::vector<int> snapshot_steps;
@@ -426,6 +473,7 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     std::cout << "Restarting from snapshot " << start << std::endl;
 
     checkpoint_active_modes.clear();
+    checkpoint_has_budget = false;
     if (load_checkpoint(start))
     {
         std::cout << "Exact state restored from checkpoint.bin." << std::endl;
@@ -447,6 +495,37 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
         fs::resize_file(folder + "/" + name, keep);
     }
     open_diagnostics(std::ios::out | std::ios::app);
+    if (has_budget_file)
+    {
+        // Older checkpoints do not store the absorbed masses: take them from the
+        // last kept row (12 significant digits).
+        if (!checkpoint_has_budget)
+        {
+            absorbed_mass_1 = absorbed_mass_2 = 0.0;
+            if (start > 0)
+            {
+                std::ifstream in(budget_path);
+                std::string line;
+                for (int row = 0; row < start && std::getline(in, line); ++row)
+                    if (row == start - 1)
+                        std::istringstream(line) >> absorbed_mass_1 >> absorbed_mass_2;
+            }
+        }
+        fs::resize_file(budget_path, start == 0 ? 0 : budget_ends[static_cast<std::size_t>(start - 1)]);
+        mass_budget_file.open(budget_path, std::ios::out | std::ios::app);
+    }
+    if (has_Lz_file)
+    {
+        fs::resize_file(Lz_path, start == 0 ? 0 : Lz_ends[static_cast<std::size_t>(start - 1)]);
+        Lz_abs_file.open(Lz_path, std::ios::out | std::ios::app);
+    }
+    else
+    {
+        // A run from before the file existed: pad the kept rows with zeros.
+        Lz_abs_file.open(Lz_path, std::ios::out);
+        for (int row = 0; row < start; ++row)
+            Lz_abs_file << "0\n";
+    }
 
     t.resize(n_steps);
     t.setZero();

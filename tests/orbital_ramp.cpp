@@ -32,10 +32,11 @@ double smoothstep(double x)
 }
 
 // Back-reaction weight at the end of a step: zero until the startup ramp ends,
-// then a smooth step over one initial period.
-double backreaction_ramp(double t_end, double ramp_end, double initial_period)
+// then a smooth step over orbit_ramp_periods initial periods (default one).
+double backreaction_ramp(double t_end, double ramp_end, double initial_period, double orbit_ramp_periods = 1.0)
 {
-    return smoothstep((t_end - ramp_end) / initial_period);
+    if (orbit_ramp_periods == 0.0) return t_end >= ramp_end ? 1.0 : 0.0;
+    return smoothstep((t_end - ramp_end) / (orbit_ramp_periods * initial_period));
 }
 
 double expected_radius(const CrankNicolsonModes& cn, double duration, double ramp = 1.0)
@@ -72,7 +73,7 @@ void test_expanding_orbit(bool absorb)
     const double expected = expected_radius(cn, cn.dt, ramp);
     cn.step(2);
     check_close(cn.R, expected, "Expanded orbit froze after the initial ramp completed");
-    require((cn.V - (cn.V1 + cn.V2)).norm() < 1e-13,
+    require((cn.V() - (cn.V1() + cn.V2())).norm() < 1e-13,
             "Completed companion-potential ramp restarted after expansion");
     const double partial_sink = cn.sink_strength(1);
     if (absorb)
@@ -88,7 +89,7 @@ void test_expanding_orbit(bool absorb)
         const double next_radius = expected_radius(cn, cn.dt);
         cn.step(step);
         check_close(cn.R, next_radius, "Orbital evolution skipped a post-ramp step");
-        require((cn.V - (cn.V1 + cn.V2)).norm() < 1e-13, "Potential ramp is not permanently complete");
+        require((cn.V() - (cn.V1() + cn.V2())).norm() < 1e-13, "Potential ramp is not permanently complete");
         if (absorb && step == 4) {
             // Same geometry as step 2 (R = 80), now at full absorption strength.
             const double full_sink = cn.sink_strength(1);
@@ -116,6 +117,43 @@ void test_crossing_step()
     check_close(cn.t[2], 5.1*initial_period, "Adaptive dt changed the completed step timestamp");
 }
 
+// The back-reaction ramp length comes from orbit_ramp_periods: steps across a
+// three-period ramp follow its smooth step, and a zero length starts at full strength.
+// With orbit_delay_periods the orbit stays fixed for that long after the startup ramp.
+void test_orbit_ramp_length(double orbit_ramp_periods, double orbit_delay_periods = 0.0)
+{
+    CrankNicolsonModes cn(32, 200.0, 200.0, 0.1, 0, 0.2, 0.0, 0.25,
+                         0.0, 50.0, false, false, 100, 5.0, 15.0, "fixture.toml");
+    cn.orbit_ramp_periods = orbit_ramp_periods;
+    cn.orbit_delay_periods = orbit_delay_periods;
+    const double initial_period = cn.P, ramp_end = 5*initial_period;
+    const double orbit_start = ramp_end + orbit_delay_periods*initial_period;
+    prepare(cn);
+    cn.dt = ramp_end;
+    cn.step(1);
+    check_close(cn.R, 50.0, "Orbit moved before activation");
+    double t = ramp_end;
+    int first = 2;
+    if (orbit_delay_periods > 0) {
+        cn.dt = orbit_delay_periods*initial_period;
+        t += cn.dt;
+        cn.step(2);
+        check_close(cn.R, 50.0, "Orbit moved during the hold");
+        check_close(cn.dt, orbit_delay_periods*initial_period, "Timestep changed during the hold");
+        first = 3;
+    }
+    for (int step = first; step < first + 8; ++step) {
+        cn.dt = 0.5*initial_period;
+        t += cn.dt;
+        const double expected = expected_radius(cn, cn.dt, backreaction_ramp(t, orbit_start, initial_period, orbit_ramp_periods));
+        cn.step(step);
+        check_close(cn.R, expected, "Back-reaction did not follow orbit_ramp_periods");
+    }
+    if (orbit_ramp_periods > 1)
+        require(backreaction_ramp(ramp_end + initial_period, ramp_end, initial_period, orbit_ramp_periods) < 0.5,
+                "Fixture does not exercise a ramp longer than one period");
+}
+
 void test_frequency_only_ramp(bool ramp_potential)
 {
     CrankNicolsonModes cn(32, 200.0, 200.0, 0.1, 2, 0.2, 0.0, 0.25,
@@ -125,20 +163,20 @@ void test_frequency_only_ramp(bool ramp_potential)
     prepare(cn);
     // At t = 0 Omega is zero in both modes; only the companion weight differs.
     const double start_weight = ramp_potential ? 0.0 : 1.0;
-    require((cn.V - (cn.V1 + start_weight*cn.V2)).norm() < 1e-13,
+    require((cn.V() - (cn.V1() + start_weight*cn.V2())).norm() < 1e-13,
             "Companion potential has the wrong weight at t = 0");
-    require(cn.V2.norm() > 0, "Fixture has no companion potential");
+    require(cn.V2().norm() > 0, "Fixture has no companion potential");
     cn.dt = 2.0*initial_period;
     cn.step(1);
     const double x = 0.4, s = 3*x*x - 2*x*x*x;
     check_close(cn.Omega, cn.Omega_0*s, "Orbital frequency did not follow the ramp");
     const double weight = ramp_potential ? s : 1.0;
-    require((cn.V - (cn.V1 + weight*cn.V2)).norm() < 1e-13*std::max(1.0, cn.V.norm()),
+    require((cn.V() - (cn.V1() + weight*cn.V2())).norm() < 1e-13*std::max(1.0, cn.V().norm()),
             "Companion potential has the wrong weight during the ramp");
     check_close(cn.R, 50.0, "Orbit moved during the ramp");
     cn.dt = 4.0*initial_period;
     cn.step(2);
-    require((cn.V - (cn.V1 + cn.V2)).norm() < 1e-13, "Companion potential incomplete after the ramp");
+    require((cn.V() - (cn.V1() + cn.V2())).norm() < 1e-13, "Companion potential incomplete after the ramp");
 }
 
 void test_zero_ramp_fixed_orbit()
@@ -164,6 +202,10 @@ int main()
         test_expanding_orbit(false);
         test_expanding_orbit(true);
         test_crossing_step();
+        test_orbit_ramp_length(3.0);
+        test_orbit_ramp_length(0.0);
+        test_orbit_ramp_length(1.0, 2.0);
+        test_orbit_ramp_length(0.0, 2.0);
         test_frequency_only_ramp(true);
         test_frequency_only_ramp(false);
         test_zero_ramp_fixed_orbit();

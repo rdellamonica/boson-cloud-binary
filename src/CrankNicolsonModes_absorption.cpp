@@ -19,7 +19,14 @@ void CrankNicolsonModes::update_absorption_profile(
     profile.radius = radius;
     profile.width = width;
     profile.multipoles.assign(size, 0.0);
-    if (width < dr || width <= 0.0 || radius < 0.0)
+    // A kernel narrower than the local spacing is not resolved.
+    double spacing = dr;
+    if (!uniform_grid)
+    {
+        const int i = std::clamp(node_at(radius - r(0)), 0, Nr - 2);
+        spacing = r(i + 1) - r(i);
+    }
+    if (width < spacing || width <= 0.0 || radius < 0.0)
         return;
 
     // K depends on s=|x-x_BH|, not on r-R_BH alone. Integrate only the angular
@@ -72,7 +79,7 @@ void CrankNicolsonModes::update_absorption_profile(
     // Only evolved interior radial samples participate in the normalization.
     double norm = 0.0;
     for (int i = 1; i < Nr - 1; ++i)
-        norm += dr * r[i] * r[i] * profile.multipoles[i];
+        norm += node_weight(i) * r[i] * r[i] * profile.multipoles[i];
     if (norm > 0.0)
     {
         for (double &value : profile.multipoles)
@@ -86,7 +93,7 @@ double CrankNicolsonModes::get_absorption_rate_1(
     if (sink1.strength == 0.0 || sink1.v.size() != psi.size())
         return 0.0;
     // mu * dr * psi^dagger Gamma_1 psi, with Gamma_1 = strength * v v^dagger.
-    return mu * dr * sink1.strength * std::norm(sink1.v.dot(psi));
+    return mu * (uniform_grid ? dr : 1.0) * sink1.strength * std::norm(sink1.left().dot(psi));
 }
 
 double CrankNicolsonModes::get_absorption_rate_2(
@@ -94,7 +101,7 @@ double CrankNicolsonModes::get_absorption_rate_2(
 {
     if (sink2.strength == 0.0 || sink2.v.size() != psi.size())
         return 0.0;
-    return mu * dr * sink2.strength * std::norm(sink2.v.dot(psi));
+    return mu * (uniform_grid ? dr : 1.0) * sink2.strength * std::norm(sink2.left().dot(psi));
 }
 
 Eigen::VectorXcd CrankNicolsonModes::apply_sink(const Eigen::VectorXcd &state) const
@@ -104,13 +111,13 @@ Eigen::VectorXcd CrankNicolsonModes::apply_sink(const Eigen::VectorXcd &state) c
         return result;
     for (const SwaveSink *sink : {&sink1, &sink2})
         if (sink->strength != 0.0 && sink->v.size() == state.size())
-            result += (sink->strength * sink->v.dot(state)) * sink->v;
+            result += (sink->strength * sink->left().dot(state)) * sink->v;
     return result;
 }
 
 Eigen::VectorXcd CrankNicolsonModes::schrodinger_rhs(const Eigen::VectorXcd &state) const
 {
-    Eigen::VectorXcd result = -I * (H * state);
+    Eigen::VectorXcd result = -I * hamiltonian_times(state);
     if (sink_active)
         result -= 0.5 * apply_sink(state);
     return result;
@@ -121,7 +128,7 @@ double CrankNicolsonModes::sink_strength(int body) const
     const SwaveSink &sink = body == 1 ? sink1 : sink2;
     if (!sink_active || sink.strength == 0.0)
         return 0.0;
-    return sink.strength * sink.v.squaredNorm();
+    return uniform_grid ? sink.strength * sink.v.squaredNorm() : sink.strength * sink.left().dot(sink.v).real();
 }
 
 void CrankNicolsonModes::build_swave_projector(
@@ -177,8 +184,39 @@ void CrankNicolsonModes::build_spherical_absorption()
     // black hole has zero overlap with the spherical kernel and is not absorbed.
 
     build_swave_projector(absorption_profile1, false, sink1.v);
-    sink1.strength = Ah1 * dr;
-
     build_swave_projector(absorption_profile2, true, sink2.v);
-    sink2.strength = Ah2 * dr;
+    if (uniform_grid)
+    {
+        sink1.strength = Ah1 * dr;
+        sink2.strength = Ah2 * dr;
+    }
+    else
+    {
+        // Gamma = A_h v (W v)^dagger: <v|W psi> is the kernel integral.
+        sink1.strength = Ah1;
+        sink2.strength = Ah2;
+        const Eigen::VectorXcd weights = node_weight.replicate(n_modes, 1).cast<dcomplex>();
+        sink1.w = sink1.v.cwiseProduct(weights);
+        sink2.w = sink2.v.cwiseProduct(weights);
+    }
+}
+
+double CrankNicolsonModes::absorbed_Lz_rate(const Eigen::VectorXcd &psi) const
+{
+    // d<L_z>/dt|sink = -Re <psi| L_z Gamma |psi>, Gamma = g v w^dagger, with L_z = m on each mode.
+    double rate = 0.0;
+    for (const SwaveSink *sink : {&sink1, &sink2})
+    {
+        if (sink->strength == 0.0 || sink->v.size() != psi.size())
+            continue;
+        const Eigen::VectorXcd &w = sink->left();
+        const dcomplex projection = w.dot(psi); // w^dagger psi
+        dcomplex L_overlap = 0.0;               // sum_j m_j <psi_j| w_j>
+        for (int j = 0; j < n_modes; ++j)
+            if (modes[j].m != 0)
+                L_overlap += static_cast<double>(modes[j].m) *
+                             psi.segment(static_cast<Eigen::Index>(j) * Nr, Nr).dot(w.segment(static_cast<Eigen::Index>(j) * Nr, Nr));
+        rate += sink->strength * (L_overlap * projection).real();
+    }
+    return rate * (uniform_grid ? dr : 1.0);
 }

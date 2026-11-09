@@ -18,10 +18,11 @@
 /**
  * @brief Read an initial state in the MODESBIN format.
  *
- * Layout (little-endian): the 8 bytes @c "MODESBIN", @c int32 version (= 1),
- * @c int64 Nr, @c int64 number of stored modes, then for each mode @c int32 l,
- * @c int32 m, Nr doubles with Re U_lm(r_i) and Nr doubles with Im U_lm(r_i).
- * The Python scripts in @c initial_states/ write this format.
+ * Layout (little-endian): the 8 bytes @c "MODESBIN", @c int32 version (1 or 2),
+ * @c int64 Nr, @c int64 number of stored modes, in version 2 the Nr radial
+ * nodes as doubles, then for each mode @c int32 l, @c int32 m, Nr doubles with
+ * Re U_lm(r_i) and Nr doubles with Im U_lm(r_i). The Python scripts in
+ * @c initial_states/ write version 2.
  *
  * @param filename Path of the file.
  * @param modes    Modes of the solver; stored modes that are not listed are
@@ -32,6 +33,20 @@
 Eigen::VectorXcd load_initial_modes_binary(
     const std::string &filename,
     const std::vector<mode> &modes);
+
+/**
+ * @brief Read a MODESBIN state onto the radial nodes @p r.
+ *
+ * The values are copied when the file was written on the same grid (same
+ * nodes, or the same number of nodes for a uniform grid); otherwise each
+ * profile is interpolated (cubic) onto @p r, and a version-1 file is taken to
+ * lie on the uniform grid from 0 to the length of @p r.
+ */
+Eigen::VectorXcd load_initial_modes_binary(
+    const std::string &filename,
+    const std::vector<mode> &modes,
+    const Eigen::VectorXd &r,
+    bool uniform_grid);
 
 /**
  * @brief Hydrogenic 1s state of a mass-1 black hole displaced to (x_bh, 0, 0).

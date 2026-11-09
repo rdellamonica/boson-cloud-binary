@@ -56,9 +56,19 @@ void CrankNicolsonModes::build_stationary_hamiltonian()
         for (int i = 1; i < Nr - 1; i++)
         {
             const auto offset = 3 * (j * (Nr - 2) + i - 1);
-            Ht[offset] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i, -(-2.0 * alpha - modes[j].l * (modes[j].l + 1) / (r(i) * r(i))) / (2 * mu));
-            Ht[offset + 1] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i - 1, -alpha / (2 * mu));
-            Ht[offset + 2] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i + 1, -alpha / (2 * mu));
+            const double centrifugal = modes[j].l * (modes[j].l + 1) / (r(i) * r(i));
+            if (uniform_grid)
+            {
+                Ht[offset] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i, -(-2.0 * alpha - centrifugal) / (2 * mu));
+                Ht[offset + 1] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i - 1, -alpha / (2 * mu));
+                Ht[offset + 2] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i + 1, -alpha / (2 * mu));
+                continue;
+            }
+            // Three-point second difference on unequal spacings h- and h+.
+            const double hm = r(i) - r(i - 1), hp = r(i + 1) - r(i);
+            Ht[offset] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i, (2.0 / (hm * hp) + centrifugal) / (2 * mu));
+            Ht[offset + 1] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i - 1, -1.0 / (mu * hm * (hm + hp)));
+            Ht[offset + 2] = Eigen::Triplet<dcomplex>(j * Nr + i, j * Nr + i + 1, -1.0 / (mu * hp * (hm + hp)));
         }
     }
 
@@ -77,7 +87,7 @@ void CrankNicolsonModes::build_coupling_cache()
             const int l = modes[j].l, m = modes[j].m;
             const int l1 = modes[k].l, m1 = modes[k].m;
             const int m_star = m1 - m;
-            ModePair pair{j, k, m_star, {}, {}};
+            ModePair pair{j, k, m_star, {}};
             for (int l_star = std::abs(l1 - l); l_star <= l1 + l; ++l_star)
             {
                 if (std::abs(m_star) > l_star || (l + l1 + l_star) % 2 != 0)
@@ -91,7 +101,7 @@ void CrankNicolsonModes::build_coupling_cache()
                                     std::sqrt((2.0 * l + 1) * (2.0 * l1 + 1) * (2.0 * l_star + 1) / (4.0 * M_PI));
                 const dcomplex angular = dcomplex(pref) * dcomplex(w1) * dcomplex(w2) * dcomplex(y);
                 if (std::abs(angular) != 0.0)
-                    pair.terms.push_back({l_star, angular});
+                    pair.terms.push_back({l_star, angular, -4.0 * M_PI / (2.0 * l_star + 1.0) * angular.real()});
             }
             if (!pair.terms.empty())
                 rows[j].push_back(std::move(pair));
@@ -110,26 +120,58 @@ dcomplex CrankNicolsonModes::orbital_phase(int m_star) const
     return std::exp(I * static_cast<double>(m_star) * theta);
 }
 
-void CrankNicolsonModes::build_sparse_element_caches()
+void CrankNicolsonModes::build_active_operator()
 {
-    // Only couplings between active modes enter the operators.
+    // Only couplings between active modes enter the operator. mode_pairs
+    // stays grouped by row mode, in increasing order. Pairs that were already
+    // active keep their coupling profiles (see refresh_couplings()).
+    std::vector<int> old_index(static_cast<std::size_t>(n_modes) * n_modes, -1);
+    for (std::size_t p = 0; p < mode_pairs.size(); ++p)
+        old_index[mode_pairs[p].row_mode * n_modes + mode_pairs[p].col_mode] = static_cast<int>(p);
     mode_pairs.clear();
+    coupling_source.clear();
     for (const auto &pair : all_mode_pairs)
         if (active_modes[pair.row_mode] && active_modes[pair.col_mode])
+        {
             mode_pairs.push_back(pair);
-
-    // Construct the pattern once per active set, including entries whose current value is zero.
-    std::vector<Eigen::Triplet<dcomplex>> pattern;
-    pattern.reserve(mode_pairs.size() * (Nr - 2));
+            coupling_source.push_back(old_index[pair.row_mode * n_modes + pair.col_mode]);
+        }
+    couplings_stale = true;
+    row_pair_start.assign(n_modes + 1, 0);
     for (const auto &pair : mode_pairs)
+        ++row_pair_start[pair.row_mode + 1];
+    for (int j = 0; j < n_modes; ++j)
+        row_pair_start[j + 1] += row_pair_start[j];
+
+    active_list.clear();
+    mode_position.assign(n_modes, -1);
+    for (int j = 0; j < n_modes; ++j)
+        if (active_modes[j])
+        {
+            mode_position[j] = static_cast<int>(active_list.size());
+            active_list.push_back(j);
+        }
+    self_pair.assign(n_modes, -1);
+    for (std::size_t p = 0; p < mode_pairs.size(); ++p)
+        if (mode_pairs[p].row_mode == mode_pairs[p].col_mode)
+            self_pair[mode_pairs[p].row_mode] = static_cast<int>(p);
+
+    // H0 is tridiagonal with a constant off-diagonal; its boundary rows are empty.
+    h0_diagonal.assign(static_cast<std::size_t>(n_modes) * Nr, 0.0);
+    for (int j = 0; j < n_modes; ++j)
         for (int i = 1; i < Nr - 1; ++i)
-            pattern.emplace_back(pair.row_mode * Nr + i, pair.col_mode * Nr + i, 0.0);
-    V1.resize(Nr * n_modes, Nr * n_modes);
-    V1.setFromTriplets(pattern.begin(), pattern.end());
-    V1.makeCompressed();
-    V2 = V1;
-    V = V1;
-    dVdt = V1;
+            h0_diagonal[j * Nr + i] = H0.coeff(j * Nr + i, j * Nr + i).real();
+    h0_offdiagonal = Nr > 2 ? H0.coeff(1, 0).real() : 0.0;
+    // On a stretched grid the off-diagonals vary along r (but not with the mode).
+    h0_lower.assign(Nr, 0.0);
+    h0_upper.assign(Nr, 0.0);
+    for (int i = 1; i < Nr - 1; ++i)
+    {
+        h0_lower[i] = H0.coeff(i, i - 1).real();
+        h0_upper[i] = H0.coeff(i, i + 1).real();
+    }
+
+    pair_phase.assign(mode_pairs.size(), 0.0);
     if (absorption)
     {
         absorption_profile1 = {};
@@ -141,113 +183,134 @@ void CrankNicolsonModes::build_sparse_element_caches()
         sink1 = {};
         sink2 = {};
     }
-#pragma omp parallel for schedule(static) if (n_modes >= 8)
-    for (std::size_t p = 0; p < mode_pairs.size(); ++p)
-    {
-        auto &pair = mode_pairs[p];
-        pair.offsets.resize(Nr - 2);
-        for (int i = 1; i < Nr - 1; ++i)
-        {
-            const int row = pair.row_mode * Nr + i;
-            const int col = pair.col_mode * Nr + i;
-            const auto begin = V1.innerIndexPtr() + V1.outerIndexPtr()[row];
-            const auto end = V1.innerIndexPtr() + V1.outerIndexPtr()[row + 1];
-            pair.offsets[i - 1] = std::lower_bound(begin, end, col) - V1.innerIndexPtr();
-        }
-    }
-    // Keep one fixed union pattern for H, A, B, including boundary diagonals
-    // and the diagonal CAP that can be enabled after initialize().
-    Id.resize(Nr * n_modes, Nr * n_modes);
-    Id.setIdentity();
-    H = H0 + V + Id;
-    H.makeCompressed();
-    stationary_values.resize(H.nonZeros());
-    potential_offsets.assign(H.nonZeros(), -1);
-#pragma omp parallel for schedule(static) if (n_modes >= 8)
-    for (int row = 0; row < H.rows(); ++row)
-    {
-        for (SparseComplex::InnerIterator it(H, row); it; ++it)
-        {
-            const auto slot = &it.valueRef() - H.valuePtr();
-            stationary_values[slot] = H0.coeff(row, it.col());
-            const auto begin = V.outerIndexPtr()[row];
-            const auto end = V.outerIndexPtr()[row + 1];
-            const auto found = std::lower_bound(V.innerIndexPtr() + begin, V.innerIndexPtr() + end, it.col());
-            if (found != V.innerIndexPtr() + end && *found == it.col())
-                potential_offsets[slot] = found - V.innerIndexPtr();
-        }
-    }
     radial_f1.resize((2 * l_max + 1) * Nr);
     radial_f2.resize(radial_f1.size());
+    operator_ready = true;
+}
+
+void CrankNicolsonModes::refresh_couplings()
+{
+    const std::size_t inner = Nr - 2;
+    const std::size_t size = mode_pairs.size() * inner;
+    const bool moved = coupling_R1 != R1 || coupling_R2 != R2 || coupling_q != q;
+    if (moved)
+    {
+        coupling_R1 = R1;
+        coupling_R2 = R2;
+        coupling_q = q;
+        // Radial profiles are independent of the mode pair and orbital phase.
+#pragma omp parallel for schedule(static) if (n_modes >= 8)
+        for (int l = 0; l <= 2 * l_max; ++l)
+            for (int i = 1; i < Nr - 1; ++i)
+            {
+                radial_f1[l * Nr + i] = F1(r[i], l, 0);
+                radial_f2[l * Nr + i] = F2(r[i], l, 0);
+            }
+    }
+    if (moved || couplings_stale)
+    {
+        // On a fixed orbit, pairs that stay active copy their old profiles.
+        std::vector<double> next1(size), next2(size);
+#pragma omp parallel for schedule(static) if (n_modes >= 8)
+        for (std::size_t p = 0; p < mode_pairs.size(); ++p)
+        {
+            const int source = moved ? -1 : coupling_source[p];
+            if (source >= 0)
+            {
+                std::copy_n(coupling1.begin() + source * inner, inner, next1.begin() + p * inner);
+                std::copy_n(coupling2.begin() + source * inner, inner, next2.begin() + p * inner);
+                continue;
+            }
+            const auto &terms = mode_pairs[p].terms;
+            for (int i = 1; i < Nr - 1; ++i)
+            {
+                double c1 = 0.0, c2 = 0.0;
+                for (const auto &term : terms)
+                {
+                    c1 += term.weight * radial_f1[term.l_star * Nr + i];
+                    c2 += term.weight * radial_f2[term.l_star * Nr + i];
+                }
+                next1[p * inner + i - 1] = c1;
+                next2[p * inner + i - 1] = c2;
+            }
+        }
+        coupling1.swap(next1);
+        coupling2.swap(next2);
+        couplings_stale = false;
+        coupling_eff.clear();
+    }
+
+    // The companion potential follows the startup ramp unless only the
+    // orbital frequency is ramped; after the ramp one profile per pair remains.
+    if (coupling_eff.size() != size || coupling_eff_ramp != potential_ramp_factor)
+    {
+        coupling_eff_ramp = potential_ramp_factor;
+        coupling_eff.resize(size);
+#pragma omp parallel for schedule(static) if (n_modes >= 8)
+        for (std::size_t p = 0; p < mode_pairs.size(); ++p)
+        {
+            const double weight = (mode_pairs[p].m_star % 2 == 0 ? 1.0 : -1.0) * potential_ramp_factor;
+            for (std::size_t n = p * inner; n < (p + 1) * inner; ++n)
+                coupling_eff[n] = coupling1[n] + weight * coupling2[n];
+        }
+    }
 }
 
 void CrankNicolsonModes::build_static_perturbation()
 {
-    // Radial profiles are independent of the mode pair and orbital phase.
-#pragma omp parallel for schedule(static) if (n_modes >= 8)
-    for (int l = 0; l <= 2 * l_max; ++l)
-        for (int i = 1; i < Nr - 1; ++i)
-        {
-            radial_f1[l * Nr + i] = F1(r[i], l, 0);
-            radial_f2[l * Nr + i] = F2(r[i], l, 0);
-        }
+    refresh_couplings();
+    // The potential of each pair is pair_phase * coupling_eff(r).
+    potential_state = {theta, mu * (M1 + M2), potential_ramp_factor, Omega};
     std::vector<dcomplex> phases(4 * l_max + 1);
     for (int m = -2 * l_max; m <= 2 * l_max; ++m)
-        phases[m + 2 * l_max] = orbital_phase(m);
-    const double phase_sign = counter ? -1.0 : 1.0;
+        phases[m + 2 * l_max] = potential_state.strength * orbital_phase(m);
+    for (std::size_t p = 0; p < mode_pairs.size(); ++p)
+        pair_phase[p] = phases[mode_pairs[p].m_star + 2 * l_max];
+}
 
-    // Every pair writes distinct compressed entries. Summation over l_star stays
-    // in its original order, so scheduling does not change the arithmetic.
-#pragma omp parallel for schedule(static) if (n_modes >= 8)
+SparseComplex CrankNicolsonModes::potential_matrix(double w1, double w2, bool derivative) const
+{
+    const PotentialState &state = potential_state;
+    const double sense = counter ? -1.0 : 1.0;
+    const std::size_t inner = Nr - 2;
+    std::vector<Eigen::Triplet<dcomplex>> entries;
+    entries.reserve(mode_pairs.size() * inner);
     for (std::size_t p = 0; p < mode_pairs.size(); ++p)
     {
         const auto &pair = mode_pairs[p];
-        const dcomplex phase = phases[pair.m_star + 2 * l_max];
+        dcomplex factor = state.strength * std::exp(I * static_cast<double>(pair.m_star) * state.theta);
+        if (derivative)
+            factor *= sense * I * static_cast<double>(pair.m_star) * state.Omega;
         const double parity = pair.m_star % 2 == 0 ? 1.0 : -1.0;
         for (int i = 1; i < Nr - 1; ++i)
         {
-            dcomplex v1 = 0.0, v2 = 0.0, derivative = 0.0;
-            for (const auto &term : pair.terms)
-            {
-                const dcomplex common = -mu * (M1 + M2) * 4.0 * M_PI /
-                                        (2.0 * term.l_star + 1.0) * term.angular * phase;
-                const dcomplex value1 = common * radial_f1[term.l_star * Nr + i];
-                const dcomplex value2 = common * (parity * radial_f2[term.l_star * Nr + i]);
-                v1 += value1;
-                v2 += value2;
-                derivative += (value1 + potential_ramp_factor * value2) * phase_sign * I *
-                              static_cast<double>(pair.m_star) * Omega;
-            }
-            const auto offset = pair.offsets[i - 1];
-            V1.valuePtr()[offset] = v1;
-            V2.valuePtr()[offset] = v2;
-            // The companion potential follows the startup ramp unless only
-            // the orbital frequency is ramped.
-            V.valuePtr()[offset] = v1 + v2 * potential_ramp_factor;
-            dVdt.valuePtr()[offset] = derivative;
+            const std::size_t n = p * inner + i - 1;
+            entries.emplace_back(pair.row_mode * Nr + i, pair.col_mode * Nr + i,
+                                 factor * (w1 * coupling1[n] + w2 * parity * coupling2[n]));
         }
     }
+    SparseComplex result(Nr * n_modes, Nr * n_modes);
+    result.setFromTriplets(entries.begin(), entries.end());
+    return result;
 }
 
-void CrankNicolsonModes::assemble_hamiltonian(bool include_absorption)
+SparseComplex CrankNicolsonModes::V1() const { return potential_matrix(1.0, 0.0, false); }
+
+SparseComplex CrankNicolsonModes::V2() const { return potential_matrix(0.0, 1.0, false); }
+
+SparseComplex CrankNicolsonModes::V() const { return potential_matrix(1.0, potential_state.ramp, false); }
+
+SparseComplex CrankNicolsonModes::dVdt() const
 {
-    // The s-wave sink is rank one and is applied outside the sparse H.
-    sink_active = include_absorption;
-#pragma omp parallel for schedule(static) if (n_modes >= 8)
-    for (int row = 0; row < H.rows(); ++row)
-    {
-        for (SparseComplex::InnerIterator it(H, row); it; ++it)
-        {
-            const auto slot = &it.valueRef() - H.valuePtr();
-            dcomplex value = stationary_values[slot];
-            const auto potential_slot = potential_offsets[slot];
-            if (potential_slot >= 0)
-                value += V.valuePtr()[potential_slot];
-            if (cap && it.col() == row)
-                value += CAP.coeff(row, row);
-            it.valueRef() = value;
-        }
-    }
+    return potential_matrix(1.0, potential_state.ramp, true);
+}
+
+SparseComplex CrankNicolsonModes::H() const
+{
+    SparseComplex result = H0 + V();
+    if (cap)
+        result += CAP;
+    return result;
 }
 
 void CrankNicolsonModes::build_time_dependent_perturbation(double time)
@@ -272,5 +335,6 @@ void CrankNicolsonModes::build_time_dependent_perturbation(double time)
     if (absorption)
         build_spherical_absorption();
 
-    assemble_hamiltonian(absorption && time >= ramp_end_time());
+    // The s-wave sink is rank one and is applied outside H.
+    sink_active = absorption && time >= ramp_end_time();
 }

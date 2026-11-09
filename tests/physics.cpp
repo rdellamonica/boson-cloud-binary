@@ -91,9 +91,9 @@ void hamiltonian_is_hermitian()
     Eigen::VectorXd interior = Eigen::VectorXd::Ones(cn->Nr * cn->n_modes);
     for (int j = 0; j < cn->n_modes; ++j) interior[j * cn->Nr] = interior[j * cn->Nr + cn->Nr - 1] = 0;
     const SparseComplex P = SparseComplex(interior.cast<dcomplex>().asDiagonal().toDenseMatrix().sparseView());
-    const SparseComplex h = P * cn->H * P;
+    const SparseComplex h = P * cn->H() * P;
     require((h - SparseComplex(h.adjoint())).norm() < 1e-12 * h.norm(), "Conservative Hamiltonian is not Hermitian");
-    require((cn->dVdt - SparseComplex(cn->dVdt.adjoint())).norm() < 1e-12 * (1 + cn->dVdt.norm()),
+    require((cn->dVdt() - SparseComplex(cn->dVdt().adjoint())).norm() < 1e-12 * (1 + cn->dVdt().norm()),
             "dV/dt is not Hermitian");
     // The sink is Hermitian and positive semi-definite.
     const Eigen::VectorXcd a = generic_state(*cn), b = mirror(*cn, a);
@@ -149,7 +149,7 @@ void hydrogen_eigenstates()
         cn->initialize();
         const Eigen::VectorXcd initial = cn->psi;
         const double norm = initial.squaredNorm();
-        const double energy = initial.dot(cn->H * initial).real() / norm;
+        const double energy = initial.dot(cn->H() * initial).real() / norm;
         const double exact = -std::pow(s.mu, 3) / (2.0 * n * n);
         close(energy, exact, 2e-3 * std::abs(exact) / std::max(1.0, std::abs(exact)),
               "Hydrogenic energy of n=" + std::to_string(n));
@@ -189,7 +189,7 @@ double jacobi_drift(bool counter, int per_period)
         double lz = 0;
         for (int j = 0; j < cn->n_modes; ++j)
             lz += cn->modes[j].m * psi.segment(j * cn->Nr, cn->Nr).squaredNorm();
-        const double energy = psi.dot(cn->H * psi).real();
+        const double energy = psi.dot(cn->H() * psi).real();
         return (energy - (jacobi ? (counter ? -1.0 : 1.0) * cn->Omega * lz : 0.0)) * cn->dr;
     };
     const int steps = 2 * per_period;
@@ -381,6 +381,33 @@ void accretion_balances_absorbed_mass()
     require(cn->M1 > 1 && cn->M2 > 1, "Both black holes must accrete in an equal-mass binary");
 }
 
+void absorbed_mass_matches_field_loss()
+{
+    test::ScratchDir dir("absorbed_mass");
+    // On a fixed orbit the holes' masses stay put, but the absorbed-mass
+    // counters still account for every bit of norm the sinks remove.
+    Setup s;
+    s.q = 1.0;
+    s.l_max = 2;
+    s.M_c = 0.05;
+    s.absorption = true;
+    auto cn = make(s);
+    cn->evolve_orbit = false;
+    cn->dt = cn->P / 16;
+    cn->set_initial_state_full(generic_state(*cn));
+    cn->initialize();
+    cn->run(1, 40);
+    const double cloud0 = cloud_mass(*cn, cn->psi);
+    cn->t.resize(41);
+    for (int step = 1; step <= 40; ++step) {
+        cn->step(step);
+        close(cloud_mass(*cn, cn->psi) + cn->absorbed_mass(1) + cn->absorbed_mass(2), cloud0, 1e-10,
+              "Field plus absorbed mass is not conserved at step " + std::to_string(step));
+    }
+    require(cn->absorbed_mass(1) > 1e-3 * cloud0 && cn->absorbed_mass(2) > 1e-3 * cloud0, "Absorption test is vacuous");
+    require(cn->M1 == 1.0, "A fixed orbit changed the masses");
+}
+
 void damping_mask_acts_outside_only()
 {
     test::ScratchDir dir("mask");
@@ -427,7 +454,7 @@ void complex_absorbing_potential()
     absorbing->build_cap(0.8, 0.5, 2);
     plain->run(1, 40);
     absorbing->run(1, 40);
-    const SparseComplex difference = absorbing->H - plain->H;
+    const SparseComplex difference = absorbing->H() - plain->H();
     const int edge = static_cast<int>(std::floor(0.8 * s.L / plain->dr));
     for (int k = 0; k < difference.outerSize(); ++k)
         for (SparseComplex::InnerIterator it(difference, k); it; ++it) {
@@ -466,6 +493,7 @@ int main()
                          std::pair{"probability flux continuity", &probability_flux_continuity},
                          std::pair{"gravitational-wave inspiral", &gravitational_wave_inspiral},
                          std::pair{"accretion balances absorbed mass", &accretion_balances_absorbed_mass},
+                         std::pair{"absorbed mass matches field loss", &absorbed_mass_matches_field_loss},
                          std::pair{"damping mask", &damping_mask_acts_outside_only},
                          std::pair{"complex absorbing potential", &complex_absorbing_potential});
 }

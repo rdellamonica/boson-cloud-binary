@@ -361,11 +361,11 @@
       const refs = (sp.hlines || []).filter((r) => isFinite(r.y) && (!sp.yLog || r.y > 0));
       const [ylo, yhi] = y.domain();
       const inside = refs.filter((r) => r.y >= Math.min(ylo, yhi) && r.y <= Math.max(ylo, yhi));
+      this.refs = inside;
       this.gRefs.selectAll('line').data(inside).join('line')
         .attr('x1', m.left).attr('x2', w - m.right).attr('y1', (r) => y(r.y)).attr('y2', (r) => y(r.y))
-        .attr('stroke', (r) => r.color).attr('stroke-width', (r) => r.width || 1)
-        .attr('stroke-dasharray', (r) => (DASH[r.dash || 'dot'] || []).join(' '));
-      this.gRefs.selectAll('text').data(inside.filter((r) => r.label)).join('text')
+      this._paintRefs();
+      this.gRefs.selectAll('text.lb').data(inside.filter((r) => r.label)).join('text').attr('class', 'lb')
         .attr('x', m.left + 4).attr('y', (r) => y(r.y) - 3).attr('fill', (r) => r.labelColor || ink)
         .attr('font-size', 10).each(function (r) { rich(d3.select(this), r.label); });
 
@@ -373,6 +373,37 @@
       this.resetBtn.style('display', this.view || this.yView ? 'block' : 'none');
       this._project();
       this._paint();
+    }
+
+    // Reference lines with a hoverLabel are highlighted and named when the
+    // pointer is within a few pixels of them.
+    _paintRefs() {
+      // The hovered line takes the look of the labelled levels: muted dashes
+      // and its name at the left edge, in line with theirs.
+      const on = this.hoveredRef, muted = cssVar('--text-muted');
+      this.gRefs.selectAll('line')
+        .attr('stroke', (r) => (r === on ? muted : r.color))
+        .attr('stroke-width', (r) => (r === on ? 1 : r.width || 1))
+        .attr('stroke-dasharray', (r) => (DASH[r === on ? 'dash' : r.dash || 'dot'] || []).join(' '));
+      const lab = this.gRefs.selectAll('text.hl').data(on && this.y ? [on] : []).join('text').attr('class', 'hl')
+        .attr('x', this.margin.left + 4).attr('y', (r) => this.y(r.y) - 3).attr('fill', cssVar('--text-secondary')).attr('font-size', 10);
+      lab.each(function (r) { rich(d3.select(this), r.hoverLabel); });
+    }
+
+    _hoverRef(mx, my) {
+      let best = null, bd = 5;
+      for (const r of this.refs || []) {
+        if (!r.hoverLabel) continue;
+        const d = Math.abs(this.y(r.y) - my);
+        if (d < bd) { bd = d; best = r; }
+      }
+      if (best !== this.hoveredRef) { this.hoveredRef = best; this._paintRefs(); }
+    }
+
+    destroy() {
+      this._ro.disconnect();
+      this.el.innerHTML = '';
+      this.el.classList.remove('d3chart');
     }
 
     // Pixel coordinates of every visible point, reused by painting and hover.
@@ -426,10 +457,11 @@
     _renderLegend() {
       if (!this.legend) return;
       const items = (this.spec.series || []).filter((s) => s.legend !== false);
+      this.legend.style('display', items.length ? null : 'none');
       // Mode series named "(l, m)" are grouped in one scrollable column per l;
       // anything else (totals, references) gets a column of its own first.
       const lm = (s) => { const k = /^\((-?\d+),\s*(-?\d+)\)$/.exec(String(s.name).replace(/<[^>]+>/g, '')); return k ? [+k[1], +k[2]] : null; };
-      const grouped = items.filter((s) => lm(s)).length >= 8;
+      const grouped = items.filter((s) => lm(s)).length >= (this.opts.groupLegend ? 1 : 8);
       const sig = (grouped ? 'g|' : 'f|') + items.map((s) => s.name).join('\u0001');
       if (sig !== this._legendSig) {
         this._legendSig = sig;
@@ -457,13 +489,13 @@
         const toggle = (names) => {
           const allHidden = names.every((n) => this.hidden.has(n));
           names.forEach((n) => (allHidden ? this.hidden.delete(n) : this.hidden.add(n)));
-          this._renderLegend(); this.draw();
+          this._renderLegend(); this.draw(); this._hiddenChanged();
         };
         const isolate = (names) => {
           const every = items.map((d) => d.name);
           const isolated = every.every((n) => names.includes(n) || this.hidden.has(n)) && names.every((n) => !this.hidden.has(n));
           this.hidden = isolated ? new Set() : new Set(every.filter((n) => !names.includes(n)));
-          this._renderLegend(); this.draw();
+          this._renderLegend(); this.draw(); this._hiddenChanged();
         };
         const clicks = (sel, names) => sel.on('click', (ev, d) => {
           clearTimeout(clickTimer); clickTimer = setTimeout(() => toggle(names(d)), 220);
@@ -478,6 +510,14 @@
       all.select('line').attr('stroke', (s) => s.color).attr('stroke-width', (s) => Math.max(1.6, s.width || 1.4))
         .attr('stroke-dasharray', (s) => (DASH[s.dash || 'solid'] || []).join(' '));
       this.legend.selectAll('button.lhead').classed('off', (list) => list.every((s) => this.hidden.has(s.name)));
+    }
+
+    // Series hidden from the legend, shared with other charts (opts.onHidden).
+    _hiddenChanged() { if (this.opts.onHidden) this.opts.onHidden(new Set(this.hidden)); }
+    setHidden(names) {
+      this.hidden = new Set(names);
+      if (this.legend) this._renderLegend();
+      this.draw();
     }
 
     // -- export ---------------------------------------------------------------------
@@ -655,10 +695,12 @@
     _hideTip() {
       this.tip.classed('show', false);
       this.gHover.selectAll('*').remove();
+      if (this.hoveredRef) { this.hoveredRef = null; this._paintRefs(); }
       if (this.hovered !== null) { this.hovered = null; this._paint(); }
     }
 
     _hover(mx, my) {
+      this._hoverRef(mx, my);
       if (!this.proj || !this.proj.length) return;
       const sp = this.spec, fx = sp.xFormat || ((v) => fmtNum(v, 6)), fy = sp.yFormat || ((v) => fmtNum(v, 4));
       const surface = cssVar('--surface-1');

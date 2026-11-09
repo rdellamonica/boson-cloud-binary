@@ -1,6 +1,7 @@
 // Resuming runs: exact continuation from checkpoint.bin, reconstruction from
 // the diagnostics, recovery from interrupted output, and run extension.
 #include "CrankNicolsonModes.hpp"
+#include "RadialGrid.hpp"
 #include "TestUtils.hpp"
 #include <omp.h>
 #include <filesystem>
@@ -14,6 +15,9 @@ namespace {
 
 constexpr double r_ex = 40.0;
 
+/// Runs made by make_solver use a stretched grid and mode pruning.
+bool stretched_and_pruned = false;
+
 std::unique_ptr<CrankNicolsonModes> make_solver()
 {
     std::ofstream("config.toml") << "# restart fixture\n";
@@ -22,6 +26,16 @@ std::unique_ptr<CrankNicolsonModes> make_solver()
     cn->evolve_orbit = true;
     cn->steps_per_period = 32;
     cn->set_power_average_orbits(1.0);
+    if (stretched_and_pruned) {
+        RadialGridSpec spec;
+        spec.type = "stretched";
+        spec.r_core = 30.0;
+        spec.stretch = 3.0;
+        spec.transition = 6.0;
+        cn->set_radial_grid(make_radial_grid(cn->Nr, 64.0, 0.0, spec));
+        cn->prune_tolerance = 1e-6;
+        cn->prune_check_every = 5;
+    }
     return cn;
 }
 
@@ -116,6 +130,34 @@ void exact_resume_from_checkpoint()
     require_identical(reference, interrupted);
 }
 
+void exact_resume_stretched_and_pruned()
+{
+    // initialize() runs before resume() loads the state, so the initial mode
+    // selection must not touch the (still empty) state on a stretched grid.
+    test::ScratchDir dir("exact_resume_stretched");
+    stretched_and_pruned = true;
+    const fs::path reference = new_run("reference", 41);
+    const fs::path interrupted = new_run("interrupted", 25);
+    resume_run(interrupted, 41);
+    stretched_and_pruned = false;
+    require(fs::exists(reference / "active_modes.txt"), "Pruning was not active");
+    require_identical(reference, interrupted);
+}
+
+void resume_run_without_mass_budget()
+{
+    // Runs written before mass_budget.txt existed still resume, and keep
+    // their format.
+    test::ScratchDir dir("resume_old_format");
+    const fs::path reference = new_run("reference", 41);
+    const fs::path old = new_run("old", 25);
+    fs::remove(old / "mass_budget.txt");
+    resume_run(old, 41);
+    require(!fs::exists(old / "mass_budget.txt"), "Resume created mass_budget.txt in an old run");
+    for (const char *name : diagnostics)
+        require(contents(reference / name) == contents(old / name), std::string("Resume changed ") + name);
+}
+
 void resume_after_crash_mid_write()
 {
     test::ScratchDir dir("crash");
@@ -202,6 +244,8 @@ int main()
     omp_set_num_threads(2);
     Eigen::setNbThreads(2);
     return test::run_all(std::pair{"exact resume from checkpoint", &exact_resume_from_checkpoint},
+                         std::pair{"exact resume, stretched grid and pruning", &exact_resume_stretched_and_pruned},
+                         std::pair{"resume a run without mass_budget.txt", &resume_run_without_mass_budget},
                          std::pair{"resume after a crash mid-write", &resume_after_crash_mid_write},
                          std::pair{"resume without checkpoint", &resume_without_checkpoint},
                          std::pair{"skip incomplete snapshot", &skips_incomplete_snapshot},

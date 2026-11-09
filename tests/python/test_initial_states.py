@@ -33,6 +33,7 @@ CONFIG = """
 [grid]
 N = {N}
 L = {L}
+{grid_extra}
 
 [binary]
 q = {q}
@@ -58,22 +59,25 @@ evolve_orbit = false
 
 
 def write_config(path, **kwargs):
-    values = dict(N=129, L=64.0, q=0.1, R=20.0, mu=0.4, n=1, l=0, m=0, l_max=2, r_ex=40.0)
+    values = dict(N=129, L=64.0, q=0.1, R=20.0, mu=0.4, n=1, l=0, m=0, l_max=2, r_ex=40.0, grid_extra="")
     values.update(kwargs)
     with open(path, "w") as f:
         f.write(CONFIG.format(**values))
     return values
 
 
-def read_modesbin(path):
+def read_modesbin(path, with_nodes=False):
     """{(l, m): complex profile} from a MODESBIN file, with its header checked."""
     with open(path, "rb") as f:
         data = f.read()
     assert data[:8] == b"MODESBIN", "bad magic"
     version, = struct.unpack_from("<i", data, 8)
     nr, n_modes = struct.unpack_from("<qq", data, 12)
-    assert version == 1, f"unexpected version {version}"
-    out, offset = {}, 28
+    assert version in (1, 2), f"unexpected version {version}"
+    out, offset, nodes = {}, 28, None
+    if version == 2:
+        nodes = np.frombuffer(data, dtype="<f8", count=nr, offset=offset).copy()
+        offset += 8 * nr
     for _ in range(n_modes):
         l, m = struct.unpack_from("<ii", data, offset)
         offset += 8
@@ -81,7 +85,7 @@ def read_modesbin(path):
         offset += 16 * nr
         out[(l, m)] = block[:nr] + 1j * block[nr:]
     assert offset == len(data), "trailing bytes in MODESBIN"
-    return out, nr
+    return (out, nr, nodes) if with_nodes else (out, nr)
 
 
 def run_script(name, args, cwd):
@@ -206,6 +210,29 @@ def test_solver_accepts_generated_state(work, solver):
     assert abs(mass[0] - 0.01) < 2e-3 * 0.01, f"cloud mass is {mass[0]}, not M_c"
 
 
+def test_stretched_grid(work, solver):
+    # A Gaussian written on a stretched grid carries its nodes, which are the
+    # solver's own, so the solver copies it and starts from mass M_c.
+    grid = 'type = "stretched"\nr_core = 30.0\nstretch = 4.0\ntransition = 6.0'
+    values = write_config(os.path.join(work, "config.toml"), N=97, L=200.0, l_max=2, r_ex=40.0, grid_extra=grid)
+    run_script("get_initial_state_gaussian.py",
+               ["--config", "config.toml", "--output", "state.bin", "--sigma", "8"], work)
+    profiles, nr, nodes = read_modesbin(os.path.join(work, "state.bin"), with_nodes=True)
+    assert nr == values["N"] and nodes is not None, "stretched state has no nodes"
+    spacing = np.diff(nodes)
+    assert spacing[-1] > 3.5 * spacing[0], "grid is not stretched"
+    assert abs(norm(profiles, nodes) - 1.0) < 1e-12, "state is not normalised on its nodes"
+    done = subprocess.run([solver, "config.toml", "state.bin"], cwd=work, capture_output=True, text=True)
+    assert done.returncode == 0, f"solver failed on a stretched grid:\n{done.stdout}\n{done.stderr}"
+    assert "Interpolating" not in done.stdout, "solver did not recognise its own nodes"
+    folder = os.path.join(work, [d for d in os.listdir(work) if d.startswith("Simulation_")][0])
+    r = np.loadtxt(os.path.join(folder, "r.txt"))
+    assert np.allclose(r, nodes, rtol=0, atol=1e-9 * values["L"]), "solver nodes differ from the script's"
+    norms = np.loadtxt(os.path.join(folder, "norms.txt"), ndmin=2)
+    mass = values["mu"] * norms.sum(axis=1)
+    assert abs(mass[0] - 0.01) < 2e-3 * 0.01, f"cloud mass is {mass[0]}, not M_c"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--solver", help="GravitationalMolecule executable, for the end-to-end check")
@@ -223,13 +250,14 @@ def main():
                 failures += 1
                 print(f"[FAIL] {test.__name__}: {error}", file=sys.stderr)
     if args.solver:
-        with tempfile.TemporaryDirectory() as work:
-            try:
-                test_solver_accepts_generated_state(work, os.path.abspath(args.solver))
-                print("[pass] test_solver_accepts_generated_state")
-            except Exception as error:  # noqa: BLE001
-                failures += 1
-                print(f"[FAIL] test_solver_accepts_generated_state: {error}", file=sys.stderr)
+        for test in (test_solver_accepts_generated_state, test_stretched_grid):
+            with tempfile.TemporaryDirectory() as work:
+                try:
+                    test(work, os.path.abspath(args.solver))
+                    print(f"[pass] {test.__name__}")
+                except Exception as error:  # noqa: BLE001
+                    failures += 1
+                    print(f"[FAIL] {test.__name__}: {error}", file=sys.stderr)
     return 1 if failures else 0
 
 

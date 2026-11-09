@@ -109,6 +109,8 @@ import struct
 from pathlib import Path
 
 import numpy as np
+
+from radial_grid import radial_grid, is_uniform, node_weights, write_modesbin_header
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
@@ -176,6 +178,7 @@ def load_config(path):
 
         N=int(g["N"]),
         L=float(g["L"]),
+        r_nodes=radial_grid(c),
 
         # ----------------------------------------------------------
         # Binary
@@ -1199,6 +1202,22 @@ def radial_norm(
     )
 
 
+# On a non-uniform grid the eigenproblem is solved for v = sqrt(w) U, with w
+# the trapezoid weights of the interior nodes: the second difference becomes
+# symmetric and plain dot products of vectors are the weighted radial
+# integrals. ivec() and to_modes() convert; on a uniform grid they do not.
+_SQRT_W = None
+
+
+def set_radial_weights(
+    r
+):
+
+    global _SQRT_W
+
+    _SQRT_W = None if is_uniform(r) else np.sqrt(node_weights(r)[1:-1])
+
+
 def ivec(
     U
 ):
@@ -1206,11 +1225,17 @@ def ivec(
     Interior points, mode-major ordering.
     """
 
+    inner = U[
+        :,
+        1:-1
+    ]
+
+    if _SQRT_W is not None:
+
+        inner = inner * _SQRT_W
+
     return (
-        U[
-            :,
-            1:-1
-        ]
+        inner
         .reshape(-1)
     )
 
@@ -1970,37 +1995,56 @@ class Hamiltonian:
             modes
         )
 
-        dr = (
-            r[1]
-            - r[0]
-        )
+        if is_uniform(
+            r
+        ):
 
-        # ----------------------------------------------------------
-        # Radial second derivative
-        # ----------------------------------------------------------
+            dr = (
+                r[1]
+                - r[0]
+            )
 
-        D2 = sp.diags(
-            [
-                np.ones(
-                    self.nr - 1
-                ),
+            # ----------------------------------------------------------
+            # Radial second derivative
+            # ----------------------------------------------------------
 
-                -2.0
-                * np.ones(
-                    self.nr
-                ),
+            D2 = sp.diags(
+                [
+                    np.ones(
+                        self.nr - 1
+                    ),
 
-                np.ones(
-                    self.nr - 1
-                )
-            ],
-            [
-                -1,
-                0,
-                +1
-            ],
-            format="csr"
-        ) / dr**2
+                    -2.0
+                    * np.ones(
+                        self.nr
+                    ),
+
+                    np.ones(
+                        self.nr - 1
+                    )
+                ],
+                [
+                    -1,
+                    0,
+                    +1
+                ],
+                format="csr"
+            ) / dr**2
+
+        else:
+
+            # Three-point second difference on unequal spacings, made
+            # symmetric by v = sqrt(w) U (see ivec()).
+            hm = r[1:-1] - r[:-2]
+            hp = r[2:] - r[1:-1]
+            w = 0.5 * (hm + hp)
+            off = 1.0 / (hp[:-1] * np.sqrt(w[:-1] * w[1:]))
+
+            D2 = sp.diags(
+                [off, -2.0 / (hm * hp), off],
+                [-1, 0, +1],
+                format="csr"
+            )
 
         T = (
 
@@ -3335,6 +3379,10 @@ def to_modes(
         N - 2
     )
 
+    if _SQRT_W is not None:
+
+        U[:, 1:-1] /= _SQRT_W
+
     return U
 
 
@@ -3345,7 +3393,8 @@ def to_modes(
 def save_modesbin(
     path,
     modes,
-    U
+    U,
+    r
 ):
     """
     Format:
@@ -3361,6 +3410,9 @@ def save_modesbin(
 
         int64:
             Nmodes
+
+        Nr float64:
+            radial nodes (version 2)
 
         for each mode:
             int32 l
@@ -3386,29 +3438,10 @@ def save_modesbin(
         "wb"
     ) as f:
 
-        f.write(
-            b"MODESBIN"
-        )
-
-        f.write(
-            struct.pack(
-                "<i",
-                1
-            )
-        )
-
-        f.write(
-            struct.pack(
-                "<q",
-                U.shape[1]
-            )
-        )
-
-        f.write(
-            struct.pack(
-                "<q",
-                len(modes)
-            )
+        write_modesbin_header(
+            f,
+            r,
+            len(modes)
         )
 
         for i in order:
@@ -3590,10 +3623,10 @@ def main():
     # Radial grid
     # --------------------------------------------------------------
 
-    r = np.linspace(
-        0.0,
-        p["L"],
-        p["N"]
+    r = p["r_nodes"]
+
+    set_radial_weights(
+        r
     )
 
     print(
@@ -3928,7 +3961,8 @@ def main():
     save_modesbin(
         args.output,
         modes,
-        U
+        U,
+        r
     )
 
     # --------------------------------------------------------------
