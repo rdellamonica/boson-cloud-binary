@@ -104,6 +104,75 @@ void reset_and_checkpoint()
     require(!average.ready(), "Reset average is still ready");
     close(average.update(1000, 50, 7.0), 7.0, 0, "Reset average kept old samples");
 }
+void hann_constant_and_linear()
+{
+    // Normalised weights: a constant is returned exactly, also on a chirping
+    // orbit; at constant Omega the taper is symmetric, so a linear signal gives
+    // its value at the window centre, as for the boxcar.
+    RollingPhaseAverage chirp(2.0, RollingPhaseAverage::Window::Hann);
+    require(chirp.window() == RollingPhaseAverage::Window::Hann, "Window shape not kept");
+    double phase = 0, result = 0;
+    for (int k = 0; k <= 4000; ++k) {
+        const double t = 0.5 * k, omega = 0.01 * (1 + 0.001 * k);
+        result = chirp.update(t, phase, -2.25);
+        phase += omega * 0.5;
+    }
+    close(result, -2.25, 1e-13, "Hann: constant signal changed under a chirping orbit");
+
+    const double rate = 0.37, n_orbits = 1.3, omega = 0.05, dt = 0.71;
+    RollingPhaseAverage linear(n_orbits, RollingPhaseAverage::Window::Hann);
+    double t = 0;
+    for (int k = 0; k < 2000; ++k, t += dt) {
+        const double value = 2.0 + rate * t;
+        const double res = linear.update(t, omega * t, value);
+        const double window = 2 * M_PI * n_orbits / omega;
+        if (t >= window)
+            close(res, 2.0 + rate * (t - 0.5 * window), 1e-6, "Hann: linear signal average is not the window centre value");
+    }
+}
+
+void hann_suppresses_non_harmonic_beat()
+{
+    // A beat at 1.15 cycles per orbit, as left by a ringing cloud. A boxcar of
+    // N orbits passes |sinc(1.15 N)| (12.6% at N = 1); a Hann window passes
+    // |sinc(x)/(1 - x^2)|, x = 1.15 N: 2.6% at 2 orbits and 0.33% at 4. Harmonics of the orbit are removed by both.
+    auto residual = [](double n_orbits, RollingPhaseAverage::Window window, double cycles) {
+        RollingPhaseAverage average(n_orbits, window);
+        const int per_orbit = 300;
+        double worst = 0;
+        for (int k = 0; k <= 40 * per_orbit; ++k) {
+            const double phase = 2 * M_PI * k / per_orbit;
+            const double r = average.update(k, phase, 1.0 + std::cos(cycles * phase + 0.3)) - 1.0;
+            if (k > 10 * per_orbit) worst = std::max(worst, std::abs(r));
+        }
+        return worst;
+    };
+    using W = RollingPhaseAverage::Window;
+    const double box1 = residual(1.0, W::Boxcar, 1.15), hann2 = residual(2.0, W::Hann, 1.15), hann4 = residual(4.0, W::Hann, 1.15);
+    require(box1 > 0.1, "Boxcar leakage at 1.15 per orbit smaller than expected");
+    require(hann2 < 0.035, "Hann (2 orbits) leaks more than 3.5% at 1.15 per orbit");
+    require(hann4 < 0.004, "Hann (4 orbits) leaks more than 0.4% at 1.15 per orbit");
+    require(residual(2.0, W::Hann, 1.0) < 1e-6 && residual(2.0, W::Hann, 2.0) < 1e-6,
+            "Hann (2 orbits) does not cancel the orbital harmonics");
+}
+
+void hann_checkpoint()
+{
+    // The saved state is the same as for the boxcar; the shape comes from the
+    // restored object (the configuration), and a resume continues exactly.
+    using W = RollingPhaseAverage::Window;
+    RollingPhaseAverage average(2.0, W::Hann);
+    for (int k = 0; k < 900; ++k) average.update(k, 0.03 * k, std::cos(0.1 * k));
+    std::stringstream buffer;
+    average.save(buffer);
+    RollingPhaseAverage restored(5.0, W::Hann);
+    restored.load(buffer);
+    for (int k = 900; k < 1500; ++k) {
+        const double a = average.update(k, 0.03 * k, std::cos(0.1 * k));
+        const double b = restored.update(k, 0.03 * k, std::cos(0.1 * k));
+        require(a == b, "Restored Hann average differs from the original");
+    }
+}
 } // namespace
 
 int main()
@@ -113,5 +182,8 @@ int main()
                          std::pair{"oscillation averages out", &oscillation_averages_out},
                          std::pair{"chirping orbit", &chirping_orbit},
                          std::pair{"rejects non-monotonic input", &rejects_non_monotonic_input},
-                         std::pair{"reset and checkpoint", &reset_and_checkpoint});
+                         std::pair{"reset and checkpoint", &reset_and_checkpoint},
+                         std::pair{"Hann: constant and linear", &hann_constant_and_linear},
+                         std::pair{"Hann: suppresses a non-harmonic beat", &hann_suppresses_non_harmonic_beat},
+                         std::pair{"Hann: checkpoint", &hann_checkpoint});
 }

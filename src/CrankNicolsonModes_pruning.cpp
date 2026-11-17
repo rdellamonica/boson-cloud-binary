@@ -257,6 +257,8 @@ bool CrankNicolsonModes::update_active_modes(double horizon, bool from_scratch)
         if (!active_modes[j])
         {
             dropped += block_norm2(psi.data() + j * Nr);
+            if (idx_ex > 0 && modes[j].m != 0)
+                Lz_budget.pruned += modes[j].m * radial_norm2(psi.data() + j * Nr, 0, idx_ex);
             psi.segment(j * Nr, Nr).setZero();
         }
     pruned_mass_total += mu * (uniform_grid ? dr : 1.0) * dropped;

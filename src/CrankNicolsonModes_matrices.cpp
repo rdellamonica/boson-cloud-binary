@@ -94,7 +94,7 @@ SparseComplex CrankNicolsonModes::active_cn_operator(dcomplex scale) const
         for (int i = 0; i < Nr; ++i)
         {
             const Eigen::Index row = static_cast<Eigen::Index>(b) * Nr + i;
-            entries.emplace_back(row, row, 1.0);
+            entries.emplace_back(row, row, 1.0 - scale * reference_energy);
             for (SparseComplex::InnerIterator it(h, static_cast<Eigen::Index>(active_list[b]) * Nr + i); it; ++it)
             {
                 // Active rows only couple to active modes.
@@ -176,25 +176,49 @@ void CrankNicolsonModes::solve_CN(const Eigen::VectorXcd &rhs)
         return;
     }
 
-    // A = 1 + (i dt/2) H on the active modes. Active rank-one sinks add
+    // A = 1 + (i dt/2) (H - E_ref) on the active modes. Active rank-one sinks add
     // (dt/4) * Gamma, Gamma = sum g_k v_k v_k^dagger.
     const dcomplex scale = I * (dt * 0.5);
-    std::vector<Eigen::VectorXcd> sink_v, sink_w; // Gamma = g v w^dagger
-    std::vector<double> sink_g;
+    // Each sink lives on the radial shell around its hole: keep only those
+    // rows of the active modes, so that an overlap costs (shell nodes) x (modes).
+    struct Shell
+    {
+        Eigen::VectorXcd v, w; // Gamma = g v w^dagger, indexed b * count + (i - first)
+        double g;              // signed: negative in a superradiant dipolar channel
+        int first, count;
+    };
+    std::vector<Shell> sinks;
+    const Eigen::Index n_active = static_cast<Eigen::Index>(active_list.size());
     if (sink_active)
-        for (const SwaveSink *sink : {&sink1, &sink2})
-            if (sink->strength != 0.0 && sink->v.size() == psi.size() && sink->v.squaredNorm() > 0.0)
+        for (const SwaveSink *sink : active_sinks(psi.size()))
+        {
+            Shell shell{Eigen::VectorXcd(n_active * sink->count), Eigen::VectorXcd(n_active * sink->count),
+                        0.25 * dt * sink->strength, sink->first, sink->count};
+            for (Eigen::Index b = 0; b < n_active; ++b)
             {
-                sink_v.push_back(gather_active(sink->v));
-                sink_w.push_back(gather_active(sink->left()));
-                sink_g.push_back(0.25 * dt * sink->strength);
+                const Eigen::Index offset = static_cast<Eigen::Index>(active_list[b]) * Nr + sink->first;
+                shell.v.segment(b * sink->count, sink->count) = sink->v.segment(offset, sink->count);
+                shell.w.segment(b * sink->count, sink->count) = sink->left().segment(offset, sink->count);
             }
-    const int k = static_cast<int>(sink_v.size());
+            if (shell.v.squaredNorm() > 0.0)
+                sinks.push_back(std::move(shell));
+        }
+    const int k = static_cast<int>(sinks.size());
+    const auto shell_dot = [&](const Shell &shell, const auto &x) {
+        dcomplex sum = 0.0;
+        for (Eigen::Index b = 0; b < n_active; ++b)
+            sum += shell.w.segment(b * shell.count, shell.count).dot(x.segment(b * Nr + shell.first, shell.count));
+        return sum;
+    };
+    const auto shell_add = [&](Eigen::VectorXcd &y, dcomplex coefficient, const Shell &shell) {
+        for (Eigen::Index b = 0; b < n_active; ++b)
+            y.segment(b * Nr + shell.first, shell.count) += coefficient * shell.v.segment(b * shell.count, shell.count);
+    };
     const auto apply_A = [&](const Eigen::VectorXcd &x, Eigen::VectorXcd &y) {
         apply_hamiltonian(x, y, true);
-        y = x + scale * y;
+        y = x + scale * (y - reference_energy * x);
         for (int a = 0; a < k; ++a)
-            y += (sink_g[a] * sink_w[a].dot(x)) * sink_v[a];
+            shell_add(y, sinks[a].g * shell_dot(sinks[a], x), sinks[a]);
     };
 
     Eigen::VectorXcd work(rhs.size());
@@ -215,17 +239,19 @@ void CrankNicolsonModes::solve_CN(const Eigen::VectorXcd &rhs)
     const auto krylov_with = [&](const auto &P_solve, int max_iterations) {
         Eigen::MatrixXcd W(rhs.size(), k);
         Eigen::MatrixXcd G = Eigen::MatrixXcd::Zero(k, k);
-        Eigen::VectorXcd column(rhs.size());
+        Eigen::VectorXcd column(rhs.size()), source = Eigen::VectorXcd::Zero(rhs.size());
         for (int a = 0; a < k; ++a)
         {
-            P_solve(sink_v[a], column);
+            shell_add(source, 1.0, sinks[a]);
+            P_solve(source, column);
             W.col(a) = column;
+            shell_add(source, -1.0, sinks[a]); // exactly back to zero
         }
         for (int a = 0; a < k; ++a)
         {
-            G(a, a) += 1.0 / sink_g[a];
+            G(a, a) += 1.0 / sinks[a].g;
             for (int b = 0; b < k; ++b)
-                G(a, b) += sink_w[a].dot(W.col(b));
+                G(a, b) += shell_dot(sinks[a], W.col(b));
         }
         const Eigen::MatrixXcd G_inverse = G.inverse();
         const auto apply_M = [&](const Eigen::VectorXcd &x, Eigen::VectorXcd &y) {
@@ -234,8 +260,11 @@ void CrankNicolsonModes::solve_CN(const Eigen::VectorXcd &rhs)
                 return;
             Eigen::VectorXcd projections(k);
             for (int a = 0; a < k; ++a)
-                projections[a] = sink_w[a].dot(y);
-            y -= W * (G_inverse * projections);
+                projections[a] = shell_dot(sinks[a], y);
+            const Eigen::VectorXcd weights = G_inverse * projections;
+#pragma omp parallel for schedule(static) if (n_active >= 8)
+            for (Eigen::Index b = 0; b < n_active; ++b)
+                y.segment(b * Nr, Nr).noalias() -= W.middleRows(b * Nr, Nr) * weights;
         };
         Eigen::VectorXcd x = guess;
         bicgstab(apply_A, apply_M, normalized_rhs, x, 1e-10, max_iterations, last_solver_iterations);
@@ -256,7 +285,7 @@ void CrankNicolsonModes::solve_CN(const Eigen::VectorXcd &rhs)
                     h += pair_phase[self_pair[j]] * coupling_eff[self_pair[j] * inner + i - 1];
                 if (cap)
                     h += cap_diagonal[static_cast<Eigen::Index>(j) * Nr + i];
-                diagonal = 1.0 + scale * h;
+                diagonal = 1.0 + scale * (h - reference_energy);
                 lower = interior ? scale * (uniform_grid ? h0_offdiagonal : h0_lower[i]) : dcomplex(0.0);
                 upper = interior ? scale * (uniform_grid ? h0_offdiagonal : h0_upper[i]) : dcomplex(0.0);
             });

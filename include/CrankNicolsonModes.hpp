@@ -24,6 +24,7 @@
 #include <complex>
 #include <cstddef>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -159,7 +160,8 @@ public:
      * Call before run(); a resumed run keeps the window stored in its checkpoint.
      * @throws std::invalid_argument unless @p n_orbits > 0.
      */
-    void set_power_average_orbits(double n_orbits);
+    void set_power_average_orbits(double n_orbits,
+                                  RollingPhaseAverage::Window window = RollingPhaseAverage::Window::Boxcar);
 
     /// Use the radial block preconditioner (default) instead of a full ILUT.
     bool use_block_preconditioner = true;
@@ -226,7 +228,49 @@ public:
     /// Cloud mass removed so far by switching modes off.
     double pruned_mass() const { return pruned_mass_total; }
     /// Mass absorbed so far by black hole @p body (1 or 2), whether or not the orbit evolves.
+    /// The CN midpoint of the last step, (psi_n + exp(i E_ref dt) psi_n+1) / 2: the step's
+    /// absorbed mass, spin and torque are exact on it.
+    Eigen::VectorXcd step_midpoint() const { return 0.5 * (psi_last + step_rotation * psi); }
     double absorbed_mass(int body) const { return body == 1 ? absorbed_mass_1 : absorbed_mass_2; }
+    /// Spin angular momentum (along +z) absorbed so far by black hole @p body through its dipolar channels.
+    double absorbed_spin(int body) const { return body == 1 ? absorbed_J_1 : absorbed_J_2; }
+    /// Cumulative angular-momentum budget terms (see LzBudget).
+    double Lz_budget_term(const std::string &name) const
+    {
+        if (name == "ionized") return Lz_budget.ionized;
+        if (name == "torque") return Lz_budget.torque;
+        if (name == "absorbed") return Lz_budget.absorbed;
+        if (name == "pruned") return Lz_budget.pruned;
+        if (name == "damped") return Lz_budget.damped;
+        throw std::invalid_argument("unknown Lz budget term " + name);
+    }
+    /// sum_j m_j N_j inside r_ex of the current state, the cloud's L_z (particle units).
+    double cloud_Lz() const { return cloud_Lz(psi); }
+    /// @}
+
+    /// @name Dipolar horizon absorption
+    /// @{
+    /**
+     * Add the @f$\ell = 1@f$ horizon channels about each black hole (needs
+     * @c absorption and @c l_max >= 1). Set before initialize().
+     */
+    bool dipole_absorption = false;
+    /// Energy E_ref the Crank-Nicolson step is taken relative to: psi_n+1 =
+    /// exp(-i E_ref dt) CN[H - E_ref] psi_n. CN multiplies a level's growth or
+    /// decay rate by 1 / (1 + ((E - E_ref) dt / 2)^2), so E_ref at the cloud's
+    /// level keeps the horizon rates independent of dt (0: plain CN).
+    double reference_energy = 0.0;
+    /// Dimensionless spins @f$\chi_a = J_a/M_a^2@f$ along +z of the simulation frame
+    /// (the orbit is in the xy plane). They evolve together with the masses.
+    double chi1 = 0.0, chi2 = 0.0;
+    /// Horizon coefficient @f$\gamma_{1m}@f$ of a hole of mass @p M and spin @p chi (no ramp).
+    double dipole_coefficient(double M, double chi, int m) const;
+    /// Regularised amplitude @f$\bar A_{1m}@f$ of @p state about black hole @p body (m = -1 or 1).
+    dcomplex dipole_amplitude(int body, int m, const Eigen::VectorXcd &state) const;
+    /// Coefficient in use for that channel, @f$\gamma_{1m}@f$ times the absorption ramp; 0 while inactive.
+    double dipole_strength(int body, int m) const;
+    /// COM-frame weight @f$w_{LM;1m}(r_i)@f$ of mode @p j in that channel.
+    dcomplex dipole_weight(int body, int m, int j, int i) const;
     /// @}
 
     bool mask = false;    ///< A damping mask is applied after every step.
@@ -260,6 +304,8 @@ public:
      * @throws std::logic_error if called after initialize().
      */
     void configure_isolated_black_hole(double x);
+    /// True after configure_isolated_black_hole(): no companion and no orbital motion.
+    bool is_isolated_black_hole() const { return isolated_black_hole; }
 
     /// @name Operators
     /// @{
@@ -315,6 +361,35 @@ public:
      */
     void build_cap(double cap_L_factor, double cap_W, int cap_n);
 
+    /**
+     * @brief Tune the CAP strength of each mode to that mode's frequency (call after build_cap()).
+     *
+     * The profile of build_cap() is kept and only its strength changes, to
+     * @f$W_j = \ln(1/\varepsilon) / (2\mu I_j)@f$ with
+     * @f$I_j = \int s(r)/k_j(r)\,dr@f$ over the layer, @f$s@f$ the profile and
+     * @f$k_j(r) = \sqrt{2\mu(E_j - V_j(r))}@f$ the local wavenumber of a wave of
+     * energy @f$E_j@f$ in the centrifugal and monopole potential @f$V_j@f$. A wave
+     * crossing the layer and coming back from the wall at @f$L@f$ is then reduced
+     * by @f$\varepsilon@f$ in amplitude, whatever its frequency, with the weakest
+     * strength that does so (the reflection at the layer's onset grows with the
+     * strength). @f$E_j@f$ is measured on the layer every step from the CN phase
+     * advance and averaged over @p tune_steps steps; a mode with no estimate yet
+     * starts from the Rayleigh quotient of the state in the layer.
+     *
+     * @param reflection Target amplitude reflection @f$\varepsilon@f$ (0 < reflection < 1).
+     * @param tune_steps Steps of the running average of each mode's energy (>= 1).
+     * @param k_min      Smallest wavenumber used (evanescent and very slow modes); <= 0 gives 1 / layer width.
+     */
+    void enable_cap_per_mode(double reflection, int tune_steps, double k_min);
+    /// True when enable_cap_per_mode() is in effect.
+    bool cap_is_per_mode() const { return cap_per_mode; }
+    /// Current CAP strength of mode @p j (the uniform W without per-mode tuning).
+    double cap_strength(int j) const { return cap_W_mode.size() ? cap_W_mode[j] : cap_W_uniform; }
+    /// Energy estimate of mode @p j used for its CAP strength (NaN before the first estimate).
+    double cap_tuned_energy(int j) const;
+    /// Strength that gives the target reflection for a wave of energy @p E in mode @p j.
+    double cap_strength_for_energy(int j, double E) const;
+
 private:
     bool isolated_black_hole = false;
     double ramp_periods;
@@ -328,6 +403,8 @@ private:
     double orbit_ramp_factor(double time) const;
 
     Eigen::VectorXcd psi_last; ///< State at the start of the current step.
+    /// exp(i E_ref dt) of the last step: psi_last and step_rotation * psi are the CN pair.
+    dcomplex step_rotation = 1.0;
     Eigen::VectorXcd damping_mask;
 
     std::string config_file;
@@ -359,7 +436,9 @@ private:
     void solve_CN(const Eigen::VectorXcd &rhs);
 
     double orbits_average = 2.0;
-    RollingPhaseAverage power_average{orbits_average};
+    /// Shape of the p_bin averaging window. Not stored in checkpoints: a resumed run uses the configured one.
+    RollingPhaseAverage::Window power_window = RollingPhaseAverage::Window::Boxcar;
+    RollingPhaseAverage power_average{orbits_average, power_window};
 
     /// Radial factor of the primary's multipole @p l_star, @f$r_<^{\ell}/r_>^{\ell+1}@f$ with mass weight.
     double F1(double r, int l_star, int m_star);
@@ -541,7 +620,7 @@ private:
      * distance @f$s@f$ from the body, normalised to unit volume on the grid.
      */
     void update_absorption_profile(AbsorptionProfile &profile, double radius, double width);
-    double Ah1 = 0.0, Ah2 = 0.0; ///< Horizon-area factors 16 pi M_a^2 (times the absorption ramp).
+    double Ah1 = 0.0, Ah2 = 0.0; ///< Horizon areas 8 pi M_a r_+ (16 pi M_a^2 without spin), times the absorption ramp.
     double epsilon_smear;
     /**
      * Rank-one s-wave sink of one body: @f$\Gamma = g\,v v^\dagger@f$, where
@@ -555,13 +634,56 @@ private:
         /// empty on a uniform grid, where w = v and g = A_h dr.
         Eigen::VectorXcd w;
         double strength = 0.0;
+        /// Radial nodes [first, first + count) outside which v vanishes in every mode.
+        int first = 0, count = 0;
+        int body = 0; ///< 1 or 2.
+        int m = 0;    ///< Azimuthal number about the black hole (0 for the s-wave sink).
         const Eigen::VectorXcd &left() const { return w.size() ? w : v; }
     };
     SwaveSink sink1, sink2;
+    /**
+     * Dipolar sinks, @f$\Gamma^{(1)}_a = \sum_m \gamma_{1m}|g_{1m}\rangle\langle g_{1m}|@f$:
+     * body 1 with m = -1, +1, then body 2. The m = 0 kernel is odd under
+     * @f$z \to -z@f$ and has no overlap with the retained (even) modes.
+     * The strengths are signed; a negative one is a superradiant channel.
+     */
+    SwaveSink dipole_sinks[4];
+    /**
+     * Reference weights of one body's dipolar kernels, for the body on the +x
+     * axis moving along +y: @f$w_{LM;1m}(r; 0)@f$ on the shell
+     * @f$|r - R_a| < \epsilon@f$ only. At azimuth @f$\varphi_a@f$ the weights
+     * are @f$e^{-i(M-m)\varphi_a}@f$ times these.
+     */
+    struct DipoleProfile {
+        double radius = -1.0, width = -1.0, boost = 0.0;
+        int first = 0, count = 0;
+        /// m = -1 and m = +1, indexed j * count + (i - first).
+        std::vector<dcomplex> reference[2];
+    };
+    DipoleProfile dipole_profile1, dipole_profile2;
+    /// Recompute the reference weights if the radius, width or boost (mu * v_a) changed.
+    void update_dipole_profile(DipoleProfile &profile, double radius, double width, double boost);
+    /// Rotate a reference profile to azimuth @p azimuth into the two sinks of a body.
+    void fill_dipole_sinks(const DipoleProfile &profile, double azimuth, double M, double chi,
+                           double ramp, SwaveSink *pair);
+    /// Sinks that act in the current step.
+    std::vector<const SwaveSink *> active_sinks(Eigen::Index size) const;
+    /// @f$w^\dagger x@f$ over the sink's radial support.
+    dcomplex sink_dot(const SwaveSink &sink, const Eigen::VectorXcd &x) const;
+    /// Particles per unit time through one sink for @p state (signed).
+    double sink_particle_rate(const SwaveSink &sink, const Eigen::VectorXcd &state) const;
+    /// Zero a sink vector on its previous support and move the support to the given shell.
+    void reset_sink_support(SwaveSink &sink, double radius, double width) const;
+    /// Spin-up rate dJ_a/dt of black hole @p body, @f$\sum_m m\,\gamma_{1m}|\bar A_{1m}|^2@f$.
+    double absorbed_spin_rate(int body, const Eigen::VectorXcd &state) const;
+    double absorbed_J_1 = 0.0, absorbed_J_2 = 0.0;
+    bool checkpoint_has_spins = false;
+    /// spins.txt: chi_1, chi_2 and the cumulative absorbed spins per step (dipolar runs only).
+    std::ofstream spins_file;
     bool sink_active = false;
     int mode00 = -1; ///< Index of the (0, 0) mode, or -1.
     /// Build the projector vector @p v of one body from its kernel moments.
-    void build_swave_projector(const AbsorptionProfile &profile, bool secondary, Eigen::VectorXcd &v) const;
+    void build_swave_projector(const AbsorptionProfile &profile, bool secondary, SwaveSink &sink) const;
     /// Update both absorbers for the current orbit and absorption ramp.
     void build_spherical_absorption();
     /// Mass accretion rate of the primary for @p state.
@@ -650,10 +772,59 @@ private:
     double step_binary_power(const Eigen::VectorXcd &psi_old, double theta_shift) const;
     double p_bin_step = 0.0;
     /// Rate at which the sinks take angular momentum L_z (about the COM) out of the field,
-    /// -d<L_z>/dt from the non-Hermitian part. It belongs to the holes, i.e. to the orbit.
+    /// -d<L_z>/dt from the non-Hermitian part. It belongs to the holes: the dipolar
+    /// channels' m per particle to their spins, the rest to the orbit.
     double absorbed_Lz_rate(const Eigen::VectorXcd &psi) const;
     double Lz_abs_rate = 0.0;
-    /// Lz_absorbed_rate.txt: Lz_abs_rate per step (absent in runs written before it existed).
+    /**
+     * @brief Exact angular-momentum budget of the cloud inside r_ex, per CN step.
+     *
+     * On the step's midpoint state, CN changes N_j (nodes below idx_ex) by exactly
+     * dt (2 Im<mid_j|H mid_j> - Re<mid_j|Gamma mid_j>). Weighted by m_j, the kinetic
+     * term telescopes to the link flux through r_ex (ionized), the couplings give the
+     * binary's torque, the CAP and the sinks their losses. Pruning and the mask remove
+     * the rest. All in particle units (hbar = 1), cumulative, written to Lz_budget.txt as
+     * "ionized torque absorbed pruned damped": cloud + ionized + absorbed + pruned +
+     * damped - torque is constant to the linear solver's tolerance.
+     */
+    struct LzBudget
+    {
+        double ionized = 0.0;  ///< L_z carried out through r_ex.
+        double torque = 0.0;   ///< L_z the binary's potential gives the cloud.
+        double absorbed = 0.0; ///< L_z the sinks take (spin and orbital parts).
+        double pruned = 0.0;   ///< L_z of the modes dropped by pruning.
+        double damped = 0.0;   ///< L_z removed by the CAP or mask inside r_ex.
+    };
+    LzBudget Lz_budget;
+    bool checkpoint_has_Lz_budget = false;
+    /// Add one step's ionized, torque, absorbed and CAP terms on the midpoint state @p mid.
+    void accumulate_Lz_step(const Eigen::VectorXcd &mid);
+    /// m-weighted norm inside r_ex of @p state (sum_j m_j N_j), for the pruned and masked parts.
+    double cloud_Lz(const Eigen::VectorXcd &state) const;
+    /// Lz_budget.txt (absent in runs written before it existed).
+    std::ofstream Lz_budget_file;
+
+    /// @name Per-mode CAP (enable_cap_per_mode())
+    /// @{
+    bool cap_per_mode = false;
+    double cap_W_uniform = 0.0;            ///< W of build_cap().
+    int cap_start = 0;                     ///< First node of the layer.
+    Eigen::VectorXd cap_shape;             ///< Profile s(r) of build_cap(), 0 before cap_start.
+    double cap_reflection = 1e-10, cap_k_min = 0.0;
+    int cap_tune_steps = 20;
+    Eigen::VectorXd cap_energy;            ///< Running energy estimate of each mode.
+    std::vector<char> cap_has_energy;      ///< Whether cap_energy[j] holds an estimate.
+    std::vector<char> cap_warned;          ///< Mode already reported as too long-wave for the layer.
+    Eigen::VectorXd cap_W_mode;            ///< Strength of each mode in the current step.
+    bool checkpoint_has_cap_energy = false;
+    /// cap_modes.txt: energy estimates then strengths of every mode, per step (per-mode CAP only).
+    std::ofstream cap_modes_file;
+    /// Set each mode's strength from its energy estimate (start of a step); fills cap_diagonal and CAP.
+    void update_cap_strengths();
+    /// Update the energy estimates from the CN phase advance psi_last -> psi over the layer.
+    void measure_cap_energies();
+    /// @}
+    /// Lz_absorbed_rate.txt: Lz_abs_rate (the part credited to the orbit) per step (absent in runs written before it existed).
     std::ofstream Lz_abs_file;
 
     /// @f$\mathrm{Re}\langle\dot\psi|V|\psi\rangle@f$ inside the extraction radius.

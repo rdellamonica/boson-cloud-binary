@@ -211,3 +211,62 @@ double CrankNicolsonModes::step_binary_power(const Eigen::VectorXcd &psi_old, do
         total += sums[b];
     return total * (uniform_grid ? dr : 1.0);
 }
+
+double CrankNicolsonModes::cloud_Lz(const Eigen::VectorXcd &state) const
+{
+    double total = 0.0;
+    if (idx_ex <= 0)
+        return total;
+    for (int j = 0; j < n_modes; ++j)
+        if (modes[j].m != 0)
+            total += modes[j].m * radial_norm2(state.data() + static_cast<Eigen::Index>(j) * Nr, 0, idx_ex);
+    return total;
+}
+
+void CrankNicolsonModes::accumulate_Lz_step(const Eigen::VectorXcd &mid)
+{
+    // Nodes 0..K are the cloud (as in get_norms); the link K -> K+1 is the flux through r_ex.
+    const int K = idx_ex - 1;
+    if (K < 1 || K + 1 >= Nr)
+        return;
+    Eigen::VectorXcd Hmid;
+    apply_hamiltonian(mid, Hmid, false);
+    Eigen::VectorXcd Gmid;
+    if (sink_active)
+        Gmid = apply_sink(mid);
+    // w_K h_K,K+1 = w_K+1 h_K+1,K: H0 is self-adjoint in the node-weighted product, so the
+    // kinetic part of Im<u|H0 u> over nodes <= K telescopes to this single link.
+    const double link_weight = uniform_grid ? dr * h0_offdiagonal : node_weight(K) * h0_upper[K];
+
+    double ionized = 0.0, torque = 0.0, absorbed = 0.0, damped = 0.0;
+#pragma omp parallel for schedule(static) reduction(+ : ionized, torque, absorbed, damped) if (n_modes >= 8 && Nr >= 128)
+    for (int j = 0; j < n_modes; ++j)
+    {
+        if (modes[j].m == 0 || !active_modes[j])
+            continue;
+        const Eigen::Index off = static_cast<Eigen::Index>(j) * Nr;
+        const dcomplex *u = mid.data() + off;
+        const dcomplex *h = Hmid.data() + off;
+        double total = 0.0, cap_part = 0.0, sink_part = 0.0;
+        for (int i = 0; i <= K; ++i)
+        {
+            const double w = node_weight(i);
+            total += w * (std::conj(u[i]) * h[i]).imag();
+            if (cap)
+                cap_part += w * std::norm(u[i]) * cap_diagonal[off + i].imag();
+            if (sink_active)
+                sink_part += w * (std::conj(u[i]) * Gmid[off + i]).real();
+        }
+        const double link = 2.0 * (link_weight * std::conj(u[K]) * u[K + 1]).imag();
+        const double m = modes[j].m;
+        // dN_j/dt = 2 total - sink_part, with 2 total = coupling + link + 2 cap_part.
+        ionized += -m * link;
+        damped += -m * 2.0 * cap_part;
+        absorbed += m * sink_part;
+        torque += m * (2.0 * total - link - 2.0 * cap_part);
+    }
+    Lz_budget.ionized += ionized * dt;
+    Lz_budget.torque += torque * dt;
+    Lz_budget.absorbed += absorbed * dt;
+    Lz_budget.damped += damped * dt;
+}

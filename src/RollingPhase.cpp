@@ -11,8 +11,8 @@
 #include <istream>
 #include <ostream>
 
-RollingPhaseAverage::RollingPhaseAverage(double n_orbits)
-    : window_phase_(2.0 * M_PI * n_orbits)
+RollingPhaseAverage::RollingPhaseAverage(double n_orbits, Window window)
+    : window_phase_(2.0 * M_PI * n_orbits), window_(window)
 {
     if (n_orbits <= 0.0)
     {
@@ -114,7 +114,11 @@ double RollingPhaseAverage::update(double time, double phase, double value)
     // Guard against tiny negative values from roundoff.
     duration_ = std::max(duration_, 0.0);
 
-    if (duration_ > 0.0)
+    if (window_ == Window::Hann)
+    {
+        average_ = hann_average(phase_cut, value);
+    }
+    else if (duration_ > 0.0)
     {
         average_ = integral_ / duration_;
     }
@@ -126,6 +130,32 @@ double RollingPhaseAverage::update(double time, double phase, double value)
     previous_ = {time, phase, value};
 
     return average_;
+}
+
+double RollingPhaseAverage::hann_average(double phase_cut, double fallback) const
+{
+    // Weight w = sin^2(pi x), x = (phase - phase_cut) / window, on the segments
+    // inside the window. Time, phase and value are linear on a segment, so each
+    // segment is integrated with Simpson's rule (error O(dphi^4 / window^4)).
+    // Before the window has filled, phase_cut lies before the first sample and
+    // the old end of the taper is simply missing.
+    const auto weight = [&](double phase) {
+        const double s = std::sin(M_PI * (phase - phase_cut) / window_phase_);
+        return s * s;
+    };
+
+    double weighted = 0.0, norm = 0.0;
+    for (const Segment &segment : segments_)
+    {
+        const double h = segment.time1 - segment.time0;
+        const double w0 = weight(segment.phase0);
+        const double wm = weight(0.5 * (segment.phase0 + segment.phase1));
+        const double w1 = weight(segment.phase1);
+        const double vm = 0.5 * (segment.value0 + segment.value1);
+        weighted += h / 6.0 * (w0 * segment.value0 + 4.0 * wm * vm + w1 * segment.value1);
+        norm += h / 6.0 * (w0 + 4.0 * wm + w1);
+    }
+    return norm > 0.0 ? weighted / norm : fallback;
 }
 
 bool RollingPhaseAverage::ready() const

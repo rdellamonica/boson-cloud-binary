@@ -182,6 +182,9 @@ void CrankNicolsonModes::build_active_operator()
                 mode00 = j;
         sink1 = {};
         sink2 = {};
+        // The dipolar reference profiles cover every mode and survive a change of the active set.
+        for (SwaveSink &sink : dipole_sinks)
+            sink = {};
     }
     radial_f1.resize((2 * l_max + 1) * Nr);
     radial_f2.resize(radial_f1.size());
@@ -335,6 +338,6 @@ void CrankNicolsonModes::build_time_dependent_perturbation(double time)
     if (absorption)
         build_spherical_absorption();
 
-    // The s-wave sink is rank one and is applied outside H.
+    // The horizon sinks are rank one each and are applied outside H.
     sink_active = absorption && time >= ramp_end_time();
 }

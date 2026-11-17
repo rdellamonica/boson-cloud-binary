@@ -65,7 +65,6 @@ Mtot = M1 + M2
 mu = float(config["atom"]["mu"])
 r0 = float(config["simulation"]["epsilon"])
 L_max = int(config["simulation"]["l_max"])
-Omega = np.sqrt(Mtot/R**3)
 
 # COM-frame distances
 R1 = M2/Mtot*R
@@ -92,7 +91,6 @@ print(f"  q        = {q}")
 print(f"  R        = {R}")
 print(f"  R1       = {R1}")
 print(f"  R2       = {R2}")
-print(f"  Omega    = {Omega}")
 print(f"  l_max    = {L_max}")
 print(f"  N        = {N}")
 print(f"  L        = {box_size}")

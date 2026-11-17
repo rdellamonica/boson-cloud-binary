@@ -82,21 +82,45 @@ int main(int argc, char **argv)
                       << " finer flux measurements.\n";
     }
 
+    if (!cfg.secondary_potential)
+    {
+        // No companion: an isolated primary at rest where the initial state has it,
+        // at distance q / (1 + q) * R from the origin on the +x axis.
+        solver.configure_isolated_black_hole(cfg.q / (1.0 + cfg.q) * cfg.R);
+        std::cout << "Companion switched off (" << (cfg.q == 0.0 ? "q = 0" : "secondary_potential = false")
+                  << "): the primary stays at rest at x = "
+                  << solver.R1 << ", with no companion potential, sink, orbital motion or back-reaction.\n";
+    }
+
     if (!resume)
         solver.set_initial_state_full(
             load_initial_modes_binary(argv[2], solver.modes, solver.r, solver.uniform_radial_grid()));
 
+    // Without a companion, evolve_orbit only lets the primary's mass and spin follow the horizon fluxes.
     solver.evolve_orbit = cfg.evolve_orbit;
+    solver.dipole_absorption = cfg.dipole_absorption;
+    // The hydrogenic level of the initial state, alpha = mu M1 with M1 = 1.
+    solver.reference_energy = cfg.energy_reference ? -0.5 * cfg.mu * cfg.mu * cfg.mu / (cfg.n * cfg.n) : 0.0;
+    solver.chi1 = cfg.spin_1;
+    solver.chi2 = cfg.spin_2;
+    if (cfg.dipole_absorption)
+        std::cout << "Dipolar horizon absorption: on (initial spins " << cfg.spin_1 << ", " << cfg.spin_2 << ")\n";
     solver.ramp_secondary_potential = cfg.ramp_secondary_potential;
     solver.orbit_delay_periods = cfg.orbit_delay_periods;
     solver.orbit_ramp_periods = cfg.orbit_ramp_periods;
     solver.steps_per_period = cfg.steps_per_period;
-    solver.set_power_average_orbits(cfg.power_average_orbits);
-    std::cout << "Startup ramp over " << cfg.ramp_periods << " initial periods: "
+    solver.set_power_average_orbits(cfg.power_average_orbits,
+                                    cfg.power_average_window == "hann" ? RollingPhaseAverage::Window::Hann
+                                                                       : RollingPhaseAverage::Window::Boxcar);
+    if (cfg.secondary_potential)
+        std::cout << "Startup ramp over " << cfg.ramp_periods << " initial periods: "
               << (cfg.ramp_secondary_potential ? "frequency and companion potential"
                                                : "frequency only (companion potential at full strength)")
               << "\n";
-    if (cfg.evolve_orbit)
+    if (cfg.evolve_orbit && !cfg.secondary_potential)
+        std::cout << "The primary's mass and spin follow the horizon fluxes after "
+                  << cfg.orbit_delay_periods << " initial periods\n";
+    else if (cfg.evolve_orbit)
         std::cout << "Orbit held fixed for " << cfg.orbit_delay_periods
                   << " initial periods after the startup ramp, then back-reaction switched on over "
                   << cfg.orbit_ramp_periods << " initial periods\n";
@@ -124,6 +148,8 @@ int main(int argc, char **argv)
     if (cfg.cap)
     {
         solver.build_cap(cfg.cap_L_factor, cfg.cap_W, cfg.cap_n);
+        if (cfg.cap_per_mode)
+            solver.enable_cap_per_mode(cfg.cap_reflection, cfg.cap_tune_steps, cfg.cap_k_min);
     }
 
     // num_steps takes precedence; otherwise run for num_periods initial periods.

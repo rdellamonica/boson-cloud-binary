@@ -17,14 +17,23 @@ constexpr double r_ex = 40.0;
 
 /// Runs made by make_solver use a stretched grid and mode pruning.
 bool stretched_and_pruned = false;
+/// Runs made by make_solver absorb from the first step, with the dipolar channels and spinning holes.
+bool dipolar = false;
 
 std::unique_ptr<CrankNicolsonModes> make_solver()
 {
     std::ofstream("config.toml") << "# restart fixture\n";
     auto cn = std::make_unique<CrankNicolsonModes>(65, 64.0, 2.0, 0.0, 2, 0.2, 0.05, 0.5, 0.0, 20.0, false, true,
-                                                   10, 0.5, 4.0, "config.toml");
+                                                   10, dipolar ? 0.0 : 0.5, 4.0, "config.toml");
     cn->evolve_orbit = true;
     cn->steps_per_period = 32;
+    if (dipolar) {
+        cn->dipole_absorption = true;
+        cn->chi1 = 0.4;
+        cn->chi2 = -0.3;
+        cn->orbit_ramp_periods = 0.0;
+        cn->dt = cn->P / 32;
+    }
     cn->set_power_average_orbits(1.0);
     if (stretched_and_pruned) {
         RadialGridSpec spec;
@@ -144,6 +153,29 @@ void exact_resume_stretched_and_pruned()
     require_identical(reference, interrupted);
 }
 
+void resume_with_dipolar_absorption()
+{
+    // Masses, spins and the absorbed-spin counters continue exactly from the checkpoint,
+    // and from spins.txt (12 digits) without one.
+    test::ScratchDir dir("resume_dipolar");
+    dipolar = true;
+    const fs::path reference = new_run("reference", 41);
+    const fs::path interrupted = new_run("interrupted", 25);
+    const fs::path no_checkpoint = copy_run(interrupted, "no_checkpoint");
+    resume_run(interrupted, 41);
+    fs::remove(no_checkpoint / "checkpoint.bin");
+    resume_run(no_checkpoint, 41);
+    dipolar = false;
+    const auto spins = test::read_rows(reference / "spins.txt");
+    require(spins.size() == 40 && spins.back().size() == 4, "spins.txt has the wrong shape");
+    require(spins.back()[0] != 0.4 && spins.back()[1] != -0.3 && spins.back()[2] != 0.0 && spins.back()[3] != 0.0,
+            "Spins did not evolve: the dipolar resume test is vacuous");
+    require_identical(reference, interrupted);
+    for (const char *name : {"spins.txt", "mass_budget.txt", "M_1.txt", "q.txt", "R_orb.txt", "norms.txt"})
+        require(max_difference(reference / name, no_checkpoint / name) < 2e-4,
+                std::string(name) + " deviates after reconstruction from diagnostics");
+}
+
 void resume_run_without_mass_budget()
 {
     // Runs written before mass_budget.txt existed still resume, and keep
@@ -245,6 +277,7 @@ int main()
     Eigen::setNbThreads(2);
     return test::run_all(std::pair{"exact resume from checkpoint", &exact_resume_from_checkpoint},
                          std::pair{"exact resume, stretched grid and pruning", &exact_resume_stretched_and_pruned},
+                         std::pair{"exact resume with dipolar absorption", &resume_with_dipolar_absorption},
                          std::pair{"resume a run without mass_budget.txt", &resume_run_without_mass_budget},
                          std::pair{"resume after a crash mid-write", &resume_after_crash_mid_write},
                          std::pair{"resume without checkpoint", &resume_without_checkpoint},

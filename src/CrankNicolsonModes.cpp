@@ -50,10 +50,11 @@ CrankNicolsonModes::CrankNicolsonModes(int Nr, double L, double dt_i, double eps
     build_stationary_hamiltonian();
 }
 
-void CrankNicolsonModes::set_power_average_orbits(double n_orbits)
+void CrankNicolsonModes::set_power_average_orbits(double n_orbits, RollingPhaseAverage::Window window)
 {
-    power_average = RollingPhaseAverage(n_orbits); // throws unless n_orbits > 0
+    power_average = RollingPhaseAverage(n_orbits, window); // throws unless n_orbits > 0
     orbits_average = n_orbits;
+    power_window = window;
 }
 
 void CrankNicolsonModes::configure_isolated_black_hole(double x)
@@ -76,6 +77,13 @@ void CrankNicolsonModes::configure_isolated_black_hole(double x)
 
 void CrankNicolsonModes::initialize()
 {
+
+    if (dipole_absorption && !absorption)
+        throw std::invalid_argument("dipole_absorption needs absorption");
+    if (dipole_absorption && l_max < 1)
+        throw std::invalid_argument("dipole_absorption needs l_max >= 1");
+    if (!(std::abs(chi1) <= 1.0 && std::abs(chi2) <= 1.0))
+        throw std::invalid_argument("The black-hole spins must satisfy |chi| <= 1");
 
     std::cout << "Building cache of mode couplings..." << std::endl;
     build_coupling_cache();
@@ -104,6 +112,9 @@ void CrankNicolsonModes::initialize()
     {
         std::cout << "Spherical absorption activated." << std::endl;
     }
+    if (dipole_absorption)
+        std::cout << "Dipolar (l = 1) horizon absorption activated, spins chi_1 = " << chi1
+                  << ", chi_2 = " << chi2 << "." << std::endl;
 
     std::cout << "Solver ready to run!" << std::endl;
 }
@@ -215,6 +226,9 @@ void CrankNicolsonModes::step(int step_id)
         write_active_modes(step_id);
     }
 
+    // A per-mode CAP is fixed over the step, from the energies measured up to now.
+    update_cap_strengths();
+
     // Keep the previous state for the orbit's midpoint accretion rates.
     psi_last = psi;
 
@@ -240,36 +254,57 @@ void CrankNicolsonModes::step(int step_id)
     const Eigen::VectorXcd state = gather_active(psi);
     Eigen::VectorXcd rhs;
     apply_hamiltonian(state, rhs, true);
-    rhs = state - (I * (0.5 * dt)) * rhs;
+    rhs = state - (I * (0.5 * dt)) * (rhs - reference_energy * state);
     if (sink_active)
         rhs -= (0.25 * dt) * gather_active(apply_sink(psi)); // B_full = B - (dt/4) * Gamma
     solve_CN(rhs);
+    // The solve gives the state in the frame rotating at E_ref; turn it back.
+    step_rotation = std::exp(I * (reference_energy * dt));
+    if (reference_energy != 0.0)
+        for (const int j : active_list)
+            psi.segment(static_cast<Eigen::Index>(j) * Nr, Nr) *= std::conj(step_rotation);
 
     // Binary power of this step: Omega_z times the torque of V(t_n+1) on the midpoint state.
-    // CN gives psi_n+1 - psi_n = -dt (iH + Gamma/2) psi_mid exactly, so this torque minus the
+    // With phi = exp(i E_ref dt) psi_n+1, CN gives phi - psi_n = -dt (i(H - E_ref) + Gamma/2) psi_mid
+    // exactly, psi_mid = (psi_n + phi) / 2 (E_ref drops out of L_z and norms), so this torque minus the
     // sinks' absorbed L_z (also on psi_mid) is exactly the field's discrete Delta L_z / dt.
     if (!isolated_black_hole)
-        p_bin_step = step_binary_power(0.5 * (psi_last + psi), 0.0);
+        p_bin_step = step_binary_power(step_midpoint(), 0.0);
+
+    // Exact L_z budget of the cloud inside r_ex for this step (same midpoint identity).
+    if (Lz_budget_file.is_open())
+        accumulate_Lz_step(step_midpoint());
+
+    // Each mode's frequency in the layer, for the next steps' CAP strengths.
+    measure_cap_energies();
 
     // Mass taken up by the sinks over this step. With the rates at the
     // midpoint state this is exactly the norm the CN step removes through them.
     if (sink_active)
     {
-        const Eigen::VectorXcd midpoint = 0.5 * (psi_last + psi);
+        const Eigen::VectorXcd midpoint = step_midpoint();
         absorbed_mass_1 += get_absorption_rate_1(midpoint) * dt;
         absorbed_mass_2 += get_absorption_rate_2(midpoint) * dt;
-        Lz_abs_rate = absorbed_Lz_rate(midpoint);
+        // The dipolar channels put m units of L_z per particle into the holes' spins;
+        // the rest of the L_z the sinks remove (about the centre of mass) is orbital.
+        const double spin_rate_1 = absorbed_spin_rate(1, midpoint), spin_rate_2 = absorbed_spin_rate(2, midpoint);
+        absorbed_J_1 += spin_rate_1 * dt;
+        absorbed_J_2 += spin_rate_2 * dt;
+        Lz_abs_rate = absorbed_Lz_rate(midpoint) - (spin_rate_1 + spin_rate_2);
     }
     else
         Lz_abs_rate = 0.0;
 
     if (mask)
     {
+        const double Lz_before_mask = Lz_budget_file.is_open() ? cloud_Lz(psi) : 0.0;
 #pragma omp parallel for schedule(static) if (psi.size() >= 4096)
         for (int i = 0; i < psi.size(); i++)
         {
             psi[i] *= damping_mask[i];
         }
+        if (Lz_budget_file.is_open())
+            Lz_budget.damped += Lz_before_mask - cloud_Lz(psi);
     }
 
     // The flux and snapshots use the post-mask endpoint state. Evaluate the
@@ -281,7 +316,7 @@ void CrankNicolsonModes::step(int step_id)
     if (sink_active)
         dpsi_dt -= 0.5 * apply_sink(psi);
 
-    if (!isolated_black_hole && evolve_orbit && t_i > orbit_start_time())
+    if (evolve_orbit && t_i > orbit_start_time())
     {
         // The crossing step may contain both frozen and evolving time. Do not
         // apply orbital feedback to the part before the fixed activation time.
@@ -325,6 +360,22 @@ void CrankNicolsonModes::step(int step_id)
     write_quantity_line_modes(energies, energy_modes_file);
     if (mass_budget_file.is_open())
         write_quantity_line_modes({absorbed_mass_1, absorbed_mass_2, pruned_mass_total}, mass_budget_file);
+    if (spins_file.is_open())
+        write_quantity_line_modes({chi1, chi2, absorbed_J_1, absorbed_J_2}, spins_file);
+    if (Lz_budget_file.is_open())
+        write_quantity_line_modes({Lz_budget.ionized, Lz_budget.torque, Lz_budget.absorbed, Lz_budget.pruned,
+                                   Lz_budget.damped},
+                                  Lz_budget_file);
+    if (cap_modes_file.is_open())
+    {
+        std::vector<double> row(2 * static_cast<std::size_t>(n_modes));
+        for (int j = 0; j < n_modes; ++j)
+        {
+            row[j] = cap_has_energy[j] ? cap_energy[j] : 0.0;
+            row[n_modes + j] = cap_W_mode[j];
+        }
+        write_quantity_line_modes(row, cap_modes_file);
+    }
 
     if (step_id % save_every == 0)
     {
@@ -350,6 +401,12 @@ void CrankNicolsonModes::run(int n_steps, double r_ex_)
     open_diagnostics(std::ios::out);
     mass_budget_file.open(output_folder + "/mass_budget.txt", std::ios::out);
     Lz_abs_file.open(output_folder + "/Lz_absorbed_rate.txt", std::ios::out);
+    Lz_budget = LzBudget{};
+    Lz_budget_file.open(output_folder + "/Lz_budget.txt", std::ios::out);
+    if (cap_per_mode)
+        cap_modes_file.open(output_folder + "/cap_modes.txt", std::ios::out);
+    if (dipole_absorption)
+        spins_file.open(output_folder + "/spins.txt", std::ios::out);
     if (pruning_enabled())
     {
         active_modes_file.open(output_folder + "/active_modes.txt", std::ios::out);

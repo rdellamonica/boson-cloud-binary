@@ -114,6 +114,12 @@ class Run:
                        for name in SCALAR_FILES + MODE_FILES}
         # Cumulative absorbed (hole 1, hole 2) and pruned mass; absent in older runs.
         self.budget = GrowingTable(os.path.join(folder, "mass_budget.txt"))
+        # chi_1, chi_2 and the cumulative absorbed spins; written by dipolar-absorption runs.
+        self.spins = GrowingTable(os.path.join(folder, "spins.txt"))
+        # Cumulative L_z budget (ionized, torque, absorbed, pruned, damped); absent in older runs.
+        self.Lz_budget = GrowingTable(os.path.join(folder, "Lz_budget.txt"))
+        # Orbital L_z taken by the sinks per step, the approximate budget's absorbed part.
+        self.Lz_abs = GrowingTable(os.path.join(folder, "Lz_absorbed_rate.txt"))
         self.snapshot_cache = {}
         self.slice_geometry = {}            # (r_plot, n_grid) -> interpolation tables
         self.payload_cache = OrderedDict()  # finished snapshot payloads, LRU
@@ -155,6 +161,9 @@ class Run:
         for table in self.tables.values():
             table.update()
         self.budget.update()
+        self.spins.update()
+        self.Lz_budget.update()
+        self.Lz_abs.update()
         rows = min(t.rows for t in self.tables.values())
         now = time.time()
         if not self.rate_history or self.rate_history[-1][1] != rows:
@@ -211,6 +220,9 @@ SETUP_SCHEMA = [
         ("binary", "R", "Initial separation R", 50.0, "M", ""),
         ("binary", "counter", "Rotation", False, "", ""),
         ("simulation", "evolve_orbit", "Orbit", False, "", "evolving: R and q follow the back-reaction"),
+        ("simulation", "secondary_potential", "Companion", True, "", "off: isolated primary at rest, no companion potential or sink"),
+        ("binary", "spin_1", "Spin χ₁", 0.0, "", "initial, along +z"),
+        ("binary", "spin_2", "Spin χ₂", 0.0, "", "initial, along +z"),
     ]),
     ("cloud", "Cloud", "cloud", [
         ("atom", "mu", "Coupling α = μM₁", 0.2, "", ""),
@@ -222,6 +234,8 @@ SETUP_SCHEMA = [
     ]),
     ("absorption", "Absorption & boundaries", "target", [
         ("simulation", "absorption", "Absorption", False, "", "s-wave projector at the primary"),
+        ("simulation", "dipole_absorption", "Dipolar absorption", False, "", "l = 1 horizon channels, m = ±1"),
+        ("simulation", "energy_reference", "CN energy reference", True, "", "steps relative to -μ³/2n², so horizon rates do not depend on dt"),
         ("simulation", "epsilon_smear", "Smearing radius ε_smear", 2.0, "M₁", "radius of the absorber around M₁"),
         ("mask", "L_factor", "Mask start", 1.0, "× L", ""),
         ("mask", "W", "Mask width W", 0.1, "", ""),
@@ -276,6 +290,7 @@ def run_setup(cfg, text, r, n_modes):
     n, l, m = (int(get("atom", k, d)) for k, d in (("n", 2), ("l", 1), ("m", 1)))
     counter = bool(get("binary", "counter", False))
     evolving = bool(get("simulation", "evolve_orbit", False))
+    alone = no_companion(cfg)
     absorption = bool(get("simulation", "absorption", False))
     smear = float(get("simulation", "epsilon_smear", 2.0))
     dt = float(get("simulation", "dt", default_dt(cfg)))
@@ -285,7 +300,7 @@ def run_setup(cfg, text, r, n_modes):
     L = float(get("grid", "L", 5000.0))
     l_max = int(get("simulation", "l_max", 5))
     P0 = 2 * math.pi * math.sqrt(R0 ** 3 / (1 + q))
-    if steps <= 0 and periods > 0:
+    if steps <= 0 and periods > 0 and P0 > 0 and dt > 0:
         steps = int(math.floor(periods * P0 / dt))
     r_c = 1 / mu ** 2
     has_mask, has_cap = isinstance(cfg.get("mask"), dict), isinstance(cfg.get("cap"), dict)
@@ -305,7 +320,10 @@ def run_setup(cfg, text, r, n_modes):
             if key == "counter":
                 rw["value"] = "counter-rotating" if counter else "co-rotating"
             elif key == "evolve_orbit":
-                rw["value"] = "evolving" if evolving else "fixed circular"
+                rw["value"] = (("mass and spin evolving" if evolving else "static") if alone
+                               else "evolving" if evolving else "fixed circular")
+            elif key == "secondary_potential":
+                rw["value"] = "off" if alone else "on"
             elif sec == "grid" and key == "r_core" and rw["default"]:
                 rw["value"], rw["hint"] = _fmt(4.0 * n * n / mu ** 2), "default 4n²/μ²; spacing grows beyond it"
             elif sec == "grid" and key == "transition" and rw["default"]:
@@ -318,8 +336,9 @@ def run_setup(cfg, text, r, n_modes):
                 continue
             rows.append(rw)
         if gid == "binary":
-            rows += [derived("Initial period P₀", P0, "M", "2π √(R³/(1+q))"),
-                     derived("Primary offset from COM", q * R0 / (1 + q), "M", "qR/(1+q)")]
+            # R = 0 (a lone hole at the origin) has no orbit and no period.
+            rows += [derived("Initial period P₀", P0, "M", "2π √(R³/(1+q))")] if P0 > 0 else []
+            rows += [derived("Primary offset from COM", q * R0 / (1 + q), "M", "qR/(1+q)")]
         elif gid == "cloud":
             st = {"label": "Initial state (n, l, m)", "value": f"({n}, {l}, {m})", "unit": "", "hint": "",
                   "key": "atom.n, atom.l, atom.m",
@@ -345,8 +364,9 @@ def run_setup(cfg, text, r, n_modes):
             rows += [
                      derived("Modes evolved", n_modes, "", "from modes.txt")]
         elif gid == "time":
-            rows += [derived("Steps per initial orbit", P0 / dt, "", "P₀ / dt"),
-                     derived("Planned duration", steps * dt, "M", f"≈ {steps * dt / P0:.4g} initial orbits"),
+            orbits = P0 > 0 and dt > 0
+            rows += [derived("Steps per initial orbit", P0 / dt, "", "P₀ / dt")] if orbits else []
+            rows += [derived("Planned duration", steps * dt, "M", f"≈ {steps * dt / P0:.4g} initial orbits" if orbits else ""),
                      derived("Snapshot interval", save_every * dt, "M", f"{steps // max(1, save_every)} snapshots")]
         groups.append({"id": gid, "title": title, "icon": icon, "rows": rows})
 
@@ -366,24 +386,26 @@ def run_setup(cfg, text, r, n_modes):
 
     boundary = "mask" if has_mask else "CAP" if has_cap else None
     badges = [
-        {"text": "Counter-rotating" if counter else "Co-rotating", "tone": "accent", "icon": "repeat"},
-        {"text": "Evolving orbit" if evolving else "Fixed orbit", "tone": "accent", "icon": "orbit"},
+        {"text": "No companion" if alone else "Counter-rotating" if counter else "Co-rotating", "tone": "accent", "icon": "repeat"},
+        {"text": ("Evolving mass and spin" if evolving else "Static hole") if alone
+                 else "Evolving orbit" if evolving else "Fixed orbit", "tone": "accent", "icon": "orbit"},
         {"text": f"Absorption · ε_smear = {smear:g}" if absorption else "No absorption",
          "tone": "on" if absorption else "off", "icon": "target"},
         {"text": f"(n, l, m) = ({n}, {l}, {m})", "tone": "plain", "icon": "atom"},
         {"text": f"μ = {mu:g}", "tone": "plain"},
-        {"text": f"q = {q:g}", "tone": "plain"},
-        {"text": f"R₀ = {R0:g} M", "tone": "plain"},
+        *([{"text": f"BH at x = {q / (1 + q) * R0:.4g} M", "tone": "plain"}] if alone else [
+            {"text": f"q = {q:g}", "tone": "plain"},
+            {"text": f"R₀ = {R0:g} M", "tone": "plain"}]),
         {"text": f"l_max = {l_max}", "tone": "plain"},
     ]
     if boundary:
         badges.append({"text": boundary.capitalize() if boundary == "mask" else boundary, "tone": "plain", "icon": "aperture"})
     summary = [
-        ["Rotation", "counter" if counter else "co"],
-        ["Orbit", "evolving" if evolving else "fixed"],
+        ["Companion", "none"] if alone else ["Rotation", "counter" if counter else "co"],
+        ["Hole", "M and χ evolve" if evolving else "static"] if alone else ["Orbit", "evolving" if evolving else "fixed"],
         ["Absorption", f"ε = {smear:g}" if absorption else "off"],
         ["Initial (n, l, m)", f"({n}, {l}, {m})"],
-        ["μ", f"{mu:g}"], ["q₀", f"{q:g}"], ["Modes", str(n_modes)],
+        ["μ", f"{mu:g}"], ["BH at x", f"{q / (1 + q) * R0:.4g}"] if alone else ["q₀", f"{q:g}"], ["Modes", str(n_modes)],
     ]
     return {"groups": groups, "badges": badges, "summary": summary, "toml": text}
 
@@ -485,6 +507,121 @@ def mass_budget(Mc, ionized, B, M_ref, idx):
     return out
 
 
+def Lz_budget_series(modes, norms_raw, t, current, mu, N_ref, LB, J, Lz_rate, torque_rate, idx):
+    """Signed angular-momentum budget along +z, in units of hbar per initial particle
+    (N_ref = initial mass inside r_ex / mu; a pure m = 1 cloud starts at +1).
+
+    With Lz_budget.txt (LB: cumulative ionized, torque, absorbed, pruned, damped,
+    accumulated by the solver on each CN step's midpoint) the terms close to the
+    linear solver's tolerance: cloud + ionized + absorbed + pruned + damped + binary
+    = const, with binary = -torque the L_z the orbit gave the cloud. Older runs
+    fall back on the diagnostics (flux at r_ex integrated by the trapezoid rule,
+    p_bin_inst / Omega_z, Lz_absorbed_rate), which close only to O(dt).
+    J: cumulative spin the holes took through the dipolar channels (None without)."""
+    if not (N_ref > 0):
+        return None
+    m = np.array([mm for _, mm in modes], dtype=float)
+    per_mode = norms_raw * m[:, None]
+    cloud = per_mode.sum(axis=0)
+    if LB is not None:
+        ionized, torque, absorbed, pruned, damped = (LB[:, k] for k in range(5))
+        exact = True
+    else:
+        j = (current * m[:, None]).sum(axis=0) / mu
+        ionized = j[0] * t[0] + np.concatenate(([0.0], np.cumsum(0.5 * (j[1:] + j[:-1]) * np.diff(t))))
+        dt = np.diff(np.concatenate(([0.0], t)))
+        torque = np.cumsum(torque_rate * dt)
+        absorbed = np.cumsum(Lz_rate * dt) + (J if J is not None else 0.0)
+        pruned = damped = np.zeros_like(t)
+        exact = False
+    binary = -torque
+    total = cloud + ionized + absorbed + pruned + damped + binary
+    c = lambda a: clean(np.asarray(a)[idx] / N_ref, 10)
+    out = {
+        "raw": (cloud, ionized, absorbed, binary, pruned + damped),
+        "exact": exact,
+        "cloud": c(cloud), "ionized": c(ionized), "absorbed": c(absorbed),
+        "binary": c(binary) if np.any(torque) else None,
+        "pruned": c(pruned) if np.any(pruned) else None,
+        "damped": c(damped) if np.any(damped) else None,
+        # Kept unrounded: the closure is far below the 10 digits of the terms.
+        "drift": clean((total - total[0])[idx] / N_ref, 3),
+        "L0": float(total[0] / N_ref),
+        "closure": float(np.max(np.abs(total - total[0])) / N_ref),
+        "spin": None, "orbital": None,
+        "modes": [c(per_mode[i]) if m[i] else None for i in range(len(modes))],
+        "by_m": {str(int(v)): c(per_mode[m == v].sum(axis=0)) for v in sorted(set(m)) if v},
+    }
+    if J is not None and np.any(J):
+        out["spin"], out["orbital"] = c(J), c(absorbed - J)
+    return out
+
+
+def orbit_ramp(cfg, t):
+    """The solver's weight of the orbital back-reaction at times t (orbit_ramp_factor):
+    0 through the companion ramp and the hold, then a smooth step over orbit_ramp_periods."""
+    sim, binary = cfg.get("simulation", {}) or {}, cfg.get("binary", {}) or {}
+    q0, R0 = float(binary.get("q", 0.001)), float(binary.get("R", 50.0))
+    P0 = 2 * math.pi / math.sqrt((1 + q0) / R0 ** 3)
+    start = (float(sim.get("ramp_periods", 0.0)) + float(sim.get("orbit_delay_periods", 0.0))) * P0
+    width = float(sim.get("orbit_ramp_periods", 1.0)) * P0
+    x = np.clip((t - start) / width, 0.0, 1.0) if width > 0 else (t >= start).astype(float)
+    return np.where(t < start, 0.0, 3 * x ** 2 - 2 * x ** 3), start
+
+
+def Lz_ledger(cfg, z_raw, t, R_orb, M_1, q_arr, Omega, p_bin, chi0, J_abs, alone, evolving, idx):
+    """Absolute angular momenta along +z in units of M1^2 (G = c = hbar = 1, the units of
+    J = chi M^2 and of sum m N_lm): the reservoirs (cloud, orbit, hole spins) and the
+    transfers between them and to infinity, for the ledger panel.
+
+    The exchange with the orbit is the exact torque of the binary's potential on the
+    cloud (Lz_budget.txt). The orbit as the solver evolves it only feels that torque
+    through the phase-averaged p_bin, weighted by the back-reaction ramp (zero while the
+    companion ramps in and during the hold); it also loses L to gravitational waves and
+    changes with the accreted masses. Those parts are split out so that what the orbit
+    actually did can be compared with what the cloud gave it."""
+    cloud, ionized, absorbed, binary, lost = z_raw
+    sgn = -1.0 if (cfg.get("binary", {}) or {}).get("counter", False) else 1.0
+    q0 = float((cfg.get("binary", {}) or {}).get("q", 0.001))
+    R0 = float((cfg.get("binary", {}) or {}).get("R", 50.0))
+    J = J_abs if J_abs is not None else np.zeros_like(t)
+    J0 = chi0[0] + chi0[1] * q0 ** 2
+    c = lambda a: clean(np.asarray(a)[idx], 10)
+    out = {
+        "cloud0": float(cloud[0] + ionized[0] + absorbed[0] + lost[0] + binary[0]),
+        "cloud": c(cloud), "ionized": c(ionized), "spin": c(J), "accretion": c(absorbed - J),
+        "exchange": c(binary), "lost": c(lost) if np.any(lost) else None,
+        "spins0": J0, "spins": c(J0 + J),
+        "orbit": None, "alone": alone, "evolving": evolving,
+    }
+    if alone:
+        return out
+    L_orb = lambda M1, q, R: sgn * M1 * (q * M1) * np.sqrt(R / (M1 * (1 + q)))
+    out["orbit0"] = float(L_orb(1.0, q0, R0))
+    if not evolving:
+        out["orbit"] = c(np.full_like(t, out["orbit0"]))
+        return out
+    orbit = L_orb(M_1, q_arr, R_orb)
+    # Row k is the end of step k + 1; its orbit update used the previous row's R, masses and p_bin.
+    ramp, start = orbit_ramp(cfg, t)
+    t_prev = np.concatenate(([0.0], t[:-1]))
+    dt = np.clip(t - np.maximum(t_prev, start), 0.0, None)
+    prev = lambda a, first: np.concatenate(([first], a[:-1]))
+    R_p, M1_p, q_p = prev(R_orb, R0), prev(M_1, 1.0), prev(q_arr, q0)
+    Om_p = np.sqrt(M1_p * (1 + q_p) / R_p ** 3)
+    p_gw = 32.0 / 5.0 * M1_p ** 4 * q_p ** 2 * M1_p * (1 + q_p) / R_p ** 5
+    gw = np.cumsum(-sgn * p_gw / Om_p * ramp * dt)
+    feedback = np.cumsum(-prev(p_bin, 0.0) / (sgn * Om_p) * ramp * dt)
+    out.update({
+        "orbit": c(orbit), "gw": c(gw), "feedback": c(feedback),
+        # What the orbit did beyond GW and the cloud's feedback: the accreted masses change
+        # L at fixed R (the solver does not move R for them), plus the explicit update's error.
+        "orbit_other": c(orbit - out["orbit0"] - gw - feedback),
+        "orbit_start": start,
+    })
+    return out
+
+
 def tomaselli_rates(n, l, m, mu, q, R0, counter):
     """Perturbative (mass rate, power) from the tabulated functions; None if absent."""
     out = []
@@ -501,6 +638,55 @@ def tomaselli_rates(n, l, m, mu, q, R0, counter):
 # ----------------------------------------------------------------------------
 # Payloads
 # ----------------------------------------------------------------------------
+
+def no_companion(cfg):
+    """True for a run with no companion: secondary_potential = false, or q = 0,
+    which the solver treats the same way. One hole at rest, no orbit."""
+    sim, binary = cfg.get("simulation", {}) or {}, cfg.get("binary", {}) or {}
+    try:
+        massless = float(binary.get("q", 0.001)) == 0.0
+    except (TypeError, ValueError):
+        massless = False
+    return massless or not bool(sim.get("secondary_potential", True))
+
+
+def at_origin(cfg):
+    """q = 0: the lone primary sits at the origin. Runs from before the solver
+    mapped q = 0 to no companion track a massless companion in R_orb and
+    theta_orb instead, so for q = 0 those columns are not read."""
+    try:
+        return float((cfg.get("binary", {}) or {}).get("q", 0.001)) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def finite_or_none(value):
+    """JSON has no NaN or infinity: such values go out as null."""
+    return value if isinstance(value, (int, float)) and math.isfinite(value) else None
+
+
+def spin_series(Sp, chi0, idx, M_1=None, M_2=None, q0=0.0):
+    """Spins of the two holes and the spin angular momentum they absorbed through the
+    dipolar channels. None unless the run evolves the spins (see data_payload)."""
+    if Sp is None:
+        return None
+    c = lambda a: clean(a, 12)
+    out = {
+        "chi_1": c(Sp[idx, 0]), "chi_2": c(Sp[idx, 1]),
+        # Change from the configured initial spins, taken before rounding.
+        "dchi_1": clean((Sp[:, 0] - chi0[0])[idx]), "dchi_2": clean((Sp[:, 1] - chi0[1])[idx]),
+        "J_1": clean(Sp[idx, 2]), "J_2": clean(Sp[idx, 3]),
+        "chi_0": [float(chi0[0]), float(chi0[1])],
+    }
+    if M_1 is not None:
+        # Spin angular momenta J = chi M^2 (M1^2 units) and their change from t = 0.
+        M_2 = np.zeros_like(M_1) if M_2 is None else M_2
+        J1, J2 = Sp[:, 0] * M_1 ** 2, Sp[:, 1] * M_2 ** 2
+        out.update({"J_1_tot": c(J1[idx]), "J_2_tot": c(J2[idx]),
+                    "dJ_1": clean((J1 - chi0[0])[idx]), "dJ_2": clean((J2 - chi0[1] * q0 ** 2)[idx])})
+    return out
+
+
 
 def clean(a, digits=7):
     a = np.asarray(a, dtype=float)
@@ -521,6 +707,9 @@ def data_payload(run, window_orbits, max_points):
         q0 = cfg["binary"]["q"]
         counter = cfg["binary"].get("counter", False)
         evolving = cfg["simulation"].get("evolve_orbit", False)
+        alone = no_companion(cfg)
+        # Ionization is shown per q^2 of the binary; a lone hole has no q to scale by.
+        scale = 1.0 if alone else q0 ** 2
         n0, l0, m0 = cfg["atom"].get("n", 2), cfg["atom"].get("l", 1), cfg["atom"].get("m", 1)
         modes = run.modes
         initial = (l0, m0)
@@ -531,6 +720,7 @@ def data_payload(run, window_orbits, max_points):
             "modes": [list(md) for md in modes],
             "initial_mode": list(initial),
             "evolving": evolving,
+            "alone": alone,
             "mu": mu, "q0": q0, "n0": n0,
             "save_every": cfg["simulation"].get("save_every"),
             "dt": cfg["simulation"].get("dt", default_dt(cfg)),
@@ -551,6 +741,19 @@ def data_payload(run, window_orbits, max_points):
         S = {k: run.tables[k].array(rows).T for k in MODE_FILES}
         B = run.budget.array()
         B = B[:rows] if B.shape[0] >= rows and B.shape[1] >= 3 else None
+        # The spins only change when the masses do: with dipolar absorption (spins.txt)
+        # on an evolving orbit. On a fixed orbit they stay at their configured values.
+        Sp = run.spins.array() if evolving and run.spins.rows else None
+        if Sp is not None:
+            Sp = Sp[:rows] if Sp.shape[0] >= rows and Sp.shape[1] >= 4 else None
+        chi0 = (float(cfg["binary"].get("spin_1", 0.0)), float(cfg["binary"].get("spin_2", 0.0)))
+        LB = run.Lz_budget.array()
+        LB = LB[:rows] if LB.shape[0] >= rows and LB.ndim == 2 and LB.shape[1] >= 5 else None
+        Sp_all = run.spins.array()
+        J_abs = (Sp_all[:rows, 2] + Sp_all[:rows, 3]
+                 if Sp_all.ndim == 2 and Sp_all.shape[0] >= rows and Sp_all.shape[1] >= 4 else None)
+        Lz_rate = run.Lz_abs.array()
+        Lz_rate = Lz_rate[:rows, 0] if Lz_rate.ndim == 2 and Lz_rate.shape[0] >= rows else np.zeros(rows)
 
     t = T["t"][:, 0]
     R_orb = T["R_orb"][:, 0]
@@ -558,6 +761,8 @@ def data_payload(run, window_orbits, max_points):
     M_1 = T["M_1"][:, 0]
     q_arr = T["q"][:, 0]
     theta = T["theta_orb"][:, 0]
+    if at_origin(cfg):
+        R_orb, theta, Omega = np.zeros_like(R_orb), np.zeros_like(theta), np.zeros_like(Omega)
     energy = T["energy"][:, 0] * mu
     current, T_tr, energy_modes, norms_raw = S["flux"], S["energy_flux"], S["energy_modes"] * mu, S["norms"]
 
@@ -586,6 +791,13 @@ def data_payload(run, window_orbits, max_points):
         M_ref = Mc[0] + ionized[0] + absorbed_1[0] + absorbed_2[0] + pruned_mass[0]
     else:
         M_ref = Mc[0] + ionized[0]
+
+    # The binary's torque on the cloud, p_bin_inst / Omega_z (approximate budget only).
+    Omega_z = -Omega if counter else Omega
+    with np.errstate(divide="ignore", invalid="ignore"):
+        torque_rate = np.where(Omega_z != 0, T["p_bin_inst"][:, 0] / np.where(Omega_z != 0, Omega_z, 1.0), 0.0)
+    if alone:
+        torque_rate = np.zeros_like(t)
 
     P_last = 2 * math.pi / Omega[-1] if Omega[-1] > 0 else float("nan")
 
@@ -617,7 +829,7 @@ def data_payload(run, window_orbits, max_points):
     alpha = mu  # M = 1
     levels = [{"n": n, "E": -mu * alpha ** 2 / (2 * n ** 2)} for n in range(1, 7)]
     eps_b = -mu * alpha ** 2 / (2 * n0 ** 2)
-    theory = tomaselli_rates(n0, l0, m0, mu, q0, R_orb[0], counter)
+    theory = None if alone else tomaselli_rates(n0, l0, m0, mu, q0, R_orb[0], counter)
 
     with np.errstate(divide="ignore", invalid="ignore"):
         e_per_mode = energy_modes / norms
@@ -640,26 +852,36 @@ def data_payload(run, window_orbits, max_points):
             "ever": int(sets.any(axis=0).sum()),
         }
 
+    Lz = Lz_budget_series(modes, norms_raw, t, current, mu, M_ref / mu, LB, J_abs, Lz_rate, torque_rate, idx)
+    if Lz is not None:
+        Lz["ledger"] = Lz_ledger(cfg, Lz.pop("raw"), t, R_orb, M_1, q_arr, Omega, T["p_bin"][:, 0], chi0,
+                                 J_abs, alone, evolving, idx)
+        Lz["N_ref"] = float(M_ref / mu)
+
     series = {
         "t": clean(t[idx], 10),
         "R": clean(R_orb[idx], 9),
         "Omega": clean(Omega[idx], 10),
         "t_over_P": clean(t[idx] / P_last, 9) if math.isfinite(P_last) else None,
-        "mass_flux": [clean(-mass_flux[i][idx] / q0 ** 2) for i in range(len(modes))],
-        "energy_flux": [clean(energy_flux[i][idx] / q0 ** 2) for i in range(len(modes))],
-        "total_mass_flux": clean(-total_mass_flux[idx] / q0 ** 2),
-        "total_energy_flux": clean(total_energy_flux[idx] / q0 ** 2),
+        "mass_flux": [clean(-mass_flux[i][idx] / scale) for i in range(len(modes))],
+        "energy_flux": [clean(energy_flux[i][idx] / scale) for i in range(len(modes))],
+        "total_mass_flux": clean(-total_mass_flux[idx] / scale),
+        "total_energy_flux": clean(total_energy_flux[idx] / scale),
         "p_bin_inst": clean(T["p_bin_inst"][idx, 0]),
         "p_bin": clean(T["p_bin"][idx, 0]),
         "p_out": clean(p_ion[idx]),
         # Quadrupole GW power of the circular binary, (32/5) M1^2 M2^2 (M1 + M2) / R^5,
         # the same formula the solver uses for the GW decay of R.
-        "p_gw": clean((32.0 / 5.0 * M_1 ** 4 * q_arr ** 2 * M_1 * (1 + q_arr) / R_orb ** 5)[idx]),
+        "p_gw": None if alone else clean((32.0 / 5.0 * M_1 ** 4 * q_arr ** 2 * M_1 * (1 + q_arr) / R_orb ** 5)[idx]),
         "M_1": clean(M_1[idx], 10),
-        "M_2": clean((q_arr * M_1)[idx], 10),
+        # A lone hole's mass moves by ~1e-9 of M: send the change, which 10 digits would lose.
+        "dM_1": clean((M_1 - M_1[0])[idx]) if alone else None,
+        "M_2": None if alone else clean((q_arr * M_1)[idx], 10),
         "M_c": clean(Mc[idx], 10),
         "budget": mass_budget(Mc, ionized, B, M_ref, idx),
-        "q": clean(q_arr[idx], 10),
+        "spins": spin_series(Sp, chi0, idx, M_1, None if alone else q_arr * M_1, 0.0 if alone else q0),
+        "Lz": Lz,
+        "q": None if alone else clean(q_arr[idx], 10),
         "norms": [clean(norms[i][idx]) for i in range(len(modes))],
         "fractions": [clean((norms[i] / Mc)[idx]) for i in range(len(modes))],
         "E_s": clean((energy / Mc)[idx]),
@@ -671,16 +893,17 @@ def data_payload(run, window_orbits, max_points):
         "P": P_last, "M_c": float(Mc[-1]), "M_c0": float(Mc[0]),
         "M_1": float(M_1[-1]), "q": float(q_arr[-1]), "theta": float(theta[-1]),
         "p_bin": float(T["p_bin"][-1, 0]),
-        "total_mass_flux": float(-total_mass_flux[-1] / q0 ** 2),
-        "total_energy_flux": float(total_energy_flux[-1] / q0 ** 2),
+        "total_mass_flux": float(-total_mass_flux[-1] / scale),
+        "total_energy_flux": float(total_energy_flux[-1] / scale),
     }
+    latest = {k: finite_or_none(v) for k, v in latest.items()}
 
     return {
         "info": info, "ready": True, "series": series, "latest": latest,
         "selected": selected, "others": others, "radiative": radiative,
         "levels": levels, "eps_b": eps_b, "pruning": pruning,
         "theory": None if theory is None else {
-            "mass": theory[0] / q0 ** 2, "power": -theory[1] / q0 ** 2},
+            "mass": theory[0] / scale, "power": -theory[1] / scale},
     }
 
 
@@ -690,7 +913,7 @@ def scalar_payload(payload):
         return payload
     series = {k: v for k, v in payload["series"].items()
               if not (isinstance(v, list) and v and isinstance(v[0], list))}
-    info = {k: payload["info"].get(k) for k in ("folder", "name", "evolving", "mu", "q0", "n0", "rows", "snapshots", "snapshot_t")}
+    info = {k: payload["info"].get(k) for k in ("folder", "name", "evolving", "alone", "mu", "q0", "n0", "rows", "snapshots", "snapshot_t")}
     pruning = payload.get("pruning")
     return {"ready": True, "info": info, "series": series, "latest": payload["latest"], "radiative": payload["radiative"],
             "pruning": None if pruning is None else {"count": pruning["count"]}}
@@ -814,13 +1037,23 @@ def snapshot_orbit(run, step):
         rows = run.update()
         if 1 <= step <= rows:
             row = step - 1
+            if at_origin(cfg):
+                return float(run.tables["t"].array()[row, 0]), 0.0, 0.0, 0.0
             return tuple(float(run.tables[k].array()[row, 0]) for k in ("t", "R_orb", "theta_orb", "q"))
-    return 0.0, float(cfg["binary"]["R"]), 0.0, float(cfg["binary"]["q"])
+    R, q = float(cfg["binary"]["R"]), float(cfg["binary"]["q"])
+    if no_companion(cfg):  # the lone primary sits where the binary would have it
+        return 0.0, q / (1 + q) * R, 0.0, 0.0
+    return 0.0, R, 0.0, q
 
 
-def black_hole_position(center, R, theta, q):
-    """Equatorial position of the primary (1) or the secondary (2) about the COM."""
-    if center == "primary":
+def black_hole_position(center, R, theta, q, alone=False):
+    """Equatorial position of the primary (1) or the secondary (2) about the COM.
+    Without a companion R_orb holds the primary's distance from the origin."""
+    if alone and center == "primary":
+        d, ang = R, theta
+    elif alone:
+        raise ValueError("This run has no companion")
+    elif center == "primary":
         d, ang = q / (1 + q) * R, theta
     elif center == "secondary":
         d, ang = R / (1 + q) * 1.0, theta + math.pi
@@ -988,7 +1221,7 @@ def centred_modes(run, step, center):
     if hit is not None:
         return hit
     t, R, theta, q = snapshot_orbit(run, step)
-    pos = black_hole_position(center, R, theta, q)
+    pos = black_hole_position(center, R, theta, q, no_companion(run.config))
     d, phase = float(np.hypot(pos[0], pos[1])), math.atan2(pos[1], pos[0])
     # The ball about the hole inside the extraction sphere, where M_c is measured.
     r_ex = min(float(run.config.get("simulation", {}).get("r_ex", 1000.0)), float(run.r[-1]))
@@ -1004,6 +1237,8 @@ def projection_payload(run, center, budget=3.0):
     projected within `budget` seconds are left for the next request."""
     if center not in ("primary", "secondary"):
         raise ValueError(f"Unknown centre {center!r}")
+    if center == "secondary" and no_companion(run.config):
+        raise ValueError("This run has no companion")
     steps = run.snapshot_steps()
     start, done = time.time(), []
     for step in steps:
@@ -1073,9 +1308,13 @@ def _snapshot_payload(run, step, r_plot, n_grid, mode_set, radiative, plane="xy"
             R_s = float(run.tables["R_orb"].array()[row, 0])
             th_s = float(run.tables["theta_orb"].array()[row, 0])
             q_s = float(run.tables["q"].array()[row, 0])
+            if at_origin(cfg):
+                R_s, th_s, q_s = 0.0, 0.0, 0.0
             norms0 = run.tables["norms"].array()[0]
         else:
             t_s, R_s, th_s, q_s = 0.0, cfg["binary"]["R"], 0.0, cfg["binary"]["q"]
+            if no_companion(cfg):  # the lone primary sits where the binary would have it
+                R_s, q_s = q_s / (1 + q_s) * R_s, 0.0
             norms0 = run.tables["norms"].array()[0] if run.tables["norms"].rows else None
 
     ir = pick(len(r), 2500)
@@ -1096,7 +1335,7 @@ def _snapshot_payload(run, step, r_plot, n_grid, mode_set, radiative, plane="xy"
     density = field_density(psi, modes, active_modes(modes, mode_set, radiative), g, plane == "xy").reshape(len(x), len(x))
 
     return {
-        "step": step, "t": t_s, "R": R_s, "theta": th_s, "q": q_s,
+        "step": step, "t": t_s, "R": R_s, "theta": th_s, "q": q_s, "alone": no_companion(cfg),
         "r": clean(r[ir], 8), "radial_f32": f32_b64(radial), "reference": ref,
         "reference_label": f"initial |U_{n0}{l0}|² (pure state)",
         # Row-major float32, base64: a quarter of the JSON size and no parsing.
@@ -1183,7 +1422,8 @@ def run_brief(folder):
                  "M_c": float(get("atom", "M_c", 0.0)), "R0": float(get("binary", "R", 50.0)),
                  "counter": bool(get("binary", "counter", False)),
                  "evolving": bool(get("simulation", "evolve_orbit", False)),
-                 "absorption": bool(get("simulation", "absorption", False))}
+                 "absorption": bool(get("simulation", "absorption", False)),
+                 "alone": no_companion(cfg)}
     except (TypeError, ValueError):
         brief = {}
     _BRIEF_CACHE[folder] = (mtime, brief)
@@ -1212,6 +1452,84 @@ def add_run_to_zip(zf, folder, step, prefix):
             zf.write(snap, f"{prefix}/psi/snapshot_{step:06d}.txt")
             return step
     return None
+
+
+def disk_usage(folder):
+    """Bytes the run folder takes: snapshots (psi/), psi_dt/, diagnostics and the rest."""
+    out = {"total": 0, "snapshots": 0, "snapshot_count": 0, "psi_dt": 0, "diagnostics": 0, "checkpoint": 0, "other": 0}
+    for root, dirs, files in os.walk(folder):
+        sub = os.path.relpath(root, folder).split(os.sep)[0]
+        for name in files:
+            try:
+                size = os.stat(os.path.join(root, name)).st_size
+            except OSError:
+                continue
+            out["total"] += size
+            if sub == "psi":
+                out["snapshots"] += size
+                out["snapshot_count"] += bool(SNAPSHOT_RE.match(name))
+            elif sub == "psi_dt":
+                out["psi_dt"] += size
+            elif sub == "." and name == "checkpoint.bin":
+                out["checkpoint"] += size
+            elif sub == "." and name.endswith(".txt"):
+                out["diagnostics"] += size
+            else:
+                out["other"] += size
+    steps = get_run(folder).snapshot_steps()
+    out["steps"] = steps
+    out["sizes"] = {}
+    for step in steps:
+        try:
+            out["sizes"][step] = os.stat(os.path.join(folder, "psi", f"snapshot_{step:06d}.txt")).st_size
+        except OSError:
+            pass
+    return out
+
+
+def snapshot_plan(steps, mode, every=None, keep=None):
+    """Snapshot steps to delete. The latest snapshot is always kept: it is the one a
+    resumed run restarts from (with checkpoint.bin), and older ones would make the
+    resume drop every diagnostic row after them.
+    mode "thin": keep every `every`-th snapshot (counting from the first) and the latest.
+    mode "keep": keep only the steps in `keep` and the latest."""
+    if not steps:
+        return []
+    if mode == "thin":
+        every = int(every)
+        if every < 2:
+            raise ValueError("thin needs every >= 2")
+        kept = {s for i, s in enumerate(steps) if i % every == 0}
+    elif mode == "keep":
+        kept = {int(k) for k in (keep or [])}
+    else:
+        raise ValueError(f"unknown mode {mode!r}")
+    kept.add(steps[-1])
+    return [s for s in steps if s not in kept]
+
+
+def delete_snapshots(run, delete):
+    """Remove psi/ (and psi_dt/) snapshots of the given steps. Returns (files, bytes) removed."""
+    files = freed = 0
+    present = set(run.snapshot_steps())
+    for step in delete:
+        if step not in present or step == max(present):
+            continue
+        for sub in ("psi", "psi_dt"):
+            path = os.path.join(run.folder, sub, f"snapshot_{int(step):06d}.txt")
+            try:
+                size = os.stat(path).st_size
+                os.remove(path)
+            except FileNotFoundError:
+                continue
+            files += 1
+            freed += size
+    with run.lock:
+        run.snapshot_cache.clear()
+        run.payload_cache.clear()
+        run.volume_cache.clear()
+        run.projection_cache.clear()
+    return files, freed
 
 
 def run_tag(folder):
@@ -1302,6 +1620,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not items:
                     raise ValueError("No runs selected")
                 self.send_zip(lambda out: write_runs_zip(items, out), f"simulations_{len(items)}runs.zip")
+            elif url.path == "/api/snapshots/prune":
+                # {"run": folder, "mode": "thin" | "keep", "every": k, "keep": [steps], "dry_run": bool}
+                run = self.run_from({"run": [body.get("run")]})
+                steps = run.snapshot_steps()
+                delete = snapshot_plan(steps, body.get("mode"), body.get("every"), body.get("keep"))
+                usage = disk_usage(run.folder)
+                plan = {"delete": delete, "keep": [s for s in steps if s not in set(delete)],
+                        "bytes": sum(usage["sizes"].get(s, 0) for s in delete)}
+                if not body.get("dry_run", True):
+                    files, freed = delete_snapshots(run, delete)
+                    plan.update(deleted_files=files, freed=freed, usage=disk_usage(run.folder))
+                self.send(200, json.dumps(plan))
             else:
                 self.send(404, json.dumps({"error": "not found"}))
         except Exception as exc:
@@ -1326,7 +1656,8 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/favicon.ico":
                 self.send(204, b"", "image/x-icon")
             elif url.path == "/api/runs":
-                runs = list_runs(self.root, self.depth)
+                # ?rescan=1 walks the folder again instead of using the cached listing.
+                runs = list_runs(self.root, self.depth, ttl=0.0 if qs.get("rescan", ["0"])[0] == "1" else 10.0)
                 self.send(200, json.dumps([dict(zip(("group", "name"), run_label(self.root_real, p)), folder=p,
                                                 params=run_brief(p)) for p in runs]))
             elif url.path == "/api/data":
@@ -1352,6 +1683,8 @@ class Handler(BaseHTTPRequestHandler):
                 n = max(24, min(128, int(qs.get("n", ["64"])[0])))
                 radiative = json.loads(qs.get("radiative", ["[]"])[0])
                 self.send(200, json.dumps(volume_payload(run, step, r_plot, n, qs.get("set", ["all"])[0], radiative)))
+            elif url.path == "/api/disk":
+                self.send(200, json.dumps(disk_usage(self.run_from(qs).folder)))
             elif url.path == "/api/projection":
                 run = self.run_from(qs)
                 self.send(200, json.dumps(projection_payload(run, qs.get("center", ["primary"])[0])))

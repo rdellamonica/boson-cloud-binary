@@ -27,6 +27,12 @@ constexpr char checkpoint_magic[8] = {'G', 'M', 'C', 'K', 'P', 'T', '0', '1'};
 constexpr char active_set_magic[8] = {'A', 'C', 'T', 'I', 'V', 'E', '0', '1'};
 // Optional trailer after it with the cumulative absorbed masses.
 constexpr char budget_magic[8] = {'B', 'U', 'D', 'G', 'E', 'T', '0', '1'};
+// Optional trailer after it with the spins and the cumulative absorbed spins.
+constexpr char spin_magic[8] = {'S', 'P', 'I', 'N', '0', '0', '0', '1'};
+// Cumulative L_z budget terms (ionized, torque, absorbed, pruned, damped).
+constexpr char Lz_budget_magic[8] = {'L', 'Z', 'B', 'U', 'D', 'G', '0', '1'};
+// Per-mode CAP energy estimates (written only with a per-mode CAP).
+constexpr char cap_energy_magic[8] = {'C', 'A', 'P', 'M', 'O', 'D', 'E', '1'};
 
 template <class T>
 void write_pod(std::ostream &out, const T &value)
@@ -175,6 +181,21 @@ void CrankNicolsonModes::save_checkpoint(int step_id) const
         out.write(budget_magic, sizeof(budget_magic));
         write_pod(out, absorbed_mass_1);
         write_pod(out, absorbed_mass_2);
+        out.write(spin_magic, sizeof(spin_magic));
+        for (const double value : {chi1, chi2, absorbed_J_1, absorbed_J_2})
+            write_pod(out, value);
+        out.write(Lz_budget_magic, sizeof(Lz_budget_magic));
+        for (const double value : {Lz_budget.ionized, Lz_budget.torque, Lz_budget.absorbed, Lz_budget.pruned,
+                                   Lz_budget.damped})
+            write_pod(out, value);
+        if (cap_per_mode)
+        {
+            out.write(cap_energy_magic, sizeof(cap_energy_magic));
+            write_pod(out, count);
+            out.write(reinterpret_cast<const char *>(cap_energy.data()),
+                      static_cast<std::streamsize>(n_modes * sizeof(double)));
+            out.write(cap_has_energy.data(), static_cast<std::streamsize>(n_modes));
+        }
 
         if (!out)
         {
@@ -218,7 +239,7 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
     if (!in)
         return false;
 
-    RollingPhaseAverage average{orbits_average};
+    RollingPhaseAverage average{orbits_average, power_window};
     try
     {
         average.load(in);
@@ -256,6 +277,50 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
             has_budget = static_cast<bool>(in);
         }
     }
+    double spins[4] = {0.0, 0.0, 0.0, 0.0};
+    bool has_spins = false;
+    if (in && has_budget)
+    {
+        char spin[sizeof(spin_magic)];
+        in.read(spin, sizeof(spin));
+        if (in && std::memcmp(spin, spin_magic, sizeof(spin)) == 0)
+        {
+            for (double &value : spins)
+                read_pod(in, value);
+            has_spins = static_cast<bool>(in);
+        }
+    }
+    double Lz_terms[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+    bool has_Lz_budget = false;
+    if (in && has_spins)
+    {
+        char tag[sizeof(Lz_budget_magic)];
+        in.read(tag, sizeof(tag));
+        if (in && std::memcmp(tag, Lz_budget_magic, sizeof(tag)) == 0)
+        {
+            for (double &value : Lz_terms)
+                read_pod(in, value);
+            has_Lz_budget = static_cast<bool>(in);
+        }
+    }
+    Eigen::VectorXd cap_E;
+    std::vector<char> cap_has;
+    if (in && has_Lz_budget && cap_per_mode)
+    {
+        char tag[sizeof(cap_energy_magic)];
+        std::int32_t modes_stored = -1;
+        in.read(tag, sizeof(tag));
+        read_pod(in, modes_stored);
+        if (in && std::memcmp(tag, cap_energy_magic, sizeof(tag)) == 0 && modes_stored == n_modes)
+        {
+            cap_E.resize(n_modes);
+            cap_has.resize(static_cast<std::size_t>(n_modes));
+            in.read(reinterpret_cast<char *>(cap_E.data()), static_cast<std::streamsize>(n_modes * sizeof(double)));
+            in.read(cap_has.data(), static_cast<std::streamsize>(n_modes));
+            if (!in)
+                cap_E.resize(0);
+        }
+    }
 
     t_i = values[0];
     theta = values[1];
@@ -279,6 +344,23 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
     {
         absorbed_mass_1 = absorbed[0];
         absorbed_mass_2 = absorbed[1];
+    }
+    checkpoint_has_spins = has_spins;
+    if (has_spins)
+    {
+        chi1 = spins[0];
+        chi2 = spins[1];
+        absorbed_J_1 = spins[2];
+        absorbed_J_2 = spins[3];
+    }
+    checkpoint_has_Lz_budget = has_Lz_budget;
+    if (has_Lz_budget)
+        Lz_budget = LzBudget{Lz_terms[0], Lz_terms[1], Lz_terms[2], Lz_terms[3], Lz_terms[4]};
+    checkpoint_has_cap_energy = cap_E.size() == n_modes;
+    if (checkpoint_has_cap_energy)
+    {
+        cap_energy = cap_E;
+        cap_has_energy = cap_has;
     }
     return true;
 }
@@ -329,6 +411,12 @@ void CrankNicolsonModes::reconstruct_state_from_diagnostics(int step_id)
     M2 = q * M1;
     R1 = M2 / (M1 + M2) * R;
     R2 = M1 / (M1 + M2) * R;
+    if (isolated_black_hole)
+    {
+        // R_orb.txt holds the hole's distance from the origin.
+        R1 = R;
+        R2 = 0.0;
+    }
     Omega = Omegas[last];
     p_bin = p_bins[last];
 
@@ -432,6 +520,16 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
         complete_rows = std::min(complete_rows, budget_ends.size());
     }
 
+    // spins.txt is written by runs with dipolar absorption.
+    const std::string spins_path = folder + "/spins.txt";
+    const bool has_spins_file = fs::exists(spins_path);
+    std::vector<std::uintmax_t> spins_ends;
+    if (has_spins_file)
+    {
+        spins_ends = line_ends(spins_path);
+        complete_rows = std::min(complete_rows, spins_ends.size());
+    }
+
     const std::string Lz_path = folder + "/Lz_absorbed_rate.txt";
     const bool has_Lz_file = fs::exists(Lz_path);
     std::vector<std::uintmax_t> Lz_ends;
@@ -439,6 +537,27 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     {
         Lz_ends = line_ends(Lz_path);
         complete_rows = std::min(complete_rows, Lz_ends.size());
+    }
+
+    // Lz_budget.txt is absent in runs written before it existed; those resume without it.
+    const std::string Lz_budget_path = folder + "/Lz_budget.txt";
+    const bool has_Lz_budget_file = fs::exists(Lz_budget_path);
+    std::vector<std::uintmax_t> Lz_budget_ends;
+    if (has_Lz_budget_file)
+    {
+        Lz_budget_ends = line_ends(Lz_budget_path);
+        complete_rows = std::min(complete_rows, Lz_budget_ends.size());
+    }
+
+    // cap_modes.txt exists only in runs with a per-mode CAP.
+    const std::string cap_modes_path = folder + "/cap_modes.txt";
+    const bool has_cap_modes_file = fs::exists(cap_modes_path);
+    std::vector<std::uintmax_t> cap_modes_ends;
+    if (has_cap_modes_file)
+    {
+        cap_modes_ends = line_ends(cap_modes_path);
+        if (cap_per_mode)
+            complete_rows = std::min(complete_rows, cap_modes_ends.size());
     }
 
     // Latest snapshot that is complete and has all of its diagnostic rows.
@@ -474,6 +593,12 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
 
     checkpoint_active_modes.clear();
     checkpoint_has_budget = false;
+    checkpoint_has_spins = false;
+    checkpoint_has_Lz_budget = false;
+    checkpoint_has_cap_energy = false;
+    Lz_budget = LzBudget{};
+    // Spin angular momenta of the configured initial state (the masses are still the initial ones).
+    const double initial_J1 = chi1 * M1 * M1, initial_J2 = chi2 * M2 * M2;
     if (load_checkpoint(start))
     {
         std::cout << "Exact state restored from checkpoint.bin." << std::endl;
@@ -514,6 +639,91 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
         fs::resize_file(budget_path, start == 0 ? 0 : budget_ends[static_cast<std::size_t>(start - 1)]);
         mass_budget_file.open(budget_path, std::ios::out | std::ios::app);
     }
+    if (!checkpoint_has_spins)
+    {
+        // Without stored spins: J_a is unchanged unless spins.txt records dipolar transfers.
+        absorbed_J_1 = absorbed_J_2 = 0.0;
+        bool from_file = false;
+        if (has_spins_file && start > 0)
+        {
+            std::ifstream in(spins_path);
+            std::string line;
+            for (int row = 0; row < start && std::getline(in, line); ++row)
+                if (row == start - 1)
+                    from_file = static_cast<bool>(std::istringstream(line) >> chi1 >> chi2 >> absorbed_J_1 >> absorbed_J_2);
+        }
+        if (!from_file)
+        {
+            chi1 = initial_J1 / (M1 * M1);
+            if (M2 > 0.0)
+                chi2 = initial_J2 / (M2 * M2);
+        }
+    }
+    if (has_spins_file)
+    {
+        fs::resize_file(spins_path, start == 0 ? 0 : spins_ends[static_cast<std::size_t>(start - 1)]);
+        spins_file.open(spins_path, std::ios::out | std::ios::app);
+    }
+    else if (dipole_absorption)
+    {
+        // Dipolar absorption switched on for a run written without it: pad the kept rows.
+        spins_file.open(spins_path, std::ios::out);
+        for (int row = 0; row < start; ++row)
+            write_quantity_line_modes({chi1, chi2, 0.0, 0.0}, spins_file);
+    }
+    if (has_Lz_budget_file)
+    {
+        // Without stored terms, take them from the last kept row (12 significant digits).
+        if (!checkpoint_has_Lz_budget && start > 0)
+        {
+            std::ifstream in(Lz_budget_path);
+            std::string line;
+            for (int row = 0; row < start && std::getline(in, line); ++row)
+                if (row == start - 1)
+                    std::istringstream(line) >> Lz_budget.ionized >> Lz_budget.torque >> Lz_budget.absorbed >>
+                        Lz_budget.pruned >> Lz_budget.damped;
+        }
+        fs::resize_file(Lz_budget_path, start == 0 ? 0 : Lz_budget_ends[static_cast<std::size_t>(start - 1)]);
+        Lz_budget_file.open(Lz_budget_path, std::ios::out | std::ios::app);
+    }
+    if (cap_per_mode)
+    {
+        if (has_cap_modes_file && static_cast<std::size_t>(start) <= cap_modes_ends.size())
+        {
+            // Without stored estimates, take them from the last kept row (0 = no estimate).
+            if (!checkpoint_has_cap_energy && start > 0)
+            {
+                std::ifstream in(cap_modes_path);
+                std::string line;
+                for (int row = 0; row < start && std::getline(in, line); ++row)
+                    if (row == start - 1)
+                    {
+                        std::istringstream values(line);
+                        for (int j = 0; j < n_modes; ++j)
+                        {
+                            double E = 0.0;
+                            if (values >> E && E != 0.0)
+                            {
+                                cap_energy[j] = E;
+                                cap_has_energy[j] = 1;
+                            }
+                        }
+                    }
+            }
+            fs::resize_file(cap_modes_path, start == 0 ? 0 : cap_modes_ends[static_cast<std::size_t>(start - 1)]);
+            cap_modes_file.open(cap_modes_path, std::ios::out | std::ios::app);
+        }
+        else
+        {
+            // Per-mode CAP switched on for a run written without it: pad the kept rows.
+            cap_modes_file.open(cap_modes_path, std::ios::out);
+            const std::vector<double> zeros(2 * static_cast<std::size_t>(n_modes), 0.0);
+            for (int row = 0; row < start; ++row)
+                write_quantity_line_modes(zeros, cap_modes_file);
+        }
+    }
+    else if (has_cap_modes_file && static_cast<std::size_t>(start) <= cap_modes_ends.size())
+        fs::resize_file(cap_modes_path, start == 0 ? 0 : cap_modes_ends[static_cast<std::size_t>(start - 1)]);
     if (has_Lz_file)
     {
         fs::resize_file(Lz_path, start == 0 ? 0 : Lz_ends[static_cast<std::size_t>(start - 1)]);

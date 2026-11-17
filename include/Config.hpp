@@ -40,12 +40,20 @@ struct Config
     int save_every;                     ///< Snapshot interval in steps (default 50).
     double ramp_periods;                ///< Startup ramp length in initial periods (default 0).
     bool ramp_secondary_potential = true; ///< Ramp the companion's potential with Omega.
+    /// false removes the companion: the primary stays at rest at its initial position and
+    /// only its own potential and horizon act on the cloud (default true).
+    bool secondary_potential = true;
     double orbit_delay_periods = 0.0;   ///< Hold with the companion fully on and the orbit fixed, after the startup ramp, in initial periods.
     double orbit_ramp_periods = 1.0;    ///< Orbital back-reaction switch-on after that hold, in initial periods (0: at once).
     double steps_per_period = 50.0;     ///< Post-ramp timestep is P / steps_per_period.
     double power_average_orbits = 2.0;  ///< Orbits in the rolling average of the binary power.
+    std::string power_average_window = "boxcar"; ///< Shape of that window: "boxcar" or "hann".
     bool evolve_orbit;                  ///< Feed the cloud power and accretion back on the orbit (default false).
     bool absorption;                    ///< Enable the black-hole absorbers (default false).
+    /// Take the CN steps relative to the initial level's energy -mu^3 / (2 n^2), so that
+    /// horizon growth and decay rates do not depend on dt (default true).
+    bool energy_reference = true;
+    bool dipole_absorption = false;     ///< Add the dipolar (l = 1) horizon channels to the absorbers (default false).
     int l_max;                          ///< Largest retained multipole (default 5).
     int num_steps;                      ///< Number of time samples; 0 uses num_periods.
     double epsilon;                     ///< Offset of the first radial node (default 0.001).
@@ -58,6 +66,8 @@ struct Config
     double q;     ///< Mass ratio M2/M1 (default 0.001).
     double R;     ///< Initial separation (default 50).
     bool counter; ///< Counter-rotating orbit (default false).
+    double spin_1 = 0.0; ///< Initial dimensionless spin of the primary along +z (default 0; atom.a stays informational).
+    double spin_2 = 0.0; ///< Initial dimensionless spin of the companion along +z (default 0).
     /// @}
 
     /// @name [atom]
@@ -89,7 +99,12 @@ struct Config
     bool cap = false;
     double cap_L_factor; ///< Fraction of L where the CAP starts (default 1).
     double cap_W;        ///< Strength (default 0.1).
-    int cap_n;           ///< Power of the profile (default 3).
+    int cap_n;           ///< Power of the profile (default 3; 6 with per_mode).
+    /// Tune each mode's strength to its frequency instead of using W (default false).
+    bool cap_per_mode = false;
+    double cap_reflection = 1e-10; ///< Per-mode target amplitude reflection (default 1e-10).
+    int cap_tune_steps = 20;      ///< Per-mode: steps of the running energy average (default 20).
+    double cap_k_min = 0.0;       ///< Per-mode: smallest wavenumber (default 0 = 1 / layer width).
     /// @}
 
     /// @name [pruning]: evolve only the modes that matter (see CrankNicolsonModes)
@@ -133,6 +148,7 @@ inline Config load_config(const std::string &filename)
     c.r_ex = tbl["simulation"]["r_ex"].value_or(1000.0);
     c.ramp_periods = tbl["simulation"]["ramp_periods"].value_or(0.0);
     c.ramp_secondary_potential = tbl["simulation"]["ramp_secondary_potential"].value_or(true);
+    c.secondary_potential = tbl["simulation"]["secondary_potential"].value_or(true);
     c.orbit_delay_periods = tbl["simulation"]["orbit_delay_periods"].value_or(0.0);
     if (!(c.orbit_delay_periods >= 0.0))
         throw std::invalid_argument("simulation.orbit_delay_periods must be nonnegative");
@@ -145,6 +161,9 @@ inline Config load_config(const std::string &filename)
     c.power_average_orbits = tbl["simulation"]["power_average_orbits"].value_or(2.0);
     if (!(c.power_average_orbits > 0.0))
         throw std::invalid_argument("simulation.power_average_orbits must be positive");
+    c.power_average_window = tbl["simulation"]["power_average_window"].value_or(std::string("boxcar"));
+    if (c.power_average_window != "boxcar" && c.power_average_window != "hann")
+        throw std::invalid_argument("simulation.power_average_window must be \"boxcar\" or \"hann\"");
     c.epsilon = tbl["simulation"]["epsilon"].value_or(0.001);
     c.epsilon_smear = tbl["simulation"]["epsilon_smear"].value_or(2.0);
     c.evolve_orbit = tbl["simulation"]["evolve_orbit"].value_or(false);
@@ -152,12 +171,34 @@ inline Config load_config(const std::string &filename)
 
     c.q = tbl["binary"]["q"].value_or(0.001);
     c.R = tbl["binary"]["R"].value_or(50.0);
+    if (!(c.q >= 0.0))
+        throw std::invalid_argument("binary.q must be nonnegative");
+    // A massless companion is no companion: q = 0 runs as secondary_potential = false,
+    // with the primary at rest at the origin.
+    if (c.q == 0.0)
+        c.secondary_potential = false;
     c.counter = tbl["binary"]["counter"].value_or(false);
+    c.dipole_absorption = tbl["simulation"]["dipole_absorption"].value_or(false);
+    c.energy_reference = tbl["simulation"]["energy_reference"].value_or(true);
+    if (c.dipole_absorption && !c.absorption)
+        throw std::invalid_argument("simulation.dipole_absorption needs simulation.absorption = true");
+    if (c.dipole_absorption && c.l_max < 1)
+        throw std::invalid_argument("simulation.dipole_absorption needs simulation.l_max >= 1");
+    // The spins point along +z of the simulation frame whatever the sense of the orbit.
+    c.spin_1 = tbl["binary"]["spin_1"].value_or(0.0);
+    c.spin_2 = tbl["binary"]["spin_2"].value_or(0.0);
+    if (!(std::abs(c.spin_1) <= 1.0 && std::abs(c.spin_2) <= 1.0))
+        throw std::invalid_argument("binary.spin_1 and binary.spin_2 must lie in [-1, 1]");
 
     // Without an explicit dt, start with the fraction of the initial period
     // P0 = 2 pi sqrt(R^3 / (1 + q)) that the orbital evolution uses.
     c.dt_from_period = !dt;
     c.dt = dt ? *dt : 2.0 * M_PI * std::sqrt(std::pow(c.R, 3) / (1.0 + c.q)) / c.steps_per_period;
+    // R = 0 (a lone hole at the origin) has no period to derive dt or the run length from.
+    if (!(c.dt > 0.0))
+        throw std::invalid_argument("simulation.dt must be positive; set it explicitly when binary.R = 0");
+    if (c.num_steps <= 0 && !(c.R > 0.0))
+        throw std::invalid_argument("simulation.num_periods needs binary.R > 0; set simulation.num_steps instead");
 
     c.mu = tbl["atom"]["mu"].value_or(0.2);
     c.n = tbl["atom"]["n"].value_or(2);
@@ -196,7 +237,13 @@ inline Config load_config(const std::string &filename)
         c.cap = true;
         c.cap_L_factor = tbl["cap"]["L_factor"].value_or(1.0);
         c.cap_W = tbl["cap"]["W"].value_or(0.1);
-        c.cap_n = tbl["cap"]["n"].value_or(3);
+        c.cap_per_mode = tbl["cap"]["per_mode"].value_or(false);
+        // The per-mode CAP defaults to a smoother onset: the reflection at the start of the
+        // layer, not its strength, limits it once the strength is tuned (n = 3 leaves ~1e-10).
+        c.cap_n = tbl["cap"]["n"].value_or(c.cap_per_mode ? 6 : 3);
+        c.cap_reflection = tbl["cap"]["reflection"].value_or(1e-10);
+        c.cap_tune_steps = tbl["cap"]["tune_steps"].value_or(20);
+        c.cap_k_min = tbl["cap"]["k_min"].value_or(0.0);
     }
 
     if (tbl.contains("pruning") && tbl["pruning"].is_table())

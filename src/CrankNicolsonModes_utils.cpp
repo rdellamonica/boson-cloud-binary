@@ -131,7 +131,7 @@ void CrankNicolsonModes::flush_diagnostics()
     for (auto* stream : {&flux_file, &energy_flux_file, &energy_file,
                          &norms_file, &time_file, &energy_modes_file, &R_file,
                          &theta_file, &Omega_file, &p_bin_file, &p_bin_inst_file,
-                         &d_V_bin_dt_file, &M_1_file, &q_file, &mass_budget_file, &Lz_abs_file})
+                         &d_V_bin_dt_file, &M_1_file, &q_file, &mass_budget_file, &Lz_abs_file, &spins_file, &Lz_budget_file, &cap_modes_file})
         if (stream->is_open())
             stream->flush();
 }

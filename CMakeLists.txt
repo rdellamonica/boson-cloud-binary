@@ -125,6 +125,7 @@ if(BUILD_TESTING)
     add_solver_test(parallel_correctness LABELS regression)
     add_solver_test(spherical_absorption LABELS regression)
     add_solver_test(swave_projector LABELS regression)
+    add_solver_test(dipole_absorption LABELS regression)
     add_solver_test(isolated_bh LABELS regression)
     add_solver_test(orbital_ramp LABELS regression)
     add_solver_test(fixed_orbit_absorption LABELS regression)
@@ -132,6 +133,7 @@ if(BUILD_TESTING)
 
     # Physical behaviour and conservation laws
     add_solver_test(physics LABELS physics)
+    add_solver_test(cap_per_mode LABELS physics)
     add_solver_test(pruning LABELS physics)
     add_solver_test(radial_grid LABELS physics)
 

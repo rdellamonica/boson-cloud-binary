@@ -133,6 +133,38 @@ def test_gaussian(work):
     assert abs(r_rms - 10.0 * math.sqrt(1.5)) < 1e-6, f"width is wrong: rms radius {r_rms}"
 
 
+def test_seed(work):
+    # Raw random seed field (--unfiltered): every evolved mode filled, normalised, regular at
+    # the origin, inside the envelope, reproducible with --seed, --zero honoured.
+    values = write_config(os.path.join(work, "config.toml"), N=401, L=200.0, mu=0.4, l_max=4, r_ex=160.0)
+    args = ["--config", "config.toml", "--seed", "7", "--envelope", "60", "--correlation", "1.5", "--unfiltered"]
+    run_script("get_initial_state_seed.py", args + ["--output", "a.bin"], work)
+    run_script("get_initial_state_seed.py", args + ["--output", "b.bin"], work)
+    run_script("get_initial_state_seed.py", args + ["--output", "c.bin", "--zero", "1,1", "--l-power", "2"], work)
+    a, nr = read_modesbin(os.path.join(work, "a.bin"))
+    b, _ = read_modesbin(os.path.join(work, "b.bin"))
+    c, _ = read_modesbin(os.path.join(work, "c.bin"))
+    r = np.linspace(0.0, values["L"], values["N"])
+    expected = {(l, m) for l in range(values["l_max"] + 1) for m in range(-l, l + 1) if (l - m) % 2 == 0}
+    assert set(a) == expected, f"modes {sorted(a)}"
+    assert abs(norm(a, r) - 1.0) < 1e-12 and abs(norm(c, r) - 1.0) < 1e-12, "seed is not normalised"
+    assert all(np.array_equal(a[k], b[k]) for k in a), "--seed does not reproduce the field"
+    masses = {k: np.trapezoid(np.abs(p) ** 2, x=r) for k, p in a.items()}
+    assert max(masses.values()) / min(masses.values()) < 1.0 + 1e-9, "modes do not carry equal mass"
+    assert not c[(1, 1)].any(), "--zero 1,1 left the 211 mode populated"
+    c_mass = {k: np.trapezoid(np.abs(p) ** 2, x=r) for k, p in c.items() if k != (1, 1)}
+    assert abs(c_mass[(0, 0)] / c_mass[(4, 0)] - 25.0) < 1e-6, "--l-power does not weight the modes"
+    for (l, m), p in a.items():
+        assert p[0] == 0 and np.all(np.isfinite(p)), f"mode {(l, m)} is not regular"
+        assert np.max(np.abs(p[r > 120])) < 1e-6 * np.max(np.abs(p)), f"mode {(l, m)} leaks past the envelope"
+        assert np.abs(p[1:6]).max() < np.abs(p).max(), f"mode {(l, m)} peaks at the origin"
+    # The field fluctuates: many sign changes, independent between modes.
+    assert np.sum(np.diff(np.sign(a[(1, 1)].real[r < 60])) != 0) > 5, "field does not fluctuate"
+    unit = [p / np.linalg.norm(p) for p in a.values()]
+    overlaps = [abs(np.vdot(unit[i], unit[j])) for i in range(len(unit)) for j in range(i)]
+    assert np.mean(overlaps) < 0.3, f"modes are correlated: mean overlap {np.mean(overlaps)}"
+
+
 def test_gaussian_rejects_bad_sigma(work):
     write_config(os.path.join(work, "config.toml"))
     command = [sys.executable, os.path.join(SCRIPTS, "get_initial_state_gaussian.py"),
@@ -145,6 +177,58 @@ def hydrogenic_1s(r, mu):
     """r R_10(r) for a hydrogenic atom of a mass-1 hole: a0 = 1 / mu^2."""
     a0 = 1.0 / mu ** 2
     return 2.0 * r * np.exp(-r / a0) / a0 ** 1.5
+
+
+def seed_levels(r, mu, l, R1=0.0):
+    """Every level of the solver's radial Hamiltonian for l on a uniform grid (dense, independent)."""
+    h = r[1] - r[0]
+    inner = r[1:-1]
+    H = (np.diag(1.0 / (mu * h * h) + l * (l + 1) / (2 * mu * inner ** 2) - mu / np.maximum(inner, R1))
+         - np.diag(np.full(inner.size - 1, 0.5 / (mu * h * h)), 1)
+         - np.diag(np.full(inner.size - 1, 0.5 / (mu * h * h)), -1))
+    energies, vectors = np.linalg.eigh(H)
+    return energies, vectors / math.sqrt(h)  # orthonormal in the node weights h
+
+
+def test_seed_bound(work):
+    # Default seed: projected on the bound levels n <= n_max of the central hole. No weight
+    # on unbound or higher levels, every mode with a level filled, still random.
+    values = write_config(os.path.join(work, "config.toml"), N=801, L=400.0, q=0.0, mu=0.4, l_max=3, r_ex=300.0)
+    args = ["--config", "config.toml", "--envelope", "60", "--correlation", "1.5"]
+    out = run_script("get_initial_state_seed.py", args + ["--seed", "3", "--n-max", "3", "--output", "a.bin"], work)
+    run_script("get_initial_state_seed.py", args + ["--seed", "4", "--n-max", "3", "--output", "b.bin"], work)
+    a, _ = read_modesbin(os.path.join(work, "a.bin"))
+    b, _ = read_modesbin(os.path.join(work, "b.bin"))
+    r = np.linspace(0.0, values["L"], values["N"])
+    mu, h = values["mu"], r[1] - r[0]
+    assert "unbound part 0" in out, out
+    assert abs(norm(a, r) - 1.0) < 1e-12, "bound seed is not normalised"
+    for (l, m), p in a.items():
+        if l >= 3:
+            assert not p.any(), f"mode {(l, m)} has no level with n <= 3 but is populated"
+            continue
+        assert p.any(), f"mode {(l, m)} is empty"
+        energies, phi = seed_levels(r, mu, l)
+        c = phi.T @ (h * p[1:-1])
+        kept = 3 - l  # n = l + 1 .. 3
+        assert np.all(energies[:kept] < 0), "kept levels are not bound"
+        # Hydrogenic energies -mu^3 / (2 n^2) to the grid's accuracy.
+        for k in range(kept):
+            n = l + 1 + k
+            assert abs(energies[k] / (-mu ** 3 / (2 * n * n)) - 1) < 1e-2, f"level ({n}, {l}) energy"
+        outside = float(np.sum(np.abs(c[kept:]) ** 2)) / float(np.sum(np.abs(c) ** 2))
+        assert outside < 1e-24, f"mode {(l, m)} has {outside:.3g} outside the bound levels n <= 3"
+        assert np.min(np.abs(c[:kept])) > 1e-6 * np.max(np.abs(c[:kept])), f"mode {(l, m)} misses a level"
+    # Random: another seed gives other level amplitudes and phases.
+    ratios = [np.vdot(a[k], b[k]) / np.sqrt(np.vdot(a[k], a[k]).real * np.vdot(b[k], b[k]).real)
+              for k in a if a[k].any() and k[0] < 2]
+    assert np.mean(np.abs(ratios)) < 0.95, "different seeds give the same bound state"
+    # By default, n_max is the highest n whose s level stays inside r_ex.
+    out = run_script("get_initial_state_seed.py", args + ["--seed", "3", "--output", "c.bin"], work)
+    n_default = int(out.split("bound levels n <= ")[1].split()[0])
+    energies, phi = seed_levels(r, mu, 0)
+    tail = np.sum(h * np.abs(phi[r[1:-1] > values["r_ex"]]) ** 2, axis=0)
+    assert tail[n_default - 1] < 1e-6 <= tail[n_default], f"default n_max {n_default} does not match r_ex"
 
 
 def test_com_fast_primary(work):
@@ -238,7 +322,7 @@ def main():
     parser.add_argument("--solver", help="GravitationalMolecule executable, for the end-to-end check")
     args = parser.parse_args()
 
-    tests = [test_gaussian, test_gaussian_rejects_bad_sigma, test_com_fast_primary,
+    tests = [test_gaussian, test_gaussian_rejects_bad_sigma, test_seed, test_seed_bound, test_com_fast_primary,
              test_com_fast_secondary_is_mirrored]
     failures = 0
     for test in tests:

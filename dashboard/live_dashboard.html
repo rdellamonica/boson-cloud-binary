@@ -57,42 +57,52 @@ window.chartsReady = new Promise((resolve, reject) => {
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --bg: #141414; --surface-1: #1e1e1e; --surface-2: #262626; --surface-3: #323232; --raised: #383838;
-    --border: #333333; --border-strong: #474747; --grid: #2a2a2a;
-    --text-primary: #ededed; --text-secondary: #bdbdbd; --text-muted: #888888;
-    --accent: #f07a3c; --accent-soft: rgba(240, 122, 60, .16);
-    --good: #8fb27a; --warn: #e0a640;
-    --s1: #6f9bc8; --s2: #f07a3c; --s3: #8fb06a; --s4: #e8b24a;
-    --s5: #e0697a; --s6: #b48a66; --s7: #a497d4; --s8: #5fb3ab;
-    --ref: #c491c0;
-    --tip-bg: #efefef; --tip-text: #222222; --tip-muted: #666666;
-    --h0: #1b1b1b; --h1: #5a2a16; --h2: #b4491f; --h3: #ee8a45; --h4: #fbe2bd;
-    --shadow-sm: 0 1px 0 rgba(0, 0, 0, .2);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, .35);
-    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+    /* Deep teal-black with mint, gold and violet accents. */
+    --bg: #091211; --surface-1: #0e1a19; --surface-2: #12201f; --surface-3: #1a2c2a; --raised: #1c302e;
+    --border: #1d3230; --border-strong: #2b4a46; --grid: #152624;
+    --text-primary: #e4eeec; --text-secondary: #a6bab6; --text-muted: #6c8580;
+    --accent: #4fd1bf; --accent-soft: rgba(79, 209, 191, .14);
+    --good: #5fc79c; --warn: #d9a85f;
+    --s1: #4fc7b7; --s2: #d9a85f; --s3: #9a83dc; --s4: #e05a7e;
+    --s5: #6fa8dc; --s6: #a3c38a; --s7: #c7a1e3; --s8: #8fa6a6;
+    --ref: #e6c88f;
+    --tip-bg: #e4eeec; --tip-text: #0e1a19; --tip-muted: #4f6662;
+    --h0: #0b1615; --h1: #15403b; --h2: #2b8577; --h3: #8fd6c3; --h4: #f2e4bf;
+    --shadow-sm: 0 1px 0 rgba(0, 0, 0, .3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, .45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .65), 0 0 0 1px rgba(79, 209, 191, .08);
+    --bg-glow: radial-gradient(1100px 520px at 75% -8%, rgba(79, 209, 191, .07), transparent 62%),
+               radial-gradient(800px 480px at -5% 105%, rgba(154, 131, 220, .05), transparent 60%);
+    --logo-grad: linear-gradient(140deg, #8be6d6, #4fd1bf 55%, #1f8f80);
+  --on-accent: #04201b; --vol-a: #11201e; --vol-b: #050c0b;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #141414; --surface-1: #1e1e1e; --surface-2: #262626; --surface-3: #323232; --raised: #383838;
-  --border: #333333; --border-strong: #474747; --grid: #2a2a2a;
-  --text-primary: #ededed; --text-secondary: #bdbdbd; --text-muted: #888888;
-  --accent: #f07a3c; --accent-soft: rgba(240, 122, 60, .16);
-  --good: #8fb27a; --warn: #e0a640;
-  --s1: #6f9bc8; --s2: #f07a3c; --s3: #8fb06a; --s4: #e8b24a;
-  --s5: #e0697a; --s6: #b48a66; --s7: #a497d4; --s8: #5fb3ab;
-  --ref: #c491c0;
-  --tip-bg: #efefef; --tip-text: #222222; --tip-muted: #666666;
-  --h0: #1b1b1b; --h1: #5a2a16; --h2: #b4491f; --h3: #ee8a45; --h4: #fbe2bd;
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, .2);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, .35);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+  /* Deep teal-black with mint, gold and violet accents. */
+  --bg: #091211; --surface-1: #0e1a19; --surface-2: #12201f; --surface-3: #1a2c2a; --raised: #1c302e;
+  --border: #1d3230; --border-strong: #2b4a46; --grid: #152624;
+  --text-primary: #e4eeec; --text-secondary: #a6bab6; --text-muted: #6c8580;
+  --accent: #4fd1bf; --accent-soft: rgba(79, 209, 191, .14);
+  --good: #5fc79c; --warn: #d9a85f;
+  --s1: #4fc7b7; --s2: #d9a85f; --s3: #9a83dc; --s4: #e05a7e;
+  --s5: #6fa8dc; --s6: #a3c38a; --s7: #c7a1e3; --s8: #8fa6a6;
+  --ref: #e6c88f;
+  --tip-bg: #e4eeec; --tip-text: #0e1a19; --tip-muted: #4f6662;
+  --h0: #0b1615; --h1: #15403b; --h2: #2b8577; --h3: #8fd6c3; --h4: #f2e4bf;
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, .3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, .65), 0 0 0 1px rgba(79, 209, 191, .08);
+  --bg-glow: radial-gradient(1100px 520px at 75% -8%, rgba(79, 209, 191, .07), transparent 62%),
+             radial-gradient(800px 480px at -5% 105%, rgba(154, 131, 220, .05), transparent 60%);
+  --logo-grad: linear-gradient(140deg, #8be6d6, #4fd1bf 55%, #1f8f80);
+  --on-accent: #04201b; --vol-a: #11201e; --vol-b: #050c0b;
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 84px; }
 body {
-  margin: 0; background: var(--bg); color: var(--text-primary);
+  margin: 0; background: var(--bg-glow, none), var(--bg); background-attachment: fixed; color: var(--text-primary);
   font: 14px/1.45 var(--font); font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   transition: background-color .3s var(--ease), color .3s var(--ease);
@@ -107,7 +117,7 @@ aside {
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
 .logo { width: 32px; height: 32px; border-radius: 4px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(140deg, #ee8a3c, var(--accent) 55%, #b9461c); box-shadow: none; }
+  background: var(--logo-grad, linear-gradient(140deg, #ee8a3c, var(--accent) 55%, #b9461c)); box-shadow: none; }
 .logo svg.i { width: 19px; height: 19px; }
 .brand b { font-size: 15px; font-weight: 650; letter-spacing: -.01em; display: block; }
 .brand span { font-size: 12px; color: var(--text-muted); }
@@ -124,6 +134,32 @@ nav a:hover { background: var(--surface-3); color: var(--text-primary); }
 nav a.active { background: var(--raised); color: var(--text-primary); font-weight: 600; border-color: var(--border); box-shadow: var(--shadow-sm); }
 nav a.active svg.i { color: var(--accent); }
 nav a.active::before { content: ''; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.diskpanel { margin-top: 18px; padding: 12px; background: var(--surface-1); border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); display: grid; gap: 8px; }
+.diskpanel .dp-head { display: flex; align-items: center; gap: 8px; }
+.diskpanel .dp-head .i { width: 15px; height: 15px; color: var(--text-muted); }
+.diskpanel .dp-head span { flex: 1; font-weight: 600; color: var(--text-primary); }
+.diskpanel .dp-head b { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.diskpanel .dp-bar { display: flex; height: 6px; background: var(--surface-3); overflow: hidden; }
+.diskpanel .dp-bar i { display: block; height: 100%; }
+.diskpanel .dp-legend { display: grid; gap: 3px; }
+.diskpanel .dp-legend div { display: flex; align-items: center; gap: 6px; }
+.diskpanel .dp-legend .sw { width: 8px; height: 8px; flex: none; }
+.diskpanel .dp-legend span:last-child { margin-left: auto; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.diskpanel .chip { justify-content: center; }
+.prunebox { width: min(460px, 100%); background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-lg); padding: 18px; display: grid; gap: 14px; font-size: 13px; color: var(--text-secondary); transform: scale(.96) translateY(8px); transition: transform .3s var(--ease); }
+.modal.open .prunebox { transform: none; }
+.prunebox h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-primary); flex: 1; }
+.prunebox label.opt { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; padding: 10px; border: 1px solid var(--border); cursor: pointer; }
+.prunebox label.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.prunebox label.opt b { color: var(--text-primary); font-weight: 600; }
+.prunebox label.opt .row { grid-column: 2; display: flex; align-items: center; gap: 8px; }
+.prunebox input[type=number], .prunebox select { height: 28px; padding: 0 6px; font: 500 12px var(--font); color: var(--text-primary); background: var(--raised); border: 1px solid var(--border); }
+.prunebox input[type=number] { width: 64px; }
+.prunebox .plan { min-height: 36px; color: var(--text-primary); }
+.prunebox .plan small { display: block; color: var(--text-muted); margin-top: 4px; }
+.prunebox .btns { display: flex; justify-content: flex-end; gap: 8px; }
+.prunebox .danger { color: #fff; background: #b8432a; border-color: #b8432a; }
+.prunebox .danger:disabled { opacity: .45; cursor: default; }
 .runinfo { margin-top: auto; padding: 12px; border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); display: grid; gap: 6px; }
 .runinfo div { display: flex; justify-content: space-between; gap: 8px; }
 .runinfo span:last-child { color: var(--text-primary); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -214,13 +250,13 @@ select:focus-visible, input:focus-visible, button:focus-visible { outline: none;
 .rp-opt > .cb { grid-column: 1; grid-row: 1 / span 2; }
 .cb {
   flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 3px; cursor: pointer;
-  border: 1.5px solid var(--border-strong); background: var(--surface-1); color: #fff; transition: background-color .12s, border-color .12s;
+  border: 1.5px solid var(--border-strong); background: var(--surface-1); color: var(--on-accent, #fff); transition: background-color .12s, border-color .12s;
 }
 .cb:hover { border-color: var(--accent); }
 .cb svg { width: 11px; height: 11px; stroke-width: 3.2; opacity: 0; }
 .cb[aria-checked="true"], .cb[aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); }
 .cb[aria-checked="true"] svg { opacity: 1; }
-.cb[aria-checked="mixed"]::after { content: ""; width: 8px; height: 2px; background: #fff; border-radius: 1px; grid-area: 1 / 1; }
+.cb[aria-checked="mixed"]::after { content: ""; width: 8px; height: 2px; background: var(--on-accent, #fff); border-radius: 1px; grid-area: 1 / 1; }
 .rp-gh .cb { width: 14px; height: 14px; }
 .rp-gh .cb svg { width: 10px; height: 10px; }
 .rp-opt.checked { background: color-mix(in srgb, var(--accent) 5%, transparent); }
@@ -231,9 +267,14 @@ select:focus-visible, input:focus-visible, button:focus-visible { outline: none;
 .rp-clear { font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: none; border: 0; padding: 4px 6px; cursor: pointer; border-radius: 3px; }
 .rp-clear:hover { color: var(--text-primary); background: var(--surface-3); }
 .rp-clear[hidden] { display: none; }
+.rp-rescan { flex: none; width: 28px; height: 28px; display: grid; place-items: center; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.rp-rescan:hover { color: var(--text-primary); background: var(--surface-3); }
+.rp-rescan .i { width: 14px; height: 14px; }
+.rp-rescan.spin .i { animation: rp-spin .8s linear infinite; }
+@keyframes rp-spin { to { transform: rotate(360deg); } }
 .rp-dl {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; font: inherit; font-size: 12.5px; font-weight: 600;
-  color: #fff; background: var(--accent); border: 0; border-radius: 4px; cursor: pointer; transition: filter .15s, opacity .15s;
+  color: var(--on-accent, #fff); background: var(--accent); border: 0; border-radius: 4px; cursor: pointer; transition: filter .15s, opacity .15s;
 }
 .rp-dl .i { width: 14px; height: 14px; }
 .rp-dl:hover:not(:disabled) { filter: brightness(1.08); }
@@ -260,7 +301,7 @@ select:focus-visible, input:focus-visible, button:focus-visible { outline: none;
 #download.busy { color: var(--accent); border-color: var(--accent); cursor: progress; }
 #download.busy svg { animation: dlbob .9s ease-in-out infinite; }
 @keyframes dlbob { 50% { transform: translateY(2px); } }
-.dlpct { position: absolute; top: -7px; right: -7px; min-width: 18px; padding: 1px 4px; border-radius: 3px; font: 600 9.5px/1.3 var(--mono); color: #fff; background: var(--accent); display: none; }
+.dlpct { position: absolute; top: -7px; right: -7px; min-width: 18px; padding: 1px 4px; border-radius: 3px; font: 600 9.5px/1.3 var(--mono); color: var(--on-accent, #fff); background: var(--accent); display: none; }
 #download.busy .dlpct:not(:empty) { display: block; }
 .spacer { flex: 1; }
 .status { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
@@ -346,7 +387,7 @@ section { margin-top: 28px; }
 .card:hover .actions, .card:focus-within .actions { opacity: 1; }
 .chip { height: 28px; padding: 0 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font); color: var(--text-secondary); background: transparent; border: 1px solid var(--border); cursor: pointer; transition: color .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease); }
 .chip:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-2); }
-.chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.chip.on { color: var(--on-accent, #fff); background: var(--accent); border-color: var(--accent); }
 .chip:active { transform: scale(.94); }
 .chip.sq { width: 28px; padding: 0; justify-content: center; }
 .plot { width: 100%; height: 330px; }
@@ -356,6 +397,20 @@ section { margin-top: 28px; }
 .skeleton { position: absolute; inset: 58px 14px 14px; border-radius: 4px; overflow: hidden; background: var(--surface-2); transition: opacity .4s; }
 .skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface-1) 70%, transparent), transparent); animation: shimmer 1.4s infinite; }
 .loaded .skeleton { opacity: 0; pointer-events: none; }
+/* A spinner on every placeholder while its data is on the way. */
+.skeleton::before, .vol-view.loading::before { content: ''; position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--text-muted) 28%, transparent); border-top-color: var(--accent); animation: spin .8s linear infinite; z-index: 1; }
+.plot { position: relative; }
+.plot > .skeleton { inset: 0; }
+.vol-view.loading::before { z-index: 3; }
+/* Placeholders for the tiles, title, badges and sidebar summary while a run loads. */
+.skel-line { display: block; height: 12px; border-radius: 3px; background: var(--surface-2); position: relative; overflow: hidden; }
+.skel-line::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface-1) 70%, transparent), transparent); animation: shimmer 1.4s infinite; }
+.tile.skel .k, .tile.skel .v { min-width: 0; }
+.tile.skel .v .skel-line { height: 18px; width: 70%; margin-top: 3px; }
+.tile.skel .s .skel-line { width: 55%; }
+.badge.skel { width: 92px; padding: 0; overflow: hidden; }
+.badge.skel .skel-line { height: 100%; border-radius: inherit; }
+.runinfo .skel-line { width: 100%; }
 @keyframes shimmer { to { transform: translateX(100%); } }
 .hidden { display: none !important; }
 
@@ -430,7 +485,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: f
 .d3tools button:hover { border-color: var(--accent); color: var(--accent); }
 .d3tools .mode { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; }
 .d3tools .mode svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.d3tools .mode.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.d3tools .mode.on { color: var(--on-accent, #fff); background: var(--accent); border-color: var(--accent); }
 .d3reset { display: none; color: var(--accent) !important; padding: 4px 9px; height: 26px; animation: fadein .2s var(--ease); }
 .d3area .overlay.panmode { cursor: grab; }
 /* Plot download: a button in the tool strip with an SVG / PDF menu. */
@@ -474,7 +529,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 26px; display: f
 @media (max-width: 1100px) {
   .app { grid-template-columns: minmax(0, 1fr); }
   aside { position: static; height: auto; flex-direction: row; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--border); gap: 12px; overflow-x: auto; }
-  aside .brand span, nav .label, .runinfo { display: none; }
+  aside .brand span, nav .label, .runinfo, .diskpanel { display: none; }
   nav { flex-direction: row; }
   nav a { white-space: nowrap; padding: 7px 10px; }
   nav a.active::before { display: none; }
@@ -562,7 +617,7 @@ html { scroll-padding-top: 52px; }
 /* 3D cloud: WebGL volume rendering on a dark stage, controls on the side. */
 .sechead .beta { font-size: 10px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 3px; }
 .vol-grid { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 18px; }
-.vol-view { position: relative; min-height: 560px; background: radial-gradient(ellipse at 50% 45%, #1a1b1f, #0b0c0e 75%); border-radius: 4px; overflow: hidden; touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none; outline: none; }
+.vol-view { position: relative; min-height: 560px; background: radial-gradient(ellipse at 50% 45%, var(--vol-a, #1a1b1f), var(--vol-b, #0b0c0e) 75%); border-radius: 4px; overflow: hidden; touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none; outline: none; }
 .vol-view:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
 .vol-view.dragging { cursor: grabbing; }
 .vol-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -806,6 +861,8 @@ html { scroll-padding-top: 52px; }
     <symbol id="i-newtab" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M2 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" opacity=".45"/></symbol>
+    <symbol id="i-spin" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M20 12c0 2.2-3.6 4-8 4s-8-1.8-8-4 3.6-4 8-4c1.5 0 2.9.2 4.1.6"/><path d="m14.5 6.2 2 2.4-2.7 1.3"/></symbol>
+    <symbol id="i-disk" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
     <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
     <symbol id="i-bars" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7" rx="1"/><rect x="12" y="6" width="3" height="11" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></symbol>
     <symbol id="i-log" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16c3 0 3-9 6-9s3 4 7 4"/></symbol>
@@ -830,11 +887,18 @@ html { scroll-padding-top: 52px; }
       <a href="#setup" class="sub"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
       <a href="#ionization"><svg class="i"><use href="#i-zap"/></svg>Ionization</a>
       <a href="#orbit"><svg class="i"><use href="#i-orbit"/></svg>Orbit &amp; masses</a>
+      <a href="#angular"><svg class="i"><use href="#i-spin"/></svg>Angular momentum</a>
       <a href="#modes"><svg class="i"><use href="#i-layers"/></svg>Modes &amp; energies</a>
       <a href="#pruning"><svg class="i"><use href="#i-sliders"/></svg>Mode pruning</a>
       <a href="#snapshot"><svg class="i"><use href="#i-aperture"/></svg>Snapshot</a>
       <a href="#cloud3d"><svg class="i"><use href="#i-cube"/></svg>3D cloud</a>
     </nav>
+    <div class="diskpanel" id="diskPanel">
+      <div class="dp-head"><svg class="i"><use href="#i-disk"/></svg><span>Run folder</span><b id="diskTotal">–</b></div>
+      <div class="dp-bar" id="diskBar"></div>
+      <div class="dp-legend" id="diskLegend"></div>
+      <button class="chip" id="diskFree" title="Thin the psi snapshots, or keep only one">Free space…</button>
+    </div>
     <div class="runinfo" id="runinfo"></div>
   </aside>
 
@@ -851,6 +915,7 @@ html { scroll-padding-top: 52px; }
           <div class="rp-search" id="rpSearch"><svg class="i"><use href="#i-search"/></svg><input id="rpFilter" type="text" placeholder="Filter simulations" autocomplete="off" spellcheck="false" aria-label="Filter simulations"><span class="rp-count" id="rpCount"></span></div>
           <div class="rp-list" id="rpList" role="listbox" aria-label="Simulations"></div>
           <div class="rp-foot" id="rpFoot">
+            <button type="button" class="rp-rescan" id="rpRescan" title="Scan the folder again for new simulations" aria-label="Rescan for new simulations"><svg class="i"><use href="#i-refresh"/></svg></button>
             <span class="rp-hint" id="rpHint">Tick simulations to download several at once</span>
             <button type="button" class="rp-clear" id="rpClear" hidden>Clear</button>
             <button type="button" class="rp-dl" id="rpDl" disabled><svg class="i"><use href="#i-download"/></svg><span id="rpDlTxt">Download</span></button>
@@ -926,6 +991,16 @@ html { scroll-padding-top: 52px; }
           <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div><h3>Cloud mass</h3><p class="sub">M<sub>c</sub> inside r<sub>ex</sub></p></div><div class="actions"><button class="chip sq" data-expand="pMc" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMc"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Mass budget</h3><p class="sub" id="pBudgetSub">Fractions of the initial mass inside r<sub>ex</sub>: residual, ionized through r<sub>ex</sub>, absorbed by the black holes</p></div><div class="actions"><button class="chip on" data-log="pBudget" title="Log scale of the absolute values">log</button><button class="chip sq" data-expand="pBudget" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pBudget"></div><div class="skeleton"></div></div>
           <div class="card reveal" style="--c: var(--s3)"><div class="head"><div class="ic"><svg class="i"><use href="#i-scale"/></svg></div><div><h3>Binary masses</h3><p class="sub">M<sub>1</sub>, M<sub>2</sub> and q, log scale</p></div><div class="actions"><button class="chip sq" data-expand="pMasses" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pMasses"></div><div class="skeleton"></div></div>
+          <div class="card reveal hidden" id="spinCard" style="--c: var(--s6)"><div class="head"><div class="ic"><svg class="i"><use href="#i-repeat"/></svg></div><div><h3>Black-hole spins</h3><p class="sub" id="pSpinSub">χ<sub>1</sub>, χ<sub>2</sub> along +z</p></div><div class="actions"><button class="chip" data-log="pSpinJ" title="Show the spin angular momentum J = χ M² instead of χ = J / M²">J</button><button class="chip on" data-log="pSpin" title="Show the change from the initial spins instead of the spins themselves">Δ</button><button class="chip sq" data-expand="pSpin" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pSpin"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
+
+      <section id="angular">
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-spin"/></svg></div><h2>Angular momentum</h2><span>L<sub>z</sub> budget with its sign: + prograde, − retrograde</span></div>
+        <div class="grid">
+          <div class="card reveal" style="--c: var(--s1); grid-column: 1 / -1"><div class="head"><div class="ic"><svg class="i"><use href="#i-spin"/></svg></div><div><h3>Where the angular momentum is</h3><p class="sub" id="lzLedgerSub">L<sub>z</sub> of each reservoir along +z (the cloud's spin axis), in M<sub>1</sub>²</p></div><div class="actions"><button class="chip" data-log="pLzAbs" title="Show each reservoir's L_z instead of its change since t = 0">absolute</button><button class="chip sq" data-expand="pLzLedger" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pLzLedger"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s5)"><div class="head"><div class="ic"><svg class="i"><use href="#i-pie"/></svg></div><div><h3>Angular-momentum budget</h3><p class="sub" id="pLzSub">L<sub>z</sub> in ħ per initial particle: cloud inside r<sub>ex</sub>, ionized through r<sub>ex</sub>, absorbed by the black holes, given up by the binary</p></div><div class="actions"><button class="chip" data-log="pLzOrbit" title="Add the orbit's actual change of L_z and the gravitational-wave loss (evolving orbits)">orbit</button><button class="chip" data-log="pLzDrift" title="Plot the closure error: the sum of every term minus its initial value">closure</button><button class="chip sq" data-expand="pLz" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pLz"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s3); grid-column: auto"><div class="head"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><div><h3>Cloud angular momentum per mode</h3><p class="sub" id="pLzModesSub">m N<sub>lm</sub> inside r<sub>ex</sub>, in ħ per initial particle</p></div><div class="actions"><button class="chip" data-log="pLzByM" title="Sum the modes of each m over l">by m</button><button class="chip sq" data-expand="pLzModes" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pLzModes"></div><div class="skeleton"></div></div>
         </div>
       </section>
 
@@ -950,7 +1025,7 @@ html { scroll-padding-top: 52px; }
         <div class="sechead"><div class="ic"><svg class="i"><use href="#i-aperture"/></svg></div><h2>Snapshot</h2><span>radial profiles and a slice (xy, zx or zy) of a saved state</span></div>
         <div class="card reveal">
           <div class="grid">
-            <div class="subcard"><div class="subhead"><div><h4><svg class="i" style="color: var(--s1)"><use href="#i-radial"/></svg>Radial profiles</h4><p>|U<sub>LM</sub>|², dashed: initial bound state</p></div></div><div class="plot tall" id="pRadial"></div></div>
+            <div class="subcard"><div class="subhead"><div><h4><svg class="i" style="color: var(--s1)"><use href="#i-radial"/></svg>Radial profiles</h4><p>|U<sub>LM</sub>|², dashed: initial bound state</p></div></div><div class="plot tall" id="pRadial"><div class="skeleton"></div></div></div>
             <div class="subcard"><div class="subhead"><div><h4><svg class="i" style="color: var(--s2)"><use href="#i-target"/></svg>Slice through the COM</h4><p>|ψ|² in the chosen plane through the centre of mass: xy is the orbital (equatorial) plane, zx and zy contain the z axis, normal to the orbit. Filled marker: primary, open marker: companion, both projected onto the plane.</p></div>
                 <div class="seg sm planeseg" id="slicePlane" data-value="xy" role="group" aria-label="Slice plane"><button data-v="xy" title="Orbital plane, z = 0">xy</button><button data-v="zx" title="y = 0">zx</button><button data-v="zy" title="x = 0">zy</button></div>
 
@@ -967,7 +1042,7 @@ html { scroll-padding-top: 52px; }
                   </div>
                 </div>
               </div></div>
-              <div class="plot tall" id="pSlice"></div></div>
+              <div class="plot tall" id="pSlice"><div class="skeleton"></div></div></div>
           </div>
           <div class="timeline" id="timeline">
             <div class="tl-transport">
@@ -1032,7 +1107,7 @@ html { scroll-padding-top: 52px; }
                 <input type="range" id="volThresh" min="0" max="90" value="6" aria-label="Cut below this fraction of the colour range"></div>
               <div class="vctl"><div class="vlab"><span>Colours</span><em>slice colormap</em></div>
                 <div class="vol-cbar" id="volCbar"></div><div class="vol-cbar-l"><span id="volLo"></span><span id="volHi"></span></div></div>
-              <label class="switch"><input type="checkbox" id="volBinary" checked><i></i>Binary and orbit</label>
+              <label class="switch"><input type="checkbox" id="volBinary" checked><i></i><span id="volBinaryLabel">Binary and orbit</span></label>
               <label class="switch"><input type="checkbox" id="volBox" checked><i></i>Box and axes</label>
             </div>
           </div>
@@ -1045,6 +1120,16 @@ html { scroll-padding-top: 52px; }
 </div>
 
 <div class="toast" id="toast" role="status"><svg class="i"><use href="#i-alert"/></svg><div><b id="toastTitle">Problem</b><span id="toastText"></span></div></div>
+<div class="modal" id="pruneModal"><div class="prunebox" role="dialog" aria-labelledby="pruneTitle">
+  <div style="display:flex;align-items:center"><h3 id="pruneTitle">Free space in this run</h3><button class="iconbtn" id="pruneClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <div id="pruneNow"></div>
+  <label class="opt"><input type="radio" name="pruneMode" value="thin" checked><b>Thin the snapshots</b>
+    <span class="row">keep one in every <input type="number" id="pruneEvery" min="2" step="1" value="2"> snapshots, counting from the first</span></label>
+  <label class="opt"><input type="radio" name="pruneMode" value="keep"><b>Keep one snapshot</b>
+    <span class="row">keep step <select id="pruneKeep"></select></span></label>
+  <div class="plan" id="prunePlan"></div>
+  <div class="btns"><button class="chip" id="pruneCancel">Cancel</button><button class="chip danger" id="pruneGo" disabled>Delete</button></div>
+</div></div>
 <div class="modal" id="modal"><div class="box"><div class="bar2"><h3 id="modalTitle"></h3><button class="iconbtn" id="modalClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div><div class="slot" id="modalSlot"></div></div></div>
 
 <script>
@@ -1052,7 +1137,7 @@ const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
 const DASHES = ['solid', 'dot', 'dash', 'longdash', 'dashdot', 'longdashdot'];
-let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false, eModes: false, pBinGW: false, pBin: false, pBudget: true }, prevTiles: {}, cmap: 'ember', cmapRev: false };
+let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false, eModes: false, pBinGW: false, pBin: false, pBudget: true, pSpin: true, pLzDrift: false, pLzByM: false, pLzOrbit: false, pLzAbs: false, pSpinJ: false }, prevTiles: {}, cmap: 'ember', cmapRev: false };
 
 // Segmented controls keep their value in data-value, like a select.
 const val = (id) => { const el = $(id); return el.dataset.value !== undefined ? el.dataset.value : el.value; };
@@ -1083,7 +1168,7 @@ const modeName = (m) => `(${m[0]}, ${m[1]})`;
 function xValues(s) {
   const mode = val('xaxis');
   if (mode === 'tP' && s.t_over_P) return { x: s.t_over_P, title: 't / T' };
-  if (mode === 'R') return { x: s.R, title: 'R (M)', reversed: true };
+  if (mode === 'R' && s.q) return { x: s.R, title: 'R (M)', reversed: true };
   return { x: s.t, title: 't (M)' };
 }
 
@@ -1153,9 +1238,182 @@ function renderBudget(d, xaxis, line, ink, muted) {
     + (bLog ? '. Log scale shows absolute values; ionized is negative while mass flows in through r<sub>ex</sub>' : '');
 }
 
+const fmtNum = (x) => (x === null || x === undefined || !isFinite(x) ? '–' : Math.abs(x) >= 1e5 || (Math.abs(x) < 1e-2 && x !== 0) ? x.toExponential(2) : (+x.toPrecision(5)).toString());
+
+// Reservoirs of L_z over time, in M1²: the cloud, the orbit, the hole spins, what was
+// radiated through r_ex and, on an evolving orbit, what gravitational waves carried off.
+function renderLedger(d, xaxis, line, ink, muted) {
+  const z = d.series.Lz;
+  if (!z || !z.ledger) return;
+  const g = z.ledger, abs = !!state.logs.pLzAbs, alone = g.alone, evolving = g.evolving && !alone;
+  const last = (y) => { if (!y) return null; for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const f = (x) => (x === null || x === undefined ? '–' : (x < 0 ? '−' : x > 0 ? '+' : '') + (Math.abs(x) >= 1e-3 || x === 0 ? Math.abs(x).toFixed(4) : Math.abs(x).toExponential(2)));
+  const shift = (y, y0) => (y ? y.map(v => (v === null ? null : abs ? v : v - y0)) : null);
+  const neg = (y) => (y ? y.map(v => (v === null ? null : -v)) : null);
+  const tr = [line(shift(g.cloud, g.cloud0), abs ? 'cloud (inside r_ex)' : 'Δ cloud (inside r_ex)', { color: css('--s1'), width: 2 })];
+  if (!alone) tr.push(line(shift(g.orbit, g.orbit0), abs ? 'orbit' : 'Δ orbit', { color: css('--s4'), width: 2 }));
+  tr.push(line(shift(g.spins, g.spins0), abs ? (alone ? 'hole spin J' : 'hole spins J₁ + J₂') : (alone ? 'Δ hole spin J' : 'Δ hole spins J₁ + J₂'), { color: css('--s7'), width: 1.8 }));
+  tr.push(line(g.ionized, 'radiated (through r_ex)', { color: css('--s2'), width: 1.8 }));
+  if (evolving && g.gw) tr.push(line(neg(g.gw), 'gravitational waves', { color: muted, width: 1.6 }));
+  if (g.lost) tr.push(line(g.lost, 'pruned / damped', { color: muted, width: 1.2, dash: 'dot' }));
+  if (!alone && !abs) {
+    // What the cloud handed the orbit (accreted orbital L minus the torque): on an evolving
+    // orbit compare it with Δ orbit; on a fixed orbit it goes to whatever holds the orbit.
+    const owed = g.accretion.map((a, i) => (a === null || g.exchange[i] === null ? null : a + g.exchange[i]));
+    tr.push(line(owed, evolving ? 'handed to the orbit by the cloud' : 'handed to the orbit (held fixed)', { color: css('--s4'), width: 1.2, dash: 'dash' }));
+  }
+  // Sum of the reservoirs: constant when nothing leaves the bookkeeping.
+  const parts = [shift(g.cloud, g.cloud0), alone ? null : shift(g.orbit, g.orbit0), shift(g.spins, g.spins0), g.ionized, evolving ? neg(g.gw) : null, g.lost];
+  const total = g.cloud.map((_, i) => parts.reduce((a, y) => (a === null || !y ? a : y[i] === null ? null : a + y[i]), 0));
+  tr.push(line(total, abs ? 'total' : 'Δ total', { color: ink, width: 1, dash: 'dash' }));
+  draw('pLzLedger', tr, { xaxis, yaxis: { title: { text: abs ? 'L<sub>z</sub> (M<sub>1</sub>²)' : 'L<sub>z</sub> − L<sub>z</sub>(0) (M<sub>1</sub>²)' } },
+       shapes: [hline(0, muted, 'dot', 1)], uirevision: (state.run || '') + val('xaxis') + abs });
+
+  const exact = z.exact ? `closes to ${(z.closure * (z.N_ref || 1)).toExponential(1)}` : 'is approximate (run without Lz_budget.txt)';
+  let sub = `L<sub>z</sub> along +z (the cloud's spin axis) in M<sub>1</sub>², ${abs ? 'absolute' : 'change since t = 0'}. At t = 0: cloud ${f(g.cloud0)}`
+    + (alone ? '' : `, orbit ${f(g.orbit0)}${g.orbit0 < 0 ? ' (counter-rotating)' : ''}`) + `, spins ${f(g.spins0)}. `
+    + `Now: cloud ${f(last(g.cloud))}${alone ? '' : `, orbit ${f(last(g.orbit))}`}, spins ${f(last(g.spins))}, radiated ${f(last(g.ionized))}`
+    + (evolving && g.gw ? `, GW ${f(-last(g.gw))}` : '') + `. The cloud's own balance ${exact}.`;
+  if (evolving) {
+    const owed = (last(g.accretion) || 0) + (last(g.exchange) || 0), fb = last(g.feedback);
+    sub += ` Δ orbit = GW (${f(last(g.gw))}) + cloud feedback (${f(fb)}) + accreted mass (${f(last(g.orbit_other))}); the cloud handed it ${f(owed)}, of which ${f(owed - fb)} was not fed back`
+      + `${g.orbit_start > 0 ? ` (orbit held until t = ${fmtNum(g.orbit_start)} M, then ramped)` : ''}, since the solver applies the phase-averaged power. So Δ total moves by that and by the mass term.`;
+  } else if (!alone) {
+    sub += ' The orbit is held fixed: Δ total misses exactly what the cloud handed it (dashed).';
+  }
+  $('lzLedgerSub').innerHTML = sub;
+}
+
+// Signed L_z budget (ħ per initial particle) and the cloud's L_z per mode.
+function renderLz(d, xaxis, line, ink, muted) {
+  const z = d.series.Lz, modes = d.info.modes;
+  if (!z) return;
+  const last = (y) => { if (!y) return null; for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const sgn = (x) => (x === null ? '–' : (x >= 0 ? '+' : '−') + (Math.abs(x) >= 1e-3 || x === 0 ? Math.abs(x).toFixed(4) : Math.abs(x).toExponential(2)));
+  const zero = [hline(0, muted, 'dot', 1)];
+  const drift = !!state.logs.pLzDrift;
+  if (drift) {
+    draw('pLz', [line(z.drift, 'sum − L(0)', { color: ink, width: 1.4 }, { showlegend: false, hovertemplate: '%{y:.3e}' })],
+         { xaxis, yaxis: { title: { text: 'ΔL<sub>z</sub> total (ħ per particle)' }, exponentformat: 'e' }, shapes: zero,
+           uirevision: (state.run || '') + val('xaxis') + 'drift' });
+  } else {
+    const tr = [
+      line(z.cloud, 'cloud (inside r_ex)', { color: css('--s1'), width: 2 }),
+      line(z.ionized, 'ionized (through r_ex)', { color: css('--s2'), width: 1.8 }),
+      line(z.absorbed, 'absorbed by the holes', { color: css('--s7'), width: 1.8 }),
+    ];
+    if (z.spin) {
+      tr.push(line(z.spin, 'into the spins', { color: css('--s7'), width: 1, dash: 'dot' }));
+      tr.push(line(z.orbital, 'into the orbit (accretion)', { color: css('--s3'), width: 1, dash: 'dot' }));
+    }
+    if (z.binary) tr.push(line(z.binary, 'binary (−torque)', { color: css('--s4'), width: 1.8 }));
+    if (z.pruned) tr.push(line(z.pruned, 'dropped by pruning', { color: muted, width: 1.2, dash: 'dash' }));
+    if (z.damped) tr.push(line(z.damped, 'damped (CAP/mask)', { color: muted, width: 1.2, dash: 'dot' }));
+    const g = z.ledger;
+    if (state.logs.pLzOrbit && g && g.gw && z.N_ref > 0) {
+      const per = (y) => y.map(v => (v === null ? null : v / z.N_ref));
+      tr.push(line(per(g.orbit.map(v => (v === null ? null : v - g.orbit0))), 'orbit: actual ΔL', { color: css('--s4'), width: 1.2, dash: 'dash' }));
+      tr.push(line(per(g.gw), 'orbit: GW', { color: muted, width: 1.2, dash: 'dash' }));
+    }
+    const total = z.cloud.map((c, i) => [z.ionized, z.absorbed, z.binary, z.pruned, z.damped]
+      .reduce((a, y) => (a === null || !y ? a : y[i] === null ? null : a + y[i]), c));
+    tr.push(line(total, 'sum', { color: ink, width: 1, dash: 'dash' }));
+    draw('pLz', tr, { xaxis, yaxis: { title: { text: 'L<sub>z</sub> (ħ per initial particle)' } }, shapes: zero,
+         uirevision: (state.run || '') + val('xaxis') });
+  }
+  $('pLzSub').innerHTML = `L<sub>z</sub> in ħ per initial particle (a pure m = 1 cloud starts at +1); + prograde, − retrograde. Now: cloud ${sgn(last(z.cloud))}, ionized ${sgn(last(z.ionized))}, absorbed ${sgn(last(z.absorbed))}`
+    + (z.spin ? ` (spins ${sgn(last(z.spin))}, orbit ${sgn(last(z.orbital))})` : '')
+    + (z.binary ? `, binary ${sgn(last(z.binary))}` : '')
+    + (z.pruned ? `, pruned ${sgn(last(z.pruned))}` : '') + (z.damped ? `, damped ${sgn(last(z.damped))}` : '')
+    + `. ${z.exact ? 'The sum stays at' : 'Approximate (run without Lz_budget.txt): the sum stays at'} ${z.L0.toFixed(4)} to ${z.closure.toExponential(1)}`
+    + (z.binary ? '. Binary: change of the orbit\'s L<sub>z</sub> through the torque of its potential (negative when the orbit spins the cloud up)' : '');
+
+  // Per mode (or per m): the cloud's L_z, m N_lm.
+  const byM = !!state.logs.pLzByM;
+  let traces;
+  if (byM) {
+    traces = Object.keys(z.by_m).map(Number).sort((a, b) => b - a).map(m => line(z.by_m[String(m)], `m = ${m > 0 ? '+' : ''}${m}`,
+      { color: css(SLOTS[(Math.abs(m) - 1) % SLOTS.length]), width: 1.8, dash: m < 0 ? 'dash' : 'solid' }));
+  } else {
+    traces = modes.map((m, i) => (z.modes[i] && z.modes[i].some(v => v) ? line(z.modes[i], modeName(m), modeStyle(m)) : null)).filter(Boolean);
+  }
+  traces.push(line(z.cloud, 'cloud total', { color: ink, width: 1, dash: 'dash' }));
+  draw('pLzModes', traces, { xaxis, yaxis: { title: { text: 'm N<sub>lm</sub> (ħ per initial particle)' } }, shapes: zero,
+       hover: 'closest', uirevision: (state.run || '') + val('xaxis') + byM });
+  const ranked = (byM ? Object.entries(z.by_m).map(([m, y]) => [`m = ${Number(m) > 0 ? '+' : ''}${m}`, last(y)])
+    : modes.map((m, i) => [modeName(m), last(z.modes[i])])).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4);
+  $('pLzModesSub').innerHTML = (byM ? 'Σ<sub>l</sub> m N<sub>lm</sub> per m (dashed: m < 0)' : 'm N<sub>lm</sub> per mode (m = 0 modes carry none)')
+    + ' inside r<sub>ex</sub>, ħ per initial particle. Largest now: ' + (ranked.map(([n, v]) => `${n} ${sgn(v)}`).join(', ') || '–');
+}
+
+// Spins of the two holes; the card only exists for runs that evolve them
+// (dipolar absorption on an evolving orbit).
+function renderSpins(d, xaxis, line, muted) {
+  const sp = d.series.spins, card = $('spinCard');
+  card.classList.toggle('hidden', !sp);
+  if (!sp) return;
+  const delta = !!state.logs.pSpin;
+  const last = (y) => { for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const num = (x, n = 6) => (x === null ? '–' : Math.abs(x) >= 1e-3 || x === 0 ? x.toFixed(n) : x.toExponential(2));
+  const sgn = (x) => (x === null ? '–' : (x >= 0 ? '+' : '−') + Math.abs(x).toExponential(2));
+  const alone = !!d.info.alone;
+  // χ = J / M², or the spin angular momentum J = χ M² itself (in M₁²); either as the change from t = 0.
+  const useJ = !!state.logs.pSpinJ && !!sp.J_1_tot;
+  const pick = (a) => (useJ ? (delta ? sp['dJ_' + a] : sp['J_' + a + '_tot']) : (delta ? sp['dchi_' + a] : sp['chi_' + a]));
+  const sym = useJ ? 'J' : 'χ';
+  const traces = [line(pick(1), `${delta ? 'Δ' : ''}${sym}₁`, { color: css('--s1'), width: 1.8 }, alone ? { showlegend: false } : {})];
+  if (!alone) traces.push(line(pick(2), `${delta ? 'Δ' : ''}${sym}₂`, { color: css('--s2'), width: 1.8 }));
+  const yTitle = useJ ? (delta ? 'J − J(0) (M<sub>1</sub>²)' : 'J = χ M² (M<sub>1</sub>²)') : (delta ? 'χ − χ(0)' : 'χ = J / M²');
+  draw('pSpin', traces, { xaxis, yaxis: { title: { text: yTitle } },
+       shapes: delta ? [hline(0, muted, 'dot', 1)] : [], uirevision: (state.run || '') + val('xaxis') + delta + useJ });
+  $('pSpinSub').innerHTML = alone
+    ? `Spin along +z. Now χ = ${num(last(sp.chi_1))} (${sgn(last(sp.dchi_1))} from ${num(sp.chi_0[0], 3)}). `
+      + `Spin taken through the dipolar channels: J ${sgn(last(sp.J_1))}${last(sp.J_1) < 0 ? ' (superradiant: the hole spins the cloud up)' : ''}; accreted mass lowers |χ| as well`
+    : `Spins along +z. Now χ<sub>1</sub> = ${num(last(sp.chi_1))} (${sgn(last(sp.dchi_1))} from ${num(sp.chi_0[0], 3)}), `
+      + `χ<sub>2</sub> = ${num(last(sp.chi_2))} (${sgn(last(sp.dchi_2))} from ${num(sp.chi_0[1], 3)}). `
+      + `Spin taken through the dipolar channels: J<sub>1</sub> ${sgn(last(sp.J_1))}, J<sub>2</sub> ${sgn(last(sp.J_2))}; accreted mass lowers |χ| as well`;
+}
+
+// A run without a companion (secondary_potential = false): one hole at rest, no
+// orbit. Panels and controls that only make sense for a binary are hidden.
+function applyAloneLayout(alone) {
+  if (state.aloneLayout === alone) return;
+  state.aloneLayout = alone;
+  ['pBin', 'pR'].forEach(id => $(id).closest('.card').classList.toggle('hidden', alone));
+  const swap = (el, binary, single) => { if (el) el.innerHTML = alone ? single : binary; };
+  const massCard = $('pMasses').closest('.card');
+  swap(massCard.querySelector('h3'), 'Binary masses', 'Black-hole mass');
+  swap(massCard.querySelector('.sub'), 'M<sub>1</sub>, M<sub>2</sub> and q, log scale', 'M<sub>1</sub> − M<sub>1</sub>(0): the hole changes only through the horizon fluxes');
+  const sec = $('orbit').querySelector('.sechead');
+  swap(sec.querySelector('h2'), 'Orbit &amp; masses', 'Black hole &amp; masses');
+  swap(sec.querySelector('span'), 'binary separation and mass budget', 'no companion: one hole at rest; mass budget, hole mass and spin');
+  swap($('volBinaryLabel'), 'Binary and orbit', 'Black hole');
+  const nav = document.querySelector('nav a[href="#orbit"]');
+  if (nav) nav.lastChild.textContent = alone ? 'Black hole & masses' : 'Orbit & masses';
+  // Ionization is scaled by q⁻² only for a binary.
+  ['pMass', 'pPower'].forEach(id => {
+    const sub = $(id).closest('.card').querySelector('.sub');
+    if (sub.dataset.binary === undefined) sub.dataset.binary = sub.innerHTML;
+    sub.innerHTML = alone ? sub.dataset.binary.replace(/q⁻² ?/g, '') : sub.dataset.binary;
+  });
+  // No orbit: no t / T or R axis, no window in orbits, no companion to expand about.
+  $('xaxis').querySelectorAll('[data-v="tP"], [data-v="R"]').forEach(b => (b.style.display = alone ? 'none' : ''));
+  if (alone && val('xaxis') !== 't') $('xaxis').setValue('t');
+  $('window').disabled = alone;
+  if (alone) $('window').value = '0';
+  ['centerNorms', 'centerFrac'].forEach(id => {
+    const b = $(id).querySelector('[data-v="secondary"]');
+    b.style.display = alone ? 'none' : '';
+    b.parentElement.setValue(val(id) === 'secondary' && alone ? 'primary' : val(id));
+  });
+}
+
 function render() {
   const d = state.data;
   if (!d || !d.ready) return;
+  const alone = !!d.info.alone;
+  applyAloneLayout(alone);
+  const qn = alone ? '' : 'q⁻² ';
   const s = d.series, X = xValues(s);
   const xaxis = { title: { text: X.title }, autorange: X.reversed ? 'reversed' : true };
   const ink = css('--text-primary'), muted = css('--text-muted'), ref = css('--ref');
@@ -1167,7 +1425,7 @@ function render() {
   tm.push(line(s.total_mass_flux, 'Total', { color: ink, width: 1.8 }));
   const shapesM = [hline(0, muted, 'dash', 0.8)];
   if (d.theory) { shapesM.push(hline(d.theory.mass, ref, 'dot', 1.5)); tm.push({ x: [null], y: [null], name: 'Tomaselli et al. (2023)', mode: 'lines', line: { color: ref, dash: 'dot' } }); }
-  draw('pMass', tm, { xaxis, yaxis: { title: { text: 'q⁻² (M/M<sub>c</sub>) Ṁ<sub>c</sub>' } }, shapes: shapesM });
+  draw('pMass', tm, { xaxis, yaxis: { title: { text: qn + '(M/M<sub>c</sub>) Ṁ<sub>c</sub>' } }, shapes: shapesM });
 
   // Ionization power. Linear: the selected modes, signed. Log: |P_ion| of
   // every mode but the initial one, over 14 decades below the peak.
@@ -1177,7 +1435,7 @@ function render() {
   tp.push(line(pAbs(s.total_energy_flux), 'Total', { color: ink, width: 1.8 }));
   const shapesP = pLog ? [] : [hline(0, muted, 'dash', 0.8)];
   if (d.theory) { shapesP.push(hline(pLog ? Math.abs(d.theory.power) : d.theory.power, ref, 'dot', 1.5)); tp.push({ x: [null], y: [null], name: 'Tomaselli et al. (2023)', mode: 'lines', line: { color: ref, dash: 'dot' } }); }
-  let yP = { title: { text: pLog ? 'q⁻² (M/M<sub>c</sub>) |P<sub>ion</sub>|' : 'q⁻² (M/M<sub>c</sub>) P<sub>ion</sub>' } };
+  let yP = { title: { text: pLog ? qn + '(M/M<sub>c</sub>) |P<sub>ion</sub>|' : qn + '(M/M<sub>c</sub>) P<sub>ion</sub>' } };
   if (pLog) {
     let peak = 0;
     tp.forEach(t => t.y.forEach(v => { if (v > peak) peak = v; }));
@@ -1216,11 +1474,17 @@ function render() {
   // Orbit and masses
   draw('pR', [line(s.R, 'R', { color: css('--s1'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'R (M)' } } });
   draw('pMc', [line(s.M_c, 'M_c', { color: css('--s2'), width: 2 }, { showlegend: false })], { xaxis, yaxis: { title: { text: 'M<sub>c</sub>' } } });
-  draw('pMasses', [
+  if (alone)
+    draw('pMasses', [line(s.dM_1 || s.M_1, 'ΔM₁', { color: css('--s1'), width: 1.8 }, { showlegend: false })],
+         { xaxis, yaxis: { title: { text: s.dM_1 ? 'M<sub>1</sub> − M<sub>1</sub>(0)' : 'M<sub>1</sub>' } } });
+  else draw('pMasses', [
     line(s.M_1, 'M₁', { color: css('--s1'), width: 1.6 }),
     line(s.M_2, 'M₂', { color: css('--s2'), width: 1.6 }),
     line(s.q, 'q', { color: css('--s3'), width: 1.6, dash: 'dash' }),
   ], { xaxis, yaxis: { title: { text: 'mass' }, type: 'log' } });
+  renderSpins(d, xaxis, line, muted);
+  renderLz(d, xaxis, line, ink, muted);
+  renderLedger(d, xaxis, line, ink, muted);
 
   // Modes
   renderModeShares(d, X, xaxis, line);
@@ -1236,7 +1500,7 @@ function render() {
     draw('pEs', [total], { xaxis, yaxis: { title: { text: 'E<sub>s</sub> / M<sub>c</sub>' } }, shapes: levelShapes, annotations: levelAnn, hover: 'x' });
   } else {
     const eShapes = levelShapes.slice();
-    if (!d.info.evolving && isFinite(d.latest.Omega)) {
+    if (!d.info.evolving && !alone && isFinite(d.latest.Omega)) {
       // Drawn where they fall inside the curves' range; they do not widen it.
       for (let g = -5; g < 5; g++) eShapes.push(Object.assign(hline(d.eps_b + g * d.latest.Omega, css('--s8'), 'dash', 0.6, g ? `ε<sub>b</sub> ${g < 0 ? '−' : '+'} ${Math.abs(g) === 1 ? '' : Math.abs(g)}Ω` : 'ε<sub>b</sub>'), { inRange: false }));
     }
@@ -1244,7 +1508,7 @@ function render() {
       { xaxis, yaxis: { title: { text: 'E<sup>LM</sup> / M<sup>LM</sup>' } }, shapes: eShapes, annotations: levelAnn, hover: 'closest' });
   }
   $('pEsSub').innerHTML = perMode
-    ? 'E<sub>s</sub> / M<sub>c</sub> and E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup> per mode, dashed: levels' + (d.info.evolving ? '' : '; fixed orbit adds ε<sub>b</sub> + gΩ')
+    ? 'E<sub>s</sub> / M<sub>c</sub> and E<sub>s</sub><sup>LM</sup> / M<sub>c</sub><sup>LM</sup> per mode, dashed: levels' + (d.info.evolving || alone ? '' : '; fixed orbit adds ε<sub>b</sub> + gΩ')
     : 'E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6';
 
   renderPruning(d, X, xaxis, line);
@@ -1351,7 +1615,18 @@ function renderTiles() {
     stepSub = `of ${total - 1} · ${mins > 90 ? fmt(mins / 60, 2) + ' h' : Math.max(0, Math.round(mins)) + ' min'} left`;
   }
   const frac = total ? Math.min(1, info.rows / (total - 1)) : null;
-  const tiles = [
+  const sp = d.series.spins, chiNow = sp ? sp.chi_1.filter(v => v !== null).pop() : null;
+  const tiles = info.alone ? [
+    ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
+    ['t', 'Time t', fmt(L.t, 6), 'no companion, no orbit', 'i-clock', '--s7'],
+    ['R', 'Black hole at x', fmt(L.R, 6), 'at rest', 'i-ruler', '--s1'],
+    ['chi', 'Spin χ', chiNow !== null && chiNow !== undefined ? fmt(chiNow, 8) : '–', sp ? `from ${fmt(sp.chi_0[0], 4)}` : 'not evolved', 'i-repeat', '--s3'],
+    ['Mc', 'Cloud mass M_c', fmt(L.M_c, 5), L.M_c0 ? `${fmt(100 * L.M_c / L.M_c0, 4)}% of initial` : '', 'i-cloud', '--s2'],
+    ['M1', 'Black-hole mass M₁', fmt(L.M_1, 9), info.evolving ? 'follows the horizon fluxes' : 'held fixed', 'i-scale', '--s3'],
+    ['rate', 'Ionization rate', fmt(L.total_mass_flux, 3), '(M/M_c)Ṁ_c', 'i-trend', '--s8'],
+    ['power', 'Ionization power', fmt(L.total_energy_flux, 3), '(M/M_c)P_ion', 'i-flame', '--s2'],
+    ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
+  ] : [
     ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
     ['t', 'Time t', fmt(L.t, 6), isFinite(L.P) ? `${fmt(L.t / L.P, 4)} orbits` : '', 'i-clock', '--s7'],
     ['R', 'Separation R', fmt(L.R, 6), info.evolving ? 'evolving orbit' : 'fixed orbit', 'i-ruler', '--s1'],
@@ -1363,6 +1638,7 @@ function renderTiles() {
     ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
   ];
   const wrap = $('tiles');
+  if (wrap.querySelector('.skel')) wrap.innerHTML = '';
   if (!wrap.children.length) {
     wrap.innerHTML = tiles.map(([key, k, , , ic, c], n) => `<div class="tile reveal" data-k="${key}" style="--c: var(${c}); transition-delay: ${n * 35}ms"><div class="ic"><svg class="i"><use href="#${ic}"/></svg></div><div class="k">${k}</div><div class="v"></div><div class="s"></div></div>`).join('');
     requestAnimationFrame(() => requestAnimationFrame(() => wrap.querySelectorAll('.reveal').forEach(e => e.classList.add('in'))));
@@ -1446,21 +1722,94 @@ async function fetchJSON(url) {
   return j;
 }
 
+// Size of the run folder, in the sidebar, and the tool that deletes psi snapshots.
+const fmtBytes = (b) => { if (!(b >= 0)) return '–'; const u = ['B', 'kB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1000 && i < u.length - 1) { b /= 1000; i++; } return (i ? b.toFixed(b >= 100 ? 0 : 1) : b) + ' ' + u[i]; };
+const disk = { usage: null, run: null, planSeq: 0 };
+async function loadDisk() {
+  const run = state.run;
+  if (!run || tabs.compare) return;
+  try {
+    const u = await fetchJSON(`/api/disk?run=${encodeURIComponent(run)}`);
+    if (state.run !== run) return;
+    disk.usage = u; disk.run = run;
+    renderDisk();
+  } catch (e) { $('diskTotal').textContent = '–'; }
+}
+function renderDisk() {
+  const u = disk.usage;
+  if (!u) { $('diskTotal').innerHTML = '<span class="skel-line" style="width:48px"></span>'; $('diskBar').innerHTML = ''; $('diskLegend').innerHTML = ''; return; }
+  $('diskTotal').textContent = fmtBytes(u.total);
+  const parts = [[`snapshots (${u.snapshot_count})`, u.snapshots, '--accent'], ['diagnostics', u.diagnostics, '--s1'],
+                 ['checkpoint', u.checkpoint, '--s3'], ['other', u.other + u.psi_dt, '--text-muted']];
+  $('diskBar').innerHTML = parts.map(([, b, c]) => (u.total > 0 && b > 0 ? `<i style="width:${(100 * b / u.total).toFixed(2)}%;background:var(${c})"></i>` : '')).join('');
+  $('diskLegend').innerHTML = parts.filter(([, b]) => b > 0).map(([n, b, c]) => `<div><span class="sw" style="background:var(${c})"></span><span>${esc(n)}</span><span>${fmtBytes(b)}</span></div>`).join('');
+  if (disk.note && disk.note.run === state.run) $('diskLegend').insertAdjacentHTML('beforeend', `<div style="color:var(--good)">${esc(disk.note.text)}</div>`);
+  $('diskFree').disabled = u.snapshot_count < 2;
+}
+function openPrune() {
+  const u = disk.usage;
+  if (!u || disk.run !== state.run) return;
+  const last = u.steps[u.steps.length - 1];
+  $('pruneNow').innerHTML = `${u.snapshot_count} snapshots take ${fmtBytes(u.snapshots)} of ${fmtBytes(u.total)}. The latest one (step ${last}) is always kept: a resumed run restarts from it.`;
+  $('pruneKeep').innerHTML = u.steps.slice().reverse().map(s => `<option value="${s}">${s}${s === last ? ' (latest)' : ''}</option>`).join('');
+  $('pruneModal').classList.add('open');
+  planPrune();
+}
+function closePrune() { $('pruneModal').classList.remove('open'); }
+function pruneRequest(dry) {
+  const mode = document.querySelector('input[name="pruneMode"]:checked').value;
+  return { run: state.run, mode, every: +$('pruneEvery').value, keep: [+$('pruneKeep').value], dry_run: dry };
+}
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+async function planPrune() {
+  const seq = ++disk.planSeq, go = $('pruneGo');
+  go.disabled = true;
+  try {
+    const p = await postJSON('/api/snapshots/prune', pruneRequest(true));
+    if (seq !== disk.planSeq) return;
+    const n = p.delete.length;
+    $('prunePlan').innerHTML = n
+      ? `Deletes ${n} snapshot${n > 1 ? 's' : ''} and frees ${fmtBytes(p.bytes)}; keeps ${p.keep.length} (step${p.keep.length > 1 ? 's' : ''} ${p.keep.length > 6 ? p.keep.slice(0, 3).join(', ') + ', …, ' + p.keep.slice(-2).join(', ') : p.keep.join(', ')}).<small>This cannot be undone. Diagnostics, config and checkpoint are not touched.</small>`
+      : 'Nothing to delete with these settings.';
+    go.textContent = n ? `Delete ${n} snapshot${n > 1 ? 's' : ''}` : 'Delete';
+    go.disabled = !n;
+  } catch (e) { if (seq === disk.planSeq) $('prunePlan').textContent = e.message; }
+}
+async function runPrune() {
+  const go = $('pruneGo');
+  go.disabled = true; go.textContent = 'Deleting…';
+  try {
+    const p = await postJSON('/api/snapshots/prune', pruneRequest(false));
+    disk.usage = p.usage; renderDisk();
+    closePrune();
+    disk.note = { run: state.run, text: `Freed ${fmtBytes(p.freed)} (${p.deleted_files} file${p.deleted_files === 1 ? '' : 's'})` }; renderDisk();
+    state.snapLoaded = null; $('follow').checked = true;
+    refresh();
+  } catch (e) { $('prunePlan').textContent = 'Could not delete: ' + e.message; go.textContent = 'Delete'; }
+}
+
 async function refresh() {
   if (tabs.compare) { await refreshCompare(); restartProgress(); return; }
   // At short intervals a slow read could overlap the next tick; skip that tick instead.
-  if (!state.run || state.fetching) return;
-  state.fetching = true;
+  if (!state.run || state.fetching === state.run) return;
+  const run = state.run;
+  state.fetching = run;
   const btn = $('refreshNow'); btn.classList.add('spin');
   try {
-    const d = await fetchJSON(`/api/data?run=${encodeURIComponent(state.run)}&window=${val('window')}`);
+    const d = await fetchJSON(`/api/data?run=${encodeURIComponent(run)}&window=${val('window')}`);
+    if (state.run !== run) return;   // another run was picked meanwhile: its own fetch draws it
     state.data = d;
     if (!d.ready) showError('Waiting for the first diagnostic rows…', 'Starting');
     renderTiles(); renderStatus(); render();
     updateSnapshotControls();
     loadProjection(true);   // new snapshots of a running simulation
-  } catch (e) { showError(e.message, 'Could not read the run'); }
-  finally { state.fetching = false; }
+  } catch (e) { if (state.run === run) showError(e.message, 'Could not read the run'); }
+  finally { if (state.fetching === run) state.fetching = false; }
   setTimeout(() => btn.classList.remove('spin'), 300);
   restartProgress();
 }
@@ -1473,6 +1822,10 @@ function updateSnapshotControls() {
   renderTimeline();
   const step = snaps[+slider.value];
   if (step !== undefined) loadSnapshot(step);
+  else if (state.data) {   // nothing to wait for: the placeholders say so instead of spinning
+    ['pRadial', 'pSlice'].forEach(id => { if (!charts[id]) $(id).innerHTML = '<div class="cmp-none">no snapshots yet</div>'; });
+    $('volView').classList.remove('loading');
+  }
 }
 
 // ---- Snapshot timeline: one grey tick per saved snapshot over the computed
@@ -1739,6 +2092,7 @@ function drawSnapshot(sn, lockRange) {
   const log = val('sliceScale') === 'log';
   if (!charts.pSlice) charts.pSlice = new D3Charts.HeatmapChart($('pSlice'));
   charts.pSlice.update(sliceSpec(sn, log, lockRange, lockRange ? ` · locked to step ${state.lock.step}` : ''));
+  $('pSlice').closest('.card').classList.add('loaded');
   volSnap(sn);
 }
 // Heatmap spec of a snapshot's slice, with the two holes projected onto its plane.
@@ -1746,13 +2100,15 @@ function sliceSpec(sn, log, zDomain, note = '') {
   const q = sn.q, R = sn.R, th = sn.theta;
   // Binary positions (in the z = 0 plane) projected onto the slice plane.
   const plane = sn.plane || 'xy', proj = (x, y) => plane === 'xy' ? [x, y] : plane === 'zx' ? [x, 0] : [y, 0];
-  const p1 = proj(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th));
+  // Without a companion, R is the lone hole's distance from the origin.
+  const d1 = sn.alone ? R : q / (1 + q) * R;
+  const p1 = proj(d1 * Math.cos(th), d1 * Math.sin(th));
   const p2 = proj(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI));
   const [hAx, vAx] = { xy: ['x', 'y'], zx: ['x', 'z'], zy: ['y', 'z'] }[plane];
   return {
     z: sliceZ(sn, log), zDomain: zDomain || null, ramp: cmapRamp(state.cmap, state.cmapRev), extent: [sn.x[0], sn.x[sn.x.length - 1]],
     xLabel: `${hAx} (M)`, yLabel: `${vAx} (M)`, zLabel: (log ? 'log₁₀|ψ|²' : '|ψ|²') + note,
-    markers: [
+    markers: sn.alone ? [{ x: p1[0], y: p1[1], color: css('--s1'), filled: true, name: 'black hole' }] : [
       { x: p1[0], y: p1[1], color: css('--s1'), filled: true, name: 'primary' },
       { x: p2[0], y: p2[1], color: css('--s1'), filled: false, name: 'companion' },
     ],
@@ -2149,7 +2505,7 @@ function renderCompare() {
   $('cmpPick').querySelectorAll('[data-q]').forEach(b => b.setAttribute('aria-pressed', String(cmp.q.includes(b.dataset.q))));
   const side = val('cmpLayout') === 'side';
   const open = tabs.list.map(t => ({ t, r: runInfo(t.run), d: cmp.data.get(t.run) }));
-  const params = (p) => !p || p.q === undefined ? '' : ` · q ${pnum(p.q)} · μ ${pnum(p.mu)} · M<sub>c</sub> ${pnum(p.M_c)} · R<sub>0</sub> ${pnum(p.R0)} M · ${p.counter ? 'counter' : 'co'}-rotating${p.evolving ? '' : ', fixed orbit'}${p.absorption ? ', absorption' : ''}`;
+  const params = (p) => !p || p.q === undefined ? '' : p.alone ? ` · no companion · μ ${pnum(p.mu)} · M<sub>c</sub> ${pnum(p.M_c)}${p.evolving ? ', evolving mass and spin' : ''}${p.absorption ? ', absorption' : ''}` : ` · q ${pnum(p.q)} · μ ${pnum(p.mu)} · M<sub>c</sub> ${pnum(p.M_c)} · R<sub>0</sub> ${pnum(p.R0)} M · ${p.counter ? 'counter' : 'co'}-rotating${p.evolving ? '' : ', fixed orbit'}${p.absorption ? ', absorption' : ''}`;
   $('cmpRuns').innerHTML = open.map(({ t, r, d }) => `<span><span class="st-dot" style="background:${tabColor(t)}"></span>${r.group ? `<span class="st-grp">${esc(r.group)} /</span>` : ''}<b>${esc(r.name)}</b><span class="pp">${params(r.params)}${!d ? ' · loading…' : d.error ? ' · unreadable' : !d.ready ? ' · no rows yet' : ''}</span></span>`).join('');
   $('cmpNote').textContent = tabs.list.length < 2 ? 'open more simulations with + to compare them' : `${tabs.list.length} simulations, one colour per tab`;
   const body = $('cmpBody');
@@ -2520,12 +2876,14 @@ function volOverlay(ov, vp, w, h, dpr) {
   const sn = vol.sn;
   if ($('volBinary').checked && sn && vol.data) {
     const q = sn.q, R = sn.R / vol.extent, th = sn.theta;
-    ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.beginPath();
-    for (let k = 0; k <= 96; k++) {   // the companion's orbit about the centre of mass
-      const a = 2 * Math.PI * k / 96, p = P(R / (1 + q) * Math.cos(a), R / (1 + q) * Math.sin(a), 0);
-      k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+    if (!sn.alone) {
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.beginPath();
+      for (let k = 0; k <= 96; k++) {   // the companion's orbit about the centre of mass
+        const a = 2 * Math.PI * k / 96, p = P(R / (1 + q) * Math.cos(a), R / (1 + q) * Math.sin(a), 0);
+        k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
     }
-    ctx.stroke(); ctx.setLineDash([]);
     const col = css('--s1');
     const dot = (x, y, filled) => {
       if (Math.abs(x) > 1 || Math.abs(y) > 1) return;
@@ -2534,8 +2892,11 @@ function volOverlay(ov, vp, w, h, dpr) {
       if (filled) { ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
       else { ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.stroke(); }
     };
-    dot(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th), true);
-    dot(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI), false);
+    if (sn.alone) dot(R * Math.cos(th), R * Math.sin(th), true);   // R: the lone hole's distance from the origin
+    else {
+      dot(q / (1 + q) * R * Math.cos(th), q / (1 + q) * R * Math.sin(th), true);
+      dot(R / (1 + q) * Math.cos(th + Math.PI), R / (1 + q) * Math.sin(th + Math.PI), false);
+    }
   }
 }
 const volParams = () => [state.run, $('volR').value, val('volRes'), val('volSet'), JSON.stringify((state.data && state.data.radiative) || [])].join('|');
@@ -2556,6 +2917,7 @@ async function volFetch() {
   try {
     if (!payload) {
       $('volStatus').textContent = `loading step ${want.step}…`;
+      $('volView').classList.add('loading');
       const rad = encodeURIComponent(JSON.stringify((state.data && state.data.radiative) || []));
       const raw = await fetchJSON(`/api/volume?run=${encodeURIComponent(state.run)}&step=${want.step}&rplot=${$('volR').value}&n=${val('volRes')}&set=${val('volSet')}&radiative=${rad}`);
       const d = decodeF32(raw.density_f32);
@@ -2567,8 +2929,9 @@ async function volFetch() {
     Object.assign(vol, { n: payload.n, extent: payload.extent, data: payload.data, max: payload.max, step: payload.step });
     vol.loaded = want.key;
     volUpload(); volDraw();
+    $('volView').classList.remove('loading');
     $('volStatus').textContent = `step ${payload.step} · ${payload.n}³ · t = ${fmt(vol.sn.t, 6)} M`;
-  } catch (e) { $('volStatus').textContent = 'could not load: ' + e.message; }
+  } catch (e) { $('volStatus').textContent = 'could not load: ' + e.message; $('volView').classList.remove('loading'); }
   vol.busy = false;
   if (vol.want && vol.want.key !== vol.loaded) volFetch();
 }
@@ -2679,7 +3042,7 @@ function volPng() {
   out.width = c.width; out.height = c.height;
   const ctx = out.getContext('2d');
   const g = ctx.createRadialGradient(out.width / 2, out.height * 0.45, 0, out.width / 2, out.height * 0.45, Math.max(out.width, out.height) * 0.75);
-  g.addColorStop(0, '#1a1b1f'); g.addColorStop(1, '#0b0c0e');
+  g.addColorStop(0, css('--vol-a') || '#1a1b1f'); g.addColorStop(1, css('--vol-b') || '#0b0c0e');
   ctx.fillStyle = g; ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(c, 0, 0); ctx.drawImage(ov, 0, 0);
   out.toBlob((blob) => {
@@ -2695,7 +3058,7 @@ function volPng() {
 function exportName(el, title = null, step = undefined) {
   const slug = (v) => String(v).normalize('NFKD').replace(/[^\w.+-]+/g, '_').replace(/^_+|_+$/g, '');
   const run = (rp.runs || []).find(r => r.folder === state.run) || {}, p = run.params;
-  const tag = p && p.q !== undefined ? `q${pnum(p.q)}_R${pnum(p.R0)}_Mc${pnum(p.M_c)}_${p.counter ? 'counter' : 'co'}` : (run.name || 'run');
+  const tag = p && p.alone ? `single_mu${pnum(p.mu)}_Mc${pnum(p.M_c)}` : p && p.q !== undefined ? `q${pnum(p.q)}_R${pnum(p.R0)}_Mc${pnum(p.M_c)}_${p.counter ? 'counter' : 'co'}` : (run.name || 'run');
   const card = el.closest('.subcard, .card');
   title = title || (el.closest('#modal') ? $('modalTitle').textContent : card ? (card.querySelector('h4, h3') || {}).textContent || el.id : el.id);
   let extra = step !== undefined && step !== null ? `_step${step}` : '';
@@ -2719,6 +3082,9 @@ const pnum = (v) => String(+(+v).toPrecision(4));
 function runParams(p) {
   if (!p || p.q === undefined) return '';
   const kv = (k, v, u = '') => `<span class="kv"><span class="k">${k}</span><span class="v">${pnum(v)}${u ? `<span class="u">${u}</span>` : ''}</span></span>`;
+  if (p.alone)
+    return `<span class="params">${kv('μ', p.mu)}${kv('M<sub>c</sub>', p.M_c)}${kv('x', p.q / (1 + p.q) * p.R0, 'M')}
+    <span class="flags"><span class="fl">single BH</span>${p.absorption ? '<span class="fl">abs</span>' : ''}${p.evolving ? '<span class="fl">M, χ evolve</span>' : ''}</span></span>`;
   return `<span class="params">${kv('q', p.q)}${kv('μ', p.mu)}${kv('M<sub>c</sub>', p.M_c)}${kv('R<sub>0</sub>', p.R0, 'M')}
     <span class="flags"><span class="fl${p.counter ? ' ctr' : ''}">${p.counter ? 'counter' : 'co'}</span>${p.absorption ? '<span class="fl">abs</span>' : ''}${p.evolving ? '' : '<span class="fl">fixed</span>'}</span></span>`;
 }
@@ -2835,6 +3201,7 @@ function initPicker() {
   $('rpList').addEventListener('auxclick', (e) => { const o = e.target.closest('.rp-opt'); if (o && e.button === 1) { e.preventDefault(); pickRun(o.dataset.v, true); } });
   $('rpClear').onclick = () => toggleChecked([...rp.checked], false);
   $('rpDl').onclick = downloadSelected;
+  $('rpRescan').onclick = rescanRuns;
   $('rpPop').addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(rp.active + 1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(rp.active - 1); }
@@ -2850,6 +3217,20 @@ function initPicker() {
 // New runs (a freshly submitted task, say) show up without reloading the page.
 async function pollRuns() {
   try { fillRuns(await fetchJSON('/api/runs')); } catch (e) { /* keep the current list */ }
+}
+// Rescan the folder now (the server otherwise caches its listing for a few seconds).
+async function rescanRuns() {
+  const btn = $('rpRescan'), hint = $('rpHint');
+  if (btn.classList.contains('spin')) return;
+  btn.classList.add('spin');
+  const before = new Set((rp.runs || []).map(r => r.folder));
+  try {
+    const runs = await fetchJSON('/api/runs?rescan=1');
+    fillRuns(runs);
+    const added = runs.filter(r => !before.has(r.folder)).length;
+    hint.innerHTML = added ? `<b>${added}</b> new simulation${added > 1 ? 's' : ''} found` : `No new simulations (${runs.length} in total)`;
+  } catch (e) { hint.textContent = 'Rescan failed: ' + e.message; }
+  finally { setTimeout(() => btn.classList.remove('spin'), 300); }
 }
 
 async function init() {
@@ -2877,11 +3258,13 @@ async function init() {
     initTabs(saved, runs);
     setInterval(pollRuns, 30000);
   } catch (e) { showError(e.message); return; }
+  loadDisk();
   await refresh();
   if (saved.compare && tabs.list.length > 1) selectCompare();
   if (state.data && state.data.ready) {
     $('xaxis').setValue(['t', 'tP', 'R'].includes(saved.xaxis) ? saved.xaxis : state.data.info.evolving ? 't' : 'tP');
-    const R = state.data.latest.R || 50;
+    // A lone hole sits near the origin: frame the cloud instead of the binary.
+    const R = state.data.info.alone ? Infinity : state.data.latest.R || 50;
     if (+saved.rplot > 0) { $('rplot').value = saved.rplot; state.rplotSet = true; }
     else $('rplot').value = Math.round(Math.min(2.5 * R, 16 / (state.data.info.mu ** 2)) / 10) * 10 || 200;
     // The 3D box frames the initial cloud: 2.5 times its peak radius n²/μ².
@@ -2940,7 +3323,42 @@ async function downloadSelected() {
   btn.classList.remove('busy'); updatePickerFoot();
 }
 $('download').onclick = downloadDiagnostics;
-$('run').onchange = () => { stopPlay(); state.lock = null; vol.sn = null; vol.data = null; vol.loaded = null; volDraw(); state.run = $('run').value; state.snapLoaded = null; state.prevTiles = {}; $('tiles').innerHTML = ''; refresh(); };
+$('run').onchange = () => { stopPlay(); state.lock = null; state.run = $('run').value; resetDashboard(); refresh(); loadDisk(); };
+
+// A newly picked run starts from a blank page: every plot, tile and badge of the
+// previous run goes, and placeholders with spinners stand in until its data arrive.
+function resetDashboard() {
+  state.data = null; state.snapLoaded = null; state.snapWant = null; state.setupSig = null; state.prevTiles = {};
+  showError('');
+  // The Compare tab keeps its own charts.
+  Object.keys(charts).filter(id => !id.startsWith('cmp')).forEach(id => {
+    const c = charts[id];
+    if (c.destroy) c.destroy(); else if (c._ro) c._ro.disconnect();
+    delete charts[id];
+  });
+  const panels = (sel) => [...document.querySelectorAll(sel)].filter(el => !el.closest('#compare'));
+  panels('main .card.loaded').forEach(c => c.classList.remove('loaded'));
+  panels('main .card .plot').forEach(el => {
+    el.classList.remove('d3chart');
+    el.innerHTML = el.parentElement.classList.contains('subcard') ? '<div class="skeleton"></div>' : '';
+  });
+  const line = (w) => `<span class="skel-line"${w ? ` style="width:${w}"` : ''}></span>`;
+  $('tiles').innerHTML = Array.from({ length: 8 }, () =>
+    `<div class="tile skel"><div class="ic"></div><div class="k">${line('60%')}</div><div class="v">${line()}</div><div class="s">${line()}</div></div>`).join('');
+  const opt = $('run').selectedOptions[0];
+  $('runTitle').textContent = opt ? opt.textContent : 'Loading…';
+  $('runPath').textContent = 'Loading the run…';
+  $('badges').innerHTML = Array.from({ length: 5 }, () => `<span class="badge skel">${line()}</span>`).join('');
+  $('runinfo').innerHTML = Array.from({ length: 6 }, () => `<div>${line()}</div>`).join('');
+  $('setupGrid').innerHTML = ''; $('toml').textContent = '';
+  $('tlMeta').textContent = ''; $('follow').checked = true; $('snapStep').max = 0; $('snapStep').value = 0;
+  renderTimeline();
+  vol.sn = null; vol.data = null; vol.loaded = null; vol.want = null;
+  disk.usage = null; renderDisk();
+  $('volView').classList.toggle('loading', vol.visible && vol.on);
+  $('volStatus').textContent = vol.visible ? 'loading…' : 'Scroll here to load the 3D view';
+  volDraw();
+}
 $('run').addEventListener('change', () => { const t = tabs.list[tabs.active]; if (t && t.run !== $('run').value) { t.run = $('run').value; renderTabs(); saveSettings(); } });
 $('window').onchange = () => { cmp.data.clear(); refresh(); };
 $('refresh').onchange = schedule;
@@ -2956,6 +3374,15 @@ $('follow').onchange = () => { if ($('follow').checked) stopPlay(); updateSnapsh
 document.querySelectorAll('[data-log]').forEach(b => b.onclick = () => { const k = b.dataset.log; state.logs[k] = !state.logs[k]; b.classList.toggle('on', state.logs[k]); render(); });
 document.querySelectorAll('[data-expand]').forEach(b => b.onclick = () => openModal(b.dataset.expand));
 $('modalClose').onclick = closeModal;
+$('diskFree').onclick = openPrune;
+$('pruneClose').onclick = closePrune; $('pruneCancel').onclick = closePrune;
+$('pruneModal').addEventListener('click', (e) => { if (e.target.id === 'pruneModal') closePrune(); });
+document.querySelectorAll('input[name="pruneMode"]').forEach(r => r.addEventListener('change', planPrune));
+$('pruneEvery').addEventListener('input', planPrune); $('pruneKeep').addEventListener('change', () => { document.querySelector('input[name="pruneMode"][value="keep"]').checked = true; planPrune(); });
+$('pruneEvery').addEventListener('focus', () => { document.querySelector('input[name="pruneMode"][value="thin"]').checked = true; planPrune(); });
+$('pruneGo').onclick = runPrune;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePrune(); });
+setInterval(loadDisk, 30000);
 $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 $('toast').onclick = () => showError(null);

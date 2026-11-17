@@ -48,7 +48,7 @@ void config_defaults()
     require(c.num_steps == 0 && c.num_periods == 0 && c.save_every == 50, "Run-length defaults");
     require(c.l_max == 5 && c.r_ex == 1000.0 && c.epsilon == 0.001 && c.epsilon_smear == 2.0, "Simulation defaults");
     require(c.ramp_periods == 0.0 && c.ramp_secondary_potential && c.orbit_delay_periods == 0.0 && c.orbit_ramp_periods == 1.0 &&
-            c.steps_per_period == 50.0 && c.power_average_orbits == 2.0, "Ramp and averaging defaults");
+            c.steps_per_period == 50.0 && c.power_average_orbits == 2.0 && c.power_average_window == "boxcar", "Ramp and averaging defaults");
     require(!c.evolve_orbit && !c.absorption, "Physics switches default to off");
     require(c.q == 0.001 && c.R == 50.0 && !c.counter, "Binary defaults");
     require(c.mu == 0.2 && c.M_c == 0.0 && c.a == 0.0 && c.n == 2 && c.l == 1 && c.m == 1, "Atom defaults");
@@ -88,6 +88,7 @@ orbit_delay_periods = 4.0
 orbit_ramp_periods = 2.5
 steps_per_period = 64.0
 power_average_orbits = 1.5
+power_average_window = "hann"
 epsilon = 0.0
 epsilon_smear = 5.0
 evolve_orbit = true
@@ -102,6 +103,9 @@ L_factor = 0.8
 L_factor = 0.9
 W = 0.5
 n = 4
+per_mode = true
+reflection = 1e-5
+tune_steps = 7
 [pruning]
 tolerance = 1e-6
 check_every = 4
@@ -112,12 +116,20 @@ flux_tolerance = 1e-4
     require(c.mu == 0.3 && c.M_c == 0.05 && c.a == 0.7 && c.n == 3 && c.l == 2 && c.m == 2, "Atom values");
     require(c.dt == 1.5 && c.num_steps == 77 && c.num_periods == 4 && c.save_every == 7 && c.l_max == 6 &&
             c.r_ex == 250.0 && c.ramp_periods == 3.5 && !c.ramp_secondary_potential &&
-            c.orbit_delay_periods == 4.0 && c.orbit_ramp_periods == 2.5 && c.steps_per_period == 64.0 && c.power_average_orbits == 1.5 && c.epsilon == 0.0 &&
+            c.orbit_delay_periods == 4.0 && c.orbit_ramp_periods == 2.5 && c.steps_per_period == 64.0 && c.power_average_orbits == 1.5 && c.power_average_window == "hann" && c.epsilon == 0.0 &&
             c.epsilon_smear == 5.0 && c.evolve_orbit && c.absorption, "Simulation values");
     require(c.threads == 3 && c.preconditioner == "ilut", "Parallel and solver values");
     require(c.mask && c.mask_L_factor == 0.8 && c.mask_W == 0.1 && c.mask_n == 3,
             "A [mask] table enables the mask, with defaults for missing keys");
     require(c.cap && c.cap_L_factor == 0.9 && c.cap_W == 0.5 && c.cap_n == 4, "CAP values");
+    require(c.cap_per_mode && c.cap_reflection == 1e-5 && c.cap_tune_steps == 7 && c.cap_k_min == 0.0,
+            "Per-mode CAP values, with the k_min default");
+    const Config uniform_cap = config_from("[cap]\nL_factor = 0.8\n");
+    require(uniform_cap.cap && !uniform_cap.cap_per_mode && uniform_cap.cap_reflection == 1e-10 &&
+                uniform_cap.cap_tune_steps == 20 && uniform_cap.cap_n == 3,
+            "The CAP is uniform unless per_mode is set");
+    const Config tuned_cap = config_from("[cap]\nL_factor = 0.8\nper_mode = true\n");
+    require(tuned_cap.cap_per_mode && tuned_cap.cap_n == 6, "The per-mode CAP defaults to n = 6");
     require(c.pruning && c.prune_tolerance == 1e-6 && c.prune_check_every == 4 && c.prune_flux_tolerance == 1e-4,
             "Pruning values");
     const Config bare = config_from("[pruning]\n");
@@ -145,10 +157,23 @@ void config_validation()
                                           "Negative flux tolerance accepted");
     require_throws<std::invalid_argument>([] { config_from("[pruning]\nflux_tolerance = 1.0\n"); },
                                           "Flux tolerance of 1 accepted");
+    require(!config_from("[binary]\nq = 0.0\n").secondary_potential && config_from("").secondary_potential,
+            "q = 0 runs without a companion");
+    require_throws<std::invalid_argument>([] { config_from("[binary]\nq = -0.1\n"); }, "Negative q accepted");
+    require(config_from("").energy_reference && !config_from("[simulation]\nenergy_reference = false\n").energy_reference,
+            "energy_reference defaults to on and can be switched off");
+    require(config_from("[binary]\nq = 0\nR = 0\n[simulation]\ndt = 5.0\nnum_steps = 10\n").R == 0.0,
+            "A lone hole at the origin with an explicit dt");
+    require_throws<std::invalid_argument>([] { config_from("[binary]\nq = 0\nR = 0\n[simulation]\nnum_steps = 10\n"); },
+                                          "R = 0 without dt accepted");
+    require_throws<std::invalid_argument>([] { config_from("[binary]\nq = 0\nR = 0\n[simulation]\ndt = 5.0\nnum_periods = 3\n"); },
+                                          "R = 0 with num_periods accepted");
     require_throws<std::invalid_argument>([] { config_from("[simulation]\nsteps_per_period = 0.0\n"); },
                                           "Non-positive steps_per_period accepted");
     require_throws<std::invalid_argument>([] { config_from("[simulation]\npower_average_orbits = -2.0\n"); },
                                           "Non-positive power_average_orbits accepted");
+    require_throws<std::invalid_argument>([] { config_from("[simulation]\npower_average_window = \"triangle\"\n"); },
+                                          "Unknown power_average_window accepted");
     require_throws<std::invalid_argument>([] { config_from("[simulation]\norbit_ramp_periods = -1.0\n"); },
                                           "Negative orbit_ramp_periods accepted");
     require(config_from("[simulation]\norbit_ramp_periods = 0.0\n").orbit_ramp_periods == 0.0,

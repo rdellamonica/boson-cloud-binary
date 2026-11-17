@@ -13,6 +13,8 @@ L = 1000.0          # outer radius
 q = 0.1             # mass ratio M2/M1
 R = 30.0            # separation
 counter = false     # true: counter-rotating orbit
+# spin_1 = 0.0      # dimensionless spins along +z (horizon area, dipolar rates)
+# spin_2 = 0.0
 
 [atom]
 mu = 0.2            # boson mass (alpha = mu * M1)
@@ -32,7 +34,9 @@ orbit_delay_periods = 0.0 # with evolve_orbit: fixed-orbit hold after the ramp
 orbit_ramp_periods = 1.0 # with evolve_orbit: back-reaction switch-on after the hold
 epsilon = 0.0
 evolve_orbit = false     # keep the orbit fixed
+# secondary_potential = false # no companion at all: isolated primary at rest
 absorption = true        # s-wave absorbers on the black holes
+# dipole_absorption = true # also absorb the dipolar (l = 1) component about each hole
 epsilon_smear = 2.0      # absorber radius in units of each mass
 
 [parallel]

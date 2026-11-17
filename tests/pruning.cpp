@@ -187,6 +187,13 @@ void conservation_with_pruning()
     }
 }
 
+/// The cloud's L_z inside r_ex plus everything the budget says left it, minus the binary's torque.
+double Lz_total(const CrankNicolsonModes &cn)
+{
+    return cn.cloud_Lz() + cn.Lz_budget_term("ionized") + cn.Lz_budget_term("absorbed") +
+           cn.Lz_budget_term("pruned") + cn.Lz_budget_term("damped") - cn.Lz_budget_term("torque");
+}
+
 void switching_on_and_off()
 {
     test::ScratchDir dir("switching");
@@ -198,7 +205,9 @@ void switching_on_and_off()
     cn->t.resize(201);
     int step = 1;
     // The companion is ramped in, so its couplings switch modes on over time.
+    const double L0 = Lz_total(*cn);
     for (; step <= 100; ++step) cn->step(step);
+    close(Lz_total(*cn), L0, 1e-9, "The L_z budget does not close while modes switch on");
     const int grown = cn->active_mode_count();
     std::cout << "active modes: " << initial << " -> " << grown << std::endl;
     require(grown > initial, "No mode was switched on as the companion ramped in");
@@ -211,6 +220,9 @@ void switching_on_and_off()
     cn->prune_flux_tolerance = 0.0;
     for (; step <= 110; ++step) cn->step(step);
     require(cn->active_mode_count() < grown, "No mode was switched off");
+    std::cout << "pruned L_z " << cn->Lz_budget_term("pruned") << " of " << L0 << std::endl;
+    require(cn->Lz_budget_term("pruned") != 0.0, "Switched-off modes held no L_z");
+    close(Lz_total(*cn), L0, 1e-9, "The L_z budget does not close when modes switch off");
     require(cn->pruned_mass() > 0.0, "Switched-off modes held no mass");
     require(cn->mu * cn->dr * cn->psi.squaredNorm() + cn->pruned_mass() <= before * (1 + 1e-12),
             "Pruned mass accounting gained mass");
