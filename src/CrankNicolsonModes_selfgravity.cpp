@@ -155,12 +155,14 @@ void CrankNicolsonModes::sg_compute_potential(const Eigen::VectorXcd &state)
         Eigen::VectorXcd A(Nr), B(Nr);
         const double *inner = sg_inner_ratio.data() + static_cast<std::size_t>(L) * Nr;
         const double *outer = sg_outer_ratio.data() + static_cast<std::size_t>(L) * Nr;
-        A[0] = w[0] * n[0] / r[0];
+        // A node at r = 0 (epsilon = 0) carries no density (U = 0 there) and is skipped in the sums.
+        const auto source = [&](int i) { return r[i] > 0.0 ? dcomplex(w[i] * n[i] / r[i]) : dcomplex(0.0); };
+        A[0] = source(0);
         for (int i = 1; i < Nr; ++i)
-            A[i] = inner[i] * A[i - 1] + w[i] * n[i] / r[i];
+            A[i] = inner[i] * A[i - 1] + source(i);
         B[Nr - 1] = 0.0;
         for (int i = Nr - 2; i >= 0; --i)
-            B[i] = outer[i] * (B[i + 1] + w[i + 1] * n[i + 1] / r[i + 1]);
+            B[i] = outer[i] * (B[i + 1] + source(i + 1));
         Eigen::VectorXcd phi = (-4.0 * M_PI * mu / (2.0 * L + 1.0)) * (A + B);
         // (mu / 2) int Phi |psi|^2 = (mu / 2) sum_i w_i sum_LM Phi_LM conj(n_LM), M < 0 as conjugates.
         double e = 0.0;
@@ -171,7 +173,8 @@ void CrankNicolsonModes::sg_compute_potential(const Eigen::VectorXcd &state)
         {
             dcomplex D = 0.0;
             for (int i = 0; i < Nr; ++i)
-                D += w[i] * n[i] / (r[i] * r[i]);
+                if (r[i] > 0.0)
+                    D += w[i] * n[i] / (r[i] * r[i]);
 #pragma omp critical(sg_dipole_update)
             sg_dipole = D;
             if (sg.recoil)

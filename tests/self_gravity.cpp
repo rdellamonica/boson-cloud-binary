@@ -10,6 +10,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <cmath>
 
 namespace fs = std::filesystem;
 using test::close;
@@ -18,10 +19,11 @@ using test::require;
 namespace {
 
 std::unique_ptr<CrankNicolsonModes> make_solver(int Nr, double L, int l_max, double mu, double M_c, double dt,
-                                                bool recoil, bool iterated = false, bool absorption = false)
+                                                bool recoil, bool iterated = false, bool absorption = false,
+                                                double epsilon = 0.001)
 {
     std::ofstream("config.toml") << "# self-gravity fixture\n";
-    auto cn = std::make_unique<CrankNicolsonModes>(Nr, L, dt, 0.001, l_max, mu, M_c, 0.0, 0.0, 0.0, false,
+    auto cn = std::make_unique<CrankNicolsonModes>(Nr, L, dt, epsilon, l_max, mu, M_c, 0.0, 0.0, 0.0, false,
                                                    absorption, 10, 0.0, 1.5, "config.toml");
     cn->configure_isolated_black_hole(0.0);
     CrankNicolsonModes::SelfGravityOptions options;
@@ -213,6 +215,23 @@ Eigen::VectorXcd check_evolution(bool iterated)
     return cn->psi;
 }
 
+/// A grid that starts at r = 0 (epsilon = 0): the origin node must not poison the potential.
+void check_origin_node()
+{
+    test::ScratchDir dir("sg_origin");
+    const double mu = 0.4, M_c = 0.3;
+    auto cn = make_solver(401, 80.0, 3, mu, M_c, 2.0, true, true, false, 0.0);
+    require(cn->r[0] == 0.0, "fixture starts at r = 0");
+    cn->reference_energy = -0.5 * mu * mu * mu / 4.0;
+    cn->set_initial_state_full(mixed_state(*cn, 5));
+    cn->initialize();
+    cn->run(6, 70.0);
+    require(cn->psi.allFinite(), "Self-gravity with a node at r = 0 gives a finite state");
+    require(std::isfinite(cn->reference_energy) && std::isfinite(cn->self_gravity_energy()),
+            "Self-gravity with a node at r = 0 gives a finite energy");
+    std::cout << "origin node: ok" << std::endl;
+}
+
 void check_resume()
 {
     const double mu = 0.4, M_c = 0.2;
@@ -259,6 +278,7 @@ int main()
         check_auger();
         check_evolution(false);
         check_evolution(true);
+        check_origin_node();
         check_resume();
     }
     catch (const std::exception &error)
