@@ -1765,19 +1765,16 @@ function renderTiles() {
   const g = d.series.sg, lastv = (y) => { if (!y) return null; for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
   const firstv = (y) => { if (!y) return null; for (let i = 0; i < y.length; i++) if (y[i] !== null) return y[i]; return null; };
   const T = g && g.T ? g.T : {}, Gm = g && g.Gamma ? g.Gamma : {};
-  const tiles = info.self_gravity && g ? [
-    ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
-    ['t', 'Time t', fmt(L.t, 6), 'self-gravity, isolated hole', 'i-clock', '--s7'],
+  const sgTiles = info.self_gravity && g ? [
     ['n211', 'N₂₁₁ / N₀', g.N ? fmt(lastv(g.N['211']), 6) : '–', g.N ? `from ${fmt(firstv(g.N['211']), 4)}` : 'no auger_probe.txt', 'i-cloud', '--s1'],
     ['n322', 'N₃₂₂ / N₀', g.N ? fmt(lastv(g.N['322']), 4) : '–', g.N ? `from ${fmt(firstv(g.N['322']), 3)}` : '', 'i-layers', '--s2'],
     ['ig', 'Auger |I_G|', fmt(g.I_G_now, 4), `paper ${g.I_G_paper} (${g.recoil ? 'recoil' : 'no recoil'})`, 'i-target', '--s2'],
     ['gh', 'Γ̄_H measured', fmt(Gm.H, 3), g.absorption ? `paper ${fmt(Gm.H_paper, 3)}` : 'absorption off', 'i-zap', '--s4'],
     ['tsg', 'T_SG', fmt(T.measured ? T.measured[1] : null, 3), `paper ${fmt(T.paper ? T.paper[1] : null, 3)} M`, 'i-timer', '--s8'],
-    ['Mc', 'Cloud mass M_c', fmt(L.M_c, 5), L.M_c0 ? `${fmt(100 * L.M_c / L.M_c0, 4)}% of initial` : '', 'i-cloud', '--s3'],
-    ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
-  ] : info.alone ? [
+  ] : [];
+  const tiles = (info.alone ? [
     ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
-    ['t', 'Time t', fmt(L.t, 6), 'no companion, no orbit', 'i-clock', '--s7'],
+    ['t', 'Time t', fmt(L.t, 6), info.self_gravity ? 'no companion · self-gravity' : 'no companion, no orbit', 'i-clock', '--s7'],
     ['R', 'Black hole at x', fmt(L.R, 6), 'at rest', 'i-ruler', '--s1'],
     ['chi', 'Spin χ', chiNow !== null && chiNow !== undefined ? fmt(chiNow, 8) : '–', sp ? `from ${fmt(sp.chi_0[0], 4)}` : 'not evolved', 'i-repeat', '--s3'],
     ['Mc', 'Cloud mass M_c', fmt(L.M_c, 5), L.M_c0 ? `${fmt(100 * L.M_c / L.M_c0, 4)}% of initial` : '', 'i-cloud', '--s2'],
@@ -1795,7 +1792,7 @@ function renderTiles() {
     ['rate', 'Ionization rate', fmt(L.total_mass_flux, 3), d.theory ? `theory ${fmt(d.theory.mass, 3)}` : 'q⁻²(M/M_c)Ṁ_c', 'i-trend', '--s8'],
     ['power', 'Ionization power', fmt(L.total_energy_flux, 3), d.theory ? `theory ${fmt(d.theory.power, 3)}` : 'q⁻²(M/M_c)P_ion', 'i-flame', '--s2'],
     ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
-  ];
+  ]).concat(sgTiles);
   const wrap = $('tiles');
   if (wrap.querySelector('.skel')) wrap.innerHTML = '';
   if (!wrap.children.length) {
