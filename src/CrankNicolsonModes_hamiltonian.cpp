@@ -311,6 +311,8 @@ SparseComplex CrankNicolsonModes::dVdt() const
 SparseComplex CrankNicolsonModes::H() const
 {
     SparseComplex result = H0 + V();
+    if (sg.enabled)
+        result += self_gravity_matrix();
     if (cap)
         result += CAP;
     return result;

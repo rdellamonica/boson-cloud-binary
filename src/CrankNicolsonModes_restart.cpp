@@ -33,6 +33,8 @@ constexpr char spin_magic[8] = {'S', 'P', 'I', 'N', '0', '0', '0', '1'};
 constexpr char Lz_budget_magic[8] = {'L', 'Z', 'B', 'U', 'D', 'G', '0', '1'};
 // Per-mode CAP energy estimates (written only with a per-mode CAP).
 constexpr char cap_energy_magic[8] = {'C', 'A', 'P', 'M', 'O', 'D', 'E', '1'};
+// Self-gravity: psi^n-1 for the extrapolated potential, E_ref and the absorption channels.
+constexpr char self_gravity_magic[8] = {'S', 'E', 'L', 'F', 'G', 'R', 'V', '1'};
 
 template <class T>
 void write_pod(std::ostream &out, const T &value)
@@ -196,6 +198,18 @@ void CrankNicolsonModes::save_checkpoint(int step_id) const
                       static_cast<std::streamsize>(n_modes * sizeof(double)));
             out.write(cap_has_energy.data(), static_cast<std::streamsize>(n_modes));
         }
+        if (sg.enabled)
+        {
+            out.write(self_gravity_magic, sizeof(self_gravity_magic));
+            const std::int32_t have_prev = sg_have_prev && sg_psi_prev.size() == psi.size() ? 1 : 0;
+            write_pod(out, have_prev);
+            for (const double value : {sg_t_prev, reference_energy, absorbed_swave_1, absorbed_dipole_1[0],
+                                       absorbed_dipole_1[1]})
+                write_pod(out, value);
+            if (have_prev)
+                out.write(reinterpret_cast<const char *>(sg_psi_prev.data()),
+                          static_cast<std::streamsize>(sg_psi_prev.size() * sizeof(dcomplex)));
+        }
 
         if (!out)
         {
@@ -322,6 +336,30 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
         }
     }
 
+    // Self-gravity trailer (last in the file).
+    bool has_sg = false;
+    std::int32_t sg_prev_flag = 0;
+    double sg_values[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+    Eigen::VectorXcd sg_prev_state;
+    if (in && sg.enabled)
+    {
+        char tag[sizeof(self_gravity_magic)];
+        in.read(tag, sizeof(tag));
+        if (in && std::memcmp(tag, self_gravity_magic, sizeof(tag)) == 0)
+        {
+            read_pod(in, sg_prev_flag);
+            for (double &value : sg_values)
+                read_pod(in, value);
+            if (in && sg_prev_flag == 1)
+            {
+                sg_prev_state.resize(static_cast<Eigen::Index>(size));
+                in.read(reinterpret_cast<char *>(sg_prev_state.data()),
+                        static_cast<std::streamsize>(size * sizeof(dcomplex)));
+            }
+            has_sg = static_cast<bool>(in);
+        }
+    }
+
     t_i = values[0];
     theta = values[1];
     phase = values[2];
@@ -356,6 +394,17 @@ bool CrankNicolsonModes::load_checkpoint(int step_id)
     checkpoint_has_Lz_budget = has_Lz_budget;
     if (has_Lz_budget)
         Lz_budget = LzBudget{Lz_terms[0], Lz_terms[1], Lz_terms[2], Lz_terms[3], Lz_terms[4]};
+    checkpoint_has_self_gravity = has_sg;
+    if (has_sg)
+    {
+        sg_have_prev = sg_prev_flag == 1;
+        sg_psi_prev = sg_prev_state;
+        sg_t_prev = sg_values[0];
+        reference_energy = sg_values[1];
+        absorbed_swave_1 = sg_values[2];
+        absorbed_dipole_1[0] = sg_values[3];
+        absorbed_dipole_1[1] = sg_values[4];
+    }
     checkpoint_has_cap_energy = cap_E.size() == n_modes;
     if (checkpoint_has_cap_energy)
     {
@@ -560,6 +609,12 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
             complete_rows = std::min(complete_rows, cap_modes_ends.size());
     }
 
+    // Self-gravity diagnostics, one row per step.
+    if (sg.enabled)
+        for (const char *name : {"self_gravity.txt", "levels.txt", "auger_probe.txt"})
+            if (fs::exists(folder + "/" + name))
+                complete_rows = std::min(complete_rows, line_ends(folder + "/" + name).size());
+
     // Latest snapshot that is complete and has all of its diagnostic rows.
     std::vector<int> snapshot_steps;
     const std::regex pattern(R"(snapshot_(\d+)\.txt)");
@@ -596,6 +651,8 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     checkpoint_has_spins = false;
     checkpoint_has_Lz_budget = false;
     checkpoint_has_cap_energy = false;
+    checkpoint_has_self_gravity = false;
+    sg_have_prev = false;
     Lz_budget = LzBudget{};
     // Spin angular momenta of the configured initial state (the masses are still the initial ones).
     const double initial_J1 = chi1 * M1 * M1, initial_J2 = chi2 * M2 * M2;
@@ -761,6 +818,24 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     }
     resume_active_modes_log(start);
 
+    if (sg.enabled)
+    {
+        if (!checkpoint_has_self_gravity)
+            std::cout << "Self-gravity: no stored history; the next step starts the extrapolation afresh"
+                         " and E_ref is the configured one." << std::endl;
+        // W[psi^n-1] and W[psi^n], exactly as the uninterrupted run held them.
+        if (sg_have_prev && sg_psi_prev.size() == psi.size())
+        {
+            sg_compute_potential(sg_psi_prev);
+            sg_fill_profile(sg_ramp(sg_t_prev), sg_profile_prev);
+        }
+        else
+            sg_have_prev = false;
+        sg_refresh_now();
+        sg_profile = sg_profile_now;
+        resume_self_gravity_files(start);
+    }
+
     if (start + 1 >= n_steps)
     {
         std::cout << "The run had already reached its last step (" << n_steps - 1 << ")." << std::endl;
@@ -768,4 +843,22 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
     }
 
     evolve(start + 1, n_steps);
+}
+
+void CrankNicolsonModes::resume_self_gravity_files(int start)
+{
+    namespace fs = std::filesystem;
+    for (const char *name : {"self_gravity.txt", "levels.txt", "auger_probe.txt", "absorbed_channels.txt"})
+    {
+        const std::string path = output_folder + "/" + name;
+        if (!fs::exists(path))
+            continue;
+        const auto ends = line_ends(path);
+        if (start == 0)
+            fs::resize_file(path, 0);
+        else if (static_cast<std::size_t>(start) <= ends.size())
+            fs::resize_file(path, ends[static_cast<std::size_t>(start - 1)]);
+    }
+    open_self_gravity_files(std::ios::out | std::ios::app);
+    write_levels_index();
 }

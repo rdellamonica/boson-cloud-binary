@@ -98,6 +98,12 @@ void CrankNicolsonModes::initialize()
     std::cout << "Configuring the Crank-Nicolson solver..." << std::endl;
     build_CN_matrices();
 
+    if (sg.enabled)
+    {
+        build_self_gravity_tables();
+        build_levels();
+    }
+
     if (pruning_enabled())
     {
         if (prune_check_every < 1 || !(prune_tolerance < 1.0))
@@ -250,19 +256,52 @@ void CrankNicolsonModes::step(int step_id)
 
     build_time_dependent_perturbation(t_i);
 
+    // Self-gravity: the potential over the step (extrapolated, or the first guess of the iteration).
+    if (sg.enabled)
+        sg_prepare_step();
+
     // B psi with B = 1 - (i dt/2) H on the active modes.
     const Eigen::VectorXcd state = gather_active(psi);
-    Eigen::VectorXcd rhs;
-    apply_hamiltonian(state, rhs, true);
-    rhs = state - (I * (0.5 * dt)) * (rhs - reference_energy * state);
+    Eigen::VectorXcd sink_rhs;
     if (sink_active)
-        rhs -= (0.25 * dt) * gather_active(apply_sink(psi)); // B_full = B - (dt/4) * Gamma
-    solve_CN(rhs);
-    // The solve gives the state in the frame rotating at E_ref; turn it back.
+        sink_rhs = (0.25 * dt) * gather_active(apply_sink(psi)); // B_full = B - (dt/4) * Gamma
     step_rotation = std::exp(I * (reference_energy * dt));
-    if (reference_energy != 0.0)
-        for (const int j : active_list)
-            psi.segment(static_cast<Eigen::Index>(j) * Nr, Nr) *= std::conj(step_rotation);
+    const auto crank_nicolson = [&]() {
+        Eigen::VectorXcd rhs;
+        apply_hamiltonian(state, rhs, true);
+        rhs = state - (I * (0.5 * dt)) * (rhs - reference_energy * state);
+        if (sink_active)
+            rhs -= sink_rhs;
+        solve_CN(rhs);
+        // The solve gives the state in the frame rotating at E_ref; turn it back.
+        if (reference_energy != 0.0)
+            for (const int j : active_list)
+                psi.segment(static_cast<Eigen::Index>(j) * Nr, Nr) *= std::conj(step_rotation);
+    };
+    crank_nicolson();
+    sg_last_iterations = 1;
+    if (sg.enabled && sg.iterated)
+    {
+        // Midpoint potential (W[psi_n] + W[psi_n+1]) / 2, by fixed-point iteration.
+        const double scale = sg_ramp(t_i);
+        std::vector<dcomplex> next;
+        for (int k = 1; k < sg.max_iterations; ++k)
+        {
+            const Eigen::VectorXcd previous = psi;
+            sg_compute_potential(psi);
+            sg_fill_profile(scale, next);
+            for (std::size_t n = 0; n < next.size(); ++n)
+                sg_profile[n] = 0.5 * (sg_profile_now[n] + next[n]);
+            // Start the solve from the last iterate, in the rotating frame.
+            if (reference_energy != 0.0)
+                for (const int j : active_list)
+                    psi.segment(static_cast<Eigen::Index>(j) * Nr, Nr) *= step_rotation;
+            crank_nicolson();
+            ++sg_last_iterations;
+            if ((psi - previous).norm() <= sg.tolerance * psi.norm())
+                break;
+        }
+    }
 
     // Binary power of this step: Omega_z times the torque of V(t_n+1) on the midpoint state.
     // With phi = exp(i E_ref dt) psi_n+1, CN gives phi - psi_n = -dt (i(H - E_ref) + Gamma/2) psi_mid
@@ -285,6 +324,13 @@ void CrankNicolsonModes::step(int step_id)
         const Eigen::VectorXcd midpoint = step_midpoint();
         absorbed_mass_1 += get_absorption_rate_1(midpoint) * dt;
         absorbed_mass_2 += get_absorption_rate_2(midpoint) * dt;
+        if (sg.enabled)
+        {
+            absorbed_swave_1 += mu * sink_particle_rate(sink1, midpoint) * dt;
+            if (dipole_absorption)
+                for (int c = 0; c < 2; ++c)
+                    absorbed_dipole_1[c] += mu * sink_particle_rate(dipole_sinks[c], midpoint) * dt;
+        }
         // The dipolar channels put m units of L_z per particle into the holes' spins;
         // the rest of the L_z the sinks remove (about the centre of mass) is orbital.
         const double spin_rate_1 = absorbed_spin_rate(1, midpoint), spin_rate_2 = absorbed_spin_rate(2, midpoint);
@@ -306,6 +352,10 @@ void CrankNicolsonModes::step(int step_id)
         if (Lz_budget_file.is_open())
             Lz_budget.damped += Lz_before_mask - cloud_Lz(psi);
     }
+
+    // Self-gravity of the new state: in H for the diagnostics below and the next step.
+    if (sg.enabled)
+        sg_finish_step();
 
     // The flux and snapshots use the post-mask endpoint state. Evaluate the
     // Schrodinger RHS on that same state, with the completed step's H(t_i).
@@ -366,6 +416,8 @@ void CrankNicolsonModes::step(int step_id)
         write_quantity_line_modes({Lz_budget.ionized, Lz_budget.torque, Lz_budget.absorbed, Lz_budget.pruned,
                                    Lz_budget.damped},
                                   Lz_budget_file);
+    if (sg.enabled && self_gravity_file.is_open())
+        write_self_gravity_rows(psi);
     if (cap_modes_file.is_open())
     {
         std::vector<double> row(2 * static_cast<std::size_t>(n_modes));
@@ -416,6 +468,31 @@ void CrankNicolsonModes::run(int n_steps, double r_ex_)
     save_run_info();
     // Refresh the initial operator, including a CAP enabled after initialize().
     build_time_dependent_perturbation(t_i);
+    if (sg.enabled)
+    {
+        sg_have_prev = false;
+        sg_refresh_now();
+        sg_profile = sg_profile_now;
+        if (sg.measured_reference && reference_energy != 0.0)
+        {
+            // The cloud's phase turns at its chemical potential <psi|H0 + V + W|psi> / N.
+            const Eigen::VectorXcd Hpsi = hamiltonian_times(psi);
+            const double N = state_norm2(psi);
+            double expectation = 0.0;
+            for (int j = 0; j < n_modes; ++j)
+                for (int i = 0; i < Nr; ++i)
+                    expectation += node_weight[i] * (std::conj(psi[j * Nr + i]) * Hpsi[j * Nr + i]).real();
+            const double weighted_N = uniform_grid ? N * dr : N;
+            if (weighted_N > 0.0)
+            {
+                std::cout << "Self-gravity: E_ref set to the measured chemical potential " << expectation / weighted_N
+                          << " (hydrogenic level " << reference_energy << ")" << std::endl;
+                reference_energy = expectation / weighted_N;
+            }
+        }
+        open_self_gravity_files(std::ios::out);
+        write_levels_index();
+    }
     save_snapshot(0, psi, "psi");
     save_snapshot(0, schrodinger_rhs(psi), "psi_dt");
     save_checkpoint(0);

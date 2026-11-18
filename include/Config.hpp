@@ -107,6 +107,20 @@ struct Config
     double cap_k_min = 0.0;       ///< Per-mode: smallest wavenumber (default 0 = 1 / layer width).
     /// @}
 
+    /// @name [self_gravity]: Newtonian self-gravity of the cloud (isolated hole at the origin)
+    /// @{
+    bool self_gravity = false;          ///< True when a [self_gravity] table is present and enabled is not false.
+    int sg_l_max = -1;                  ///< Highest multipole of Phi (default 2 l_max).
+    bool sg_recoil = true;              ///< Free-fall frame of the hole (default true).
+    double sg_recoil_taper = 0.0;       ///< Taper the recoil field beyond this radius (default 0 = none).
+    double sg_ramp_time = 0.0;          ///< Smooth switch-on time (default 0).
+    std::string sg_scheme = "extrapolated"; ///< "extrapolated" (one solve per step) or "iterated".
+    double sg_tolerance = 1e-10;        ///< Iterated scheme: relative change that stops the iteration.
+    int sg_max_iterations = 20;         ///< Iterated scheme: most solves per step.
+    bool sg_measured_reference = true;  ///< E_ref = the initial state's chemical potential (with energy_reference).
+    int sg_levels_n_max = 5;            ///< Highest n written to levels.txt.
+    /// @}
+
     /// @name [pruning]: evolve only the modes that matter (see CrankNicolsonModes)
     /// @{
     bool pruning = false;         ///< True when a [pruning] table is present and enabled is not false.
@@ -244,6 +258,29 @@ inline Config load_config(const std::string &filename)
         c.cap_reflection = tbl["cap"]["reflection"].value_or(1e-10);
         c.cap_tune_steps = tbl["cap"]["tune_steps"].value_or(20);
         c.cap_k_min = tbl["cap"]["k_min"].value_or(0.0);
+    }
+
+    if (tbl.contains("self_gravity") && tbl["self_gravity"].is_table())
+    {
+        auto sgt = tbl["self_gravity"];
+        c.self_gravity = sgt["enabled"].value_or(true);
+        c.sg_l_max = sgt["l_max"].value_or(-1);
+        c.sg_recoil = sgt["recoil"].value_or(true);
+        c.sg_recoil_taper = sgt["recoil_taper"].value_or(0.0);
+        c.sg_ramp_time = sgt["ramp_time"].value_or(0.0);
+        c.sg_scheme = sgt["scheme"].value_or(std::string("extrapolated"));
+        c.sg_tolerance = sgt["tolerance"].value_or(1e-10);
+        c.sg_max_iterations = sgt["max_iterations"].value_or(20);
+        c.sg_measured_reference = sgt["measured_reference"].value_or(true);
+        c.sg_levels_n_max = sgt["levels_n_max"].value_or(5);
+        if (c.sg_scheme != "extrapolated" && c.sg_scheme != "iterated")
+            throw std::invalid_argument("self_gravity.scheme must be \"extrapolated\" or \"iterated\"");
+        if (!(c.sg_ramp_time >= 0.0 && c.sg_recoil_taper >= 0.0 && c.sg_tolerance > 0.0 &&
+              c.sg_max_iterations >= 1 && c.sg_levels_n_max >= 1))
+            throw std::invalid_argument("self_gravity: ramp_time and recoil_taper must be >= 0, tolerance > 0, "
+                                        "max_iterations and levels_n_max >= 1");
+        if (c.self_gravity && c.secondary_potential)
+            throw std::invalid_argument("self_gravity needs an isolated hole at the origin (binary.q = 0)");
     }
 
     if (tbl.contains("pruning") && tbl["pruning"].is_table())

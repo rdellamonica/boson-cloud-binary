@@ -137,6 +137,22 @@ int main(int argc, char **argv)
                   << " steps\n";
     }
 
+    if (cfg.self_gravity)
+    {
+        CrankNicolsonModes::SelfGravityOptions options;
+        options.enabled = true;
+        options.l_max = cfg.sg_l_max;
+        options.recoil = cfg.sg_recoil;
+        options.recoil_taper = cfg.sg_recoil_taper;
+        options.ramp_time = cfg.sg_ramp_time;
+        options.iterated = cfg.sg_scheme == "iterated";
+        options.tolerance = cfg.sg_tolerance;
+        options.max_iterations = cfg.sg_max_iterations;
+        options.measured_reference = cfg.sg_measured_reference;
+        options.levels_n_max = cfg.sg_levels_n_max;
+        solver.enable_self_gravity(options);
+    }
+
     solver.use_block_preconditioner = cfg.preconditioner == "radial";
     solver.initialize();
 

@@ -44,6 +44,7 @@ add_library(GravitationalMoleculeLib
     src/CrankNicolsonModes_outgoing.cpp
     src/CrankNicolsonModes_pruning.cpp
     src/CrankNicolsonModes_restart.cpp
+    src/CrankNicolsonModes_selfgravity.cpp
     src/CrankNicolsonModes_utils.cpp
     src/RadialGrid.cpp
     src/RollingPhase.cpp
@@ -136,6 +137,7 @@ if(BUILD_TESTING)
     add_solver_test(cap_per_mode LABELS physics)
     add_solver_test(pruning LABELS physics)
     add_solver_test(radial_grid LABELS physics)
+    add_solver_test(self_gravity LABELS physics)
 
     # Restart and command-line drivers
     add_solver_test(restart LABELS integration)

@@ -39,6 +39,7 @@ void CrankNicolsonModes::apply_hamiltonian(const Eigen::VectorXcd &x, Eigen::Vec
     const double *lo = h0_lower.data(), *up = h0_upper.data();
     // Complex arithmetic is spelled out on (re, im) pairs so the inner loops vectorize.
     const double *xs = reinterpret_cast<const double *>(x.data());
+    const bool self_gravity = sg.enabled && sg_profile.size() == mode_pairs.size() * inner;
 #pragma omp parallel for schedule(dynamic) if (blocks >= 8)
     for (int b = 0; b < blocks; ++b)
     {
@@ -70,6 +71,17 @@ void CrankNicolsonModes::apply_hamiltonian(const Eigen::VectorXcd &x, Eigen::Vec
                 const double vr = pr * c[i], vi = pi * c[i];
                 yj[2 * i] += vr * xk[2 * i] - vi * xk[2 * i + 1];
                 yj[2 * i + 1] += vr * xk[2 * i + 1] + vi * xk[2 * i];
+            }
+            if (self_gravity && !sg_pair_terms[p].empty())
+            {
+                // Self-gravity coupling: a complex profile per pair.
+                const dcomplex *g = sg_profile.data() + p * inner - 1;
+                for (int i = 1; i < Nr - 1; ++i)
+                {
+                    const double gr = g[i].real(), gi = g[i].imag();
+                    yj[2 * i] += gr * xk[2 * i] - gi * xk[2 * i + 1];
+                    yj[2 * i + 1] += gr * xk[2 * i + 1] + gi * xk[2 * i];
+                }
             }
         }
         if (cap)
@@ -283,6 +295,8 @@ void CrankNicolsonModes::solve_CN(const Eigen::VectorXcd &rhs)
                 dcomplex h = h0_diagonal[static_cast<std::size_t>(j) * Nr + i];
                 if (interior && self_pair[j] >= 0)
                     h += pair_phase[self_pair[j]] * coupling_eff[self_pair[j] * inner + i - 1];
+                if (interior && self_pair[j] >= 0 && sg.enabled && sg_profile.size() == mode_pairs.size() * inner)
+                    h += sg_profile[self_pair[j] * inner + i - 1];
                 if (cap)
                     h += cap_diagonal[static_cast<Eigen::Index>(j) * Nr + i];
                 diagonal = 1.0 + scale * (h - reference_energy);

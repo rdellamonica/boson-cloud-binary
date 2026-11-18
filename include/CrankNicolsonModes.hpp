@@ -273,6 +273,56 @@ public:
     dcomplex dipole_weight(int body, int m, int j, int i) const;
     /// @}
 
+    /**
+     * @name Self-gravity of the cloud (isolated hole at the origin only)
+     *
+     * The cloud's Newtonian potential, @f$\nabla^2\Phi = 4\pi\mu|\psi|^2@f$, is
+     * expanded as @f$\Phi = \sum_{LM}\Phi_{LM}(r)Y_{LM}@f$ with
+     * @f$\Phi_{LM}(r) = -\frac{4\pi\mu}{2L+1}\int r_<^L/r_>^{L+1}\,n_{LM}(s)\,ds@f$ and the
+     * density moments @f$n_{LM} = \sum \mathcal{G}^{LM}_{\ell'm',\ell m}U^*_{\ell m}U_{\ell'm'}@f$.
+     * It couples the modes through
+     * @f$W_{\ell m,\ell'm'} = \mu\sum_L\mathcal{G}^{L,m-m'}_{\ell m,\ell'm'}\Phi_{L,m-m'}@f$,
+     * with @f$\mathcal{G}^{LM}_{\ell m,\ell'm'} = \int Y^*_{\ell m}Y_{LM}Y_{\ell'm'}d\Omega@f$.
+     * With @c recoil the cloud is solved in the free-fall frame of the hole,
+     * @f$\hat\Phi = \Phi - \mathbf{x}\cdot\nabla\Phi(0)@f$ (only L = 1 changes). See
+     * self_gravity_formalism.pdf and auger_test_design.md.
+     */
+    /// @{
+    struct SelfGravityOptions
+    {
+        bool enabled = false;
+        int l_max = -1;              ///< Highest multipole L of Phi; < 0 gives 2 l_max of the modes.
+        bool recoil = true;          ///< Free-fall frame of the hole (the uniform part of the cloud's field removed).
+        double recoil_taper = 0.0;   ///< > 0: the recoil field falls smoothly to 0 between this radius and twice it.
+        double ramp_time = 0.0;      ///< Smoothstep switch-on time of the self-potential (0: on at once).
+        bool iterated = false;       ///< false: extrapolated potential (3W^n - W^n-1)/2; true: (W^n + W^n+1)/2 iterated.
+        double tolerance = 1e-10;    ///< Iterated scheme: stop when |psi^(k+1) - psi^(k)| / |psi| is below this.
+        int max_iterations = 20;     ///< Iterated scheme: largest number of solves per step.
+        bool measured_reference = true; ///< With energy_reference: E_ref = <psi|H|psi>/N of the initial state.
+        int levels_n_max = 5;        ///< Highest principal number of the levels written to levels.txt.
+    };
+    /// Switch self-gravity on (call before initialize(), after configure_isolated_black_hole()).
+    void enable_self_gravity(const SelfGravityOptions &options);
+    bool self_gravity_enabled() const { return sg.enabled; }
+    const SelfGravityOptions &self_gravity_options() const { return sg; }
+    /// @f$W[\rho]\,x@f$: the self-gravity operator built from the density of @p density_state
+    /// (with the recoil setting, no ramp) applied to @p x. Both hold every mode.
+    Eigen::VectorXcd self_gravity_apply(const Eigen::VectorXcd &density_state, const Eigen::VectorXcd &x);
+    /// @f$\Phi_{LM}(r_i)@f$ (M >= 0, without the recoil term) of the density of @p state.
+    Eigen::VectorXcd self_gravity_potential(const Eigen::VectorXcd &state, int L, int M);
+    /// Gravitational self-energy @f$\frac{\mu}{2}\int\Phi|\psi|^2@f$ of the last computed density (no recoil).
+    double self_gravity_energy() const { return sg_energy; }
+    /// Acceleration of the hole, @f$-\nabla\Phi(0)@f$, (x, y) components, of the last computed density.
+    std::pair<double, double> self_gravity_hole_acceleration() const;
+    /// Bound level (n, l) of the hole's monopole H0 - mu M/r on the grid: U-space vector with
+    /// sum_i w_i f_i^2 = 1, positive near the origin. Available after initialize() with self-gravity.
+    const Eigen::VectorXd &level_function(int n, int l) const;
+    /// Energy of that level on the grid.
+    double level_energy(int n, int l) const;
+    /// Solves taken by the last step (1 for the extrapolated scheme).
+    int self_gravity_last_iterations() const { return sg_last_iterations; }
+    /// @}
+
     bool mask = false;    ///< A damping mask is applied after every step.
     bool cap = false;     ///< A complex absorbing potential is part of H.
 
@@ -826,6 +876,55 @@ private:
     /// @}
     /// Lz_absorbed_rate.txt: Lz_abs_rate (the part credited to the orbit) per step (absent in runs written before it existed).
     std::ofstream Lz_abs_file;
+    /// @name Self-gravity internals (CrankNicolsonModes_selfgravity.cpp)
+    /// @{
+    SelfGravityOptions sg;
+    int sg_L = 0;                                     ///< Highest multipole in use.
+    std::vector<std::pair<int, int>> sg_multipoles;   ///< (L, M >= 0), L - M even.
+    std::vector<int> sg_index;                        ///< Position of (L, M) in sg_multipoles, at L * (sg_L + 1) + M, or -1.
+    struct SgDensityTerm { int j, k; double gaunt; }; ///< gaunt * conj(U_j) U_k in n_LM.
+    std::vector<std::vector<SgDensityTerm>> sg_density_terms; ///< Per multipole.
+    struct SgPairTerm { int multipole; double gaunt; bool conjugate; double sign; };
+    std::vector<std::vector<SgPairTerm>> sg_pair_terms; ///< Per entry of mode_pairs.
+    std::vector<double> sg_inner_ratio, sg_outer_ratio; ///< (r_i-1/r_i)^(L+1) and (r_i/r_i+1)^L, indexed L*Nr+i.
+    std::vector<Eigen::VectorXcd> sg_phi;             ///< Phi_LM of the last density (recoil included).
+    std::vector<dcomplex> sg_profile;                 ///< Self-gravity coupling in H now, indexed p*(Nr-2)+i-1.
+    std::vector<dcomplex> sg_profile_now, sg_profile_prev; ///< W[psi^n] and W[psi^n-1], ramp included.
+    Eigen::VectorXcd sg_psi_prev;                     ///< psi^n-1 (state at the start of the last step).
+    double sg_t_prev = 0.0;
+    bool sg_have_prev = false;
+    double sg_energy = 0.0;
+    dcomplex sg_dipole = 0.0;                         ///< D_1 = sum_i w_i n_11 / r_i^2.
+    int sg_last_iterations = 0;
+    bool checkpoint_has_self_gravity = false;
+    std::ofstream self_gravity_file, levels_file, auger_probe_file, absorbed_channels_file;
+    double absorbed_swave_1 = 0.0, absorbed_dipole_1[2] = {0.0, 0.0};
+    struct Level { int n, l; double energy; Eigen::VectorXd f; };
+    std::vector<Level> sg_levels;
+    struct LevelColumn { int level, mode; };
+    std::vector<LevelColumn> sg_level_columns;        ///< Columns of levels.txt.
+    void build_self_gravity_tables();
+    void build_levels();
+    double sg_ramp(double time) const;
+    /// Density moments, Phi_LM (with recoil), the energy and D_1 of @p state.
+    void sg_compute_potential(const Eigen::VectorXcd &state);
+    /// Coupling profiles from sg_phi, times @p scale, into @p out.
+    void sg_fill_profile(double scale, std::vector<dcomplex> &out) const;
+    /// sg_profile_now = W[psi] at time t_i.
+    void sg_refresh_now();
+    /// Before a step: put the extrapolated (or first-guess) potential into H.
+    void sg_prepare_step();
+    /// After a step (or resume): W[psi^n+1] into H and the history.
+    void sg_finish_step();
+    /// Sparse matrix of the current self-gravity coupling (for H()).
+    SparseComplex self_gravity_matrix() const;
+    void open_self_gravity_files(std::ios::openmode mode);
+    void write_self_gravity_rows(const Eigen::VectorXcd &midpoint);
+    void write_levels_index() const;
+    /// Truncate the self-gravity files to @p start rows on resume and reopen them.
+    void resume_self_gravity_files(int start);
+    /// @}
+
 
     /// @f$\mathrm{Re}\langle\dot\psi|V|\psi\rangle@f$ inside the extraction radius.
     double get_dVexpectation_dt(const Eigen::VectorXcd &psi, const Eigen::VectorXcd &dpsi_dt);

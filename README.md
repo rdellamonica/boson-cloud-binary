@@ -238,6 +238,9 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[cap]` | `L_factor`, `W`, `n` | Complex absorbing potential beyond `L_factor * L` |
 | | `per_mode`, `reflection`, `tune_steps`, `k_min` | Tune the CAP strength of each mode to that mode's frequency instead of using `W`, for no measurable reflection (defaults `false`, `1e-10`, `20` steps, `0` = 1 / layer width; with `per_mode` the default `n` is 6). See *Outer boundary* below |
 | `[pruning]` | `enabled`, `tolerance`, `flux_tolerance`, `check_every` | Evolve only the modes that matter (defaults `true`, `1e-8`, `1e-3` and `10` steps); `enabled = false` evolves every mode but keeps the settings. See *Mode pruning* below |
+| `[self_gravity]` | `enabled`, `l_max`, `recoil`, `recoil_taper`, `ramp_time` | Newtonian self-gravity of the cloud, for an isolated hole at the origin only (`binary.q = 0` or `secondary_potential = false` with the hole at x = 0) and without pruning. Defaults `true` when the table is present, `l_max = 2 l_max` of the modes, `recoil = true` (hole free-fall frame, needed for the Auger rate), `recoil_taper = 0` (none; otherwise the recoil field falls off from this radius to twice it), `ramp_time = 0`. See *Self-gravity* below |
+| | `scheme`, `tolerance`, `max_iterations` | `"extrapolated"` (default: potential (3 W^n - W^(n-1)) / 2, one solve per step) or `"iterated"` (midpoint potential iterated to `tolerance`, default `1e-10`, at most `max_iterations` = 20 solves) |
+| | `measured_reference`, `levels_n_max` | With `energy_reference`, use the initial state's measured chemical potential as E_ref (default `true`); highest n of the levels projected in `levels.txt` (default 5) |
 
 ## Output
 
@@ -276,6 +279,18 @@ Each run writes a `Simulation_YYYY_MM_DD_HH_MM_SS/` folder with
   caption), the signed cloud budget over time and the cloud's L_z per mode;
   for runs written before the file existed it falls back on the diagnostics, which
   close only to O(dt). Runs resumed without it keep going without it,
+- with `[self_gravity]`, one row per step in
+  - `self_gravity.txt`: `E_self a_x a_y iterations` (self-energy (mu/2) int Phi mu |psi|^2
+    without the recoil field, the hole's acceleration towards the cloud's dipole, and the
+    solves of the step),
+  - `levels.txt`: the population |c_nlm|^2 of every level of the self-consistent
+    monopole Hamiltonian (hole + the cloud's own l = 0 potential), n <= `levels_n_max`,
+    in the column order of `levels_index.txt` (`n l m energy`, energies at t = 0),
+  - `auger_probe.txt`: `Re/Im` of the 211, 322 and 433 amplitudes (projections of the
+    (1,1), (2,2), (3,3) modes on those levels), `Re/Im psi_00(0)` from a cusp fit at
+    the inner boundary, and `Re/Im` of `U_33` and `U_53` at `r_ex`,
+  - `absorbed_channels.txt`: the cumulative mass the hole took through the s-wave
+    channel and the dipolar m = -1 and m = +1 channels,
 - `checkpoint.bin`, the exact binary state at the last snapshot, used to resume,
 - with pruning, `active_modes.txt`: one line `step t count flags...` at the start
   and at every change of the active set, with a 0/1 flag per mode in the order
@@ -407,6 +422,22 @@ Each run writes `cap_modes.txt` (one row per step: the energy estimate of every
 mode, 0 before the first one, then its strength `W_j`), and checkpoints keep the
 estimates so a resumed run continues bitwise. Without `per_mode` the CAP is the
 uniform one, unchanged.
+
+**Self-gravity.** With `[self_gravity]` the cloud feels its own Newtonian
+potential, Phi from Poisson's equation lap Phi = 4 pi mu |psi|^2 (G = 1, so the
+term in the Schrodinger equation is mu Phi). The density is expanded in multipoles
+n_LM = sum G U_j* U_k with Gaunt coefficients, each multipole is solved with the
+Green's function r_<^L / r_>^(L+1) by two O(N) sweeps, and Phi couples the modes
+through the same Gaunt coefficients as the binary potential. With `recoil = true`
+the solver works in the hole's free-fall frame: the hole is pinned at the origin
+and the cloud feels the uniform field that accelerates the hole, which removes
+the hole's own dipole response (needed for the gravitational Auger rate, about
+35% lower than without it). The potential is time-centred, extrapolated or
+iterated; the iterated scheme conserves E = <H0 + V> + E_self to the solve
+tolerance with `recoil = false` (the free-fall frame is not inertial). The test
+`self_gravity` checks the monopole, the 211 self-energy, Hermiticity, the Auger
+coefficient I_G = 0.0914 (0.143 without recoil) of Foster & Rodd
+(arXiv:2611.18833), energy and norm conservation, and bitwise resume.
 
 **Mode pruning.** Every pair of modes is coupled by the binary's multipoles, so
 a step costs roughly the square of the number of modes. With a `[pruning]` table
