@@ -231,6 +231,49 @@ def test_seed_bound(work):
     assert tail[n_default - 1] < 1e-6 <= tail[n_default], f"default n_max {n_default} does not match r_ex"
 
 
+def test_auger(work):
+    # 211 with a 322 seed at the origin: only (1, 1) and (2, 2), seed fraction f, bare levels equal
+    # to the solver's radial levels, and the self-consistent 211 an eigenstate of H_1 + its own potential.
+    from sympy.physics.wigner import gaunt as sympy_gaunt
+    values = write_config(os.path.join(work, "config.toml"), N=801, L=400.0, q=0.0, mu=0.4, l_max=3, r_ex=300.0)
+    with open(os.path.join(work, "config.toml"), "a") as f:
+        f.write("\n[self_gravity]\nrecoil = true\n")
+    r = np.linspace(0.0, values["L"], values["N"])
+    mu, h, N = values["mu"], r[1] - r[0], 0.01 / values["mu"]
+    frac = 1e-3
+    run_script("get_initial_state_auger.py", ["--config", "config.toml", "--output", "bare.bin", "--bare",
+                                              "--seed-fraction", str(frac), "--phase", "0.5"], work)
+    out = run_script("get_initial_state_auger.py", ["--config", "config.toml", "--output", "sc.bin",
+                                                    "--seed-fraction", str(frac)], work)
+    bare, _ = read_modesbin(os.path.join(work, "bare.bin"))
+    sc, _ = read_modesbin(os.path.join(work, "sc.bin"))
+    assert set(bare) == {(1, 1), (2, 2)} and set(sc) == {(1, 1), (2, 2)}, f"modes {sorted(bare)}"
+    for state in (bare, sc):
+        assert abs(norm(state, r) - 1.0) < 1e-12, "state is not normalised"
+        assert abs(np.trapezoid(np.abs(state[(2, 2)]) ** 2, x=r) - frac) < 1e-12, "seed fraction"
+    assert abs(np.angle(bare[(2, 2)][np.argmax(np.abs(bare[(2, 2)]))]) - 0.5) < 1e-12, "seed phase"
+    for (l, n) in ((1, 2), (2, 3)):
+        energies, phi = seed_levels(r, mu, l)
+        f = phi[:, 0] * np.sign(phi[np.argmax(np.abs(phi[:, 0])), 0])
+        p = np.abs(bare[(l, l)][1:-1])
+        p /= math.sqrt(np.sum(h * p ** 2))
+        assert np.max(np.abs(p - np.abs(f))) < 1e-8, f"bare ({n}, {l}, {l}) is not the grid level"
+    # Self-consistent 211: H_1 f + mu sum_L G_L Phi_L0[N f^2] f = E f, with an independent dense Green's function.
+    G = {L: float(sympy_gaunt(1, L, 1, -1, 0, 1)) * -1 for L in (0, 2)}   # int Y*_11 Y_L0 Y_11
+    f = np.real(sc[(1, 1)]) / math.sqrt(1 - frac)
+    inner = r[1:-1]
+    K = lambda L: np.minimum.outer(inner, inner) ** L / np.maximum.outer(inner, inner) ** (L + 1)
+    V = sum(mu * G[L] * (-4 * math.pi * mu / (2 * L + 1)) * (K(L) @ (h * G[L] * N * f[1:-1] ** 2)) for L in (0, 2))
+    H = (np.diag(1.0 / (mu * h * h) + 1 / (mu * inner ** 2) - mu / inner + V)
+         - np.diag(np.full(inner.size - 1, 0.5 / (mu * h * h)), 1)
+         - np.diag(np.full(inner.size - 1, 0.5 / (mu * h * h)), -1))
+    Hf = H @ f[1:-1]
+    E = float(f[1:-1] @ Hf) * h
+    assert np.max(np.abs(Hf - E * f[1:-1])) < 1e-8 * np.max(np.abs(E * f[1:-1])), "211 is not self-consistent"
+    assert E < seed_levels(r, mu, 1)[0][0], "self-gravity does not lower the 211 energy"
+    assert "self-consistent" in out, out
+
+
 def test_com_fast_primary(work):
     # A 1s cloud on the primary of a q = 0.1 binary, so the atom sits at
     # x = R1 = R q / (1 + q) and the state is the translated 1s state.
@@ -322,7 +365,7 @@ def main():
     parser.add_argument("--solver", help="GravitationalMolecule executable, for the end-to-end check")
     args = parser.parse_args()
 
-    tests = [test_gaussian, test_gaussian_rejects_bad_sigma, test_seed, test_seed_bound, test_com_fast_primary,
+    tests = [test_gaussian, test_gaussian_rejects_bad_sigma, test_seed, test_seed_bound, test_auger, test_com_fast_primary,
              test_com_fast_secondary_is_mirrored]
     failures = 0
     for test in tests:
