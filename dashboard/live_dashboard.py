@@ -120,6 +120,11 @@ class Run:
         self.Lz_budget = GrowingTable(os.path.join(folder, "Lz_budget.txt"))
         # Orbital L_z taken by the sinks per step, the approximate budget's absorbed part.
         self.Lz_abs = GrowingTable(os.path.join(folder, "Lz_absorbed_rate.txt"))
+        # Self-gravity runs: E_self and hole acceleration, level occupations, Auger amplitudes,
+        # absorbed mass per horizon channel (see sg_payload).
+        self.sg_tables = {name: GrowingTable(os.path.join(folder, name + ".txt"))
+                          for name in ("self_gravity", "levels", "auger_probe", "absorbed_channels")}
+        self.levels_index = None
         self.snapshot_cache = {}
         self.slice_geometry = {}            # (r_plot, n_grid) -> interpolation tables
         self.payload_cache = OrderedDict()  # finished snapshot payloads, LRU
@@ -164,6 +169,8 @@ class Run:
         self.spins.update()
         self.Lz_budget.update()
         self.Lz_abs.update()
+        for table in self.sg_tables.values():
+            table.update()
         rows = min(t.rows for t in self.tables.values())
         now = time.time()
         if not self.rate_history or self.rate_history[-1][1] != rows:
@@ -263,6 +270,16 @@ SETUP_SCHEMA = [
         ("simulation", "ramp_periods", "Companion ramp-up", 0.0, "orbits", "the companion is switched on over this time"),
         ("simulation", "orbit_delay_periods", "Orbit hold", 0.0, "orbits", "with evolve_orbit, the companion is fully on but the orbit stays fixed for this time after the companion ramp"),
         ("simulation", "orbit_ramp_periods", "Orbit ramp-up", 1.0, "orbits", "with evolve_orbit, the back-reaction on R is switched on over this time after the hold"),
+    ]),
+    ("self_gravity", "Self-gravity", "atom", [
+        ("self_gravity", "enabled", "Self-gravity", True, "", "Newtonian potential of the cloud (Schrödinger–Poisson), isolated hole at the origin"),
+        ("self_gravity", "recoil", "Hole recoil", True, "", "free-fall frame of the hole: the cloud feels the field that accelerates the hole"),
+        ("self_gravity", "scheme", "Potential in the step", "extrapolated", "", "extrapolated (one solve) or iterated midpoint"),
+        ("self_gravity", "l_max", "Multipoles of Φ", -1, "", "-1: 2 l_max"),
+        ("self_gravity", "ramp_time", "Switch-on time", 0.0, "M", ""),
+        ("self_gravity", "recoil_taper", "Recoil taper", 0.0, "M", "0: none"),
+        ("self_gravity", "levels_n_max", "Levels tracked", 5, "", "highest n in levels.txt"),
+        ("self_gravity", "measured_reference", "Measured E_ref", True, "", "CN energy reference = initial chemical potential"),
     ]),
     ("numerics", "Numerics", "steps", [
         ("parallel", "threads", "Threads", 0, "", "0 uses every core"),
@@ -398,6 +415,10 @@ def run_setup(cfg, text, r, n_modes):
             {"text": f"R₀ = {R0:g} M", "tone": "plain"}]),
         {"text": f"l_max = {l_max}", "tone": "plain"},
     ]
+    if self_gravity_on(cfg):
+        sgc = cfg.get("self_gravity") or {}
+        badges.insert(1, {"text": "Self-gravity" + (" · recoil" if sgc.get("recoil", True) else " · no recoil"),
+                          "tone": "on", "icon": "atom"})
     if boundary:
         badges.append({"text": boundary.capitalize() if boundary == "mask" else boundary, "tone": "plain", "icon": "aperture"})
     summary = [
@@ -407,6 +428,8 @@ def run_setup(cfg, text, r, n_modes):
         ["Initial (n, l, m)", f"({n}, {l}, {m})"],
         ["μ", f"{mu:g}"], ["BH at x", f"{q / (1 + q) * R0:.4g}"] if alone else ["q₀", f"{q:g}"], ["Modes", str(n_modes)],
     ]
+    if self_gravity_on(cfg):
+        summary.insert(0, ["Self-gravity", "recoil" if (cfg.get("self_gravity") or {}).get("recoil", True) else "no recoil"])
     return {"groups": groups, "badges": badges, "summary": summary, "toml": text}
 
 
@@ -650,6 +673,12 @@ def no_companion(cfg):
     return massless or not bool(sim.get("secondary_potential", True))
 
 
+def self_gravity_on(cfg):
+    """True for a run with the cloud's self-gravity: a [self_gravity] table with enabled not false."""
+    sg = cfg.get("self_gravity")
+    return isinstance(sg, dict) and bool(sg.get("enabled", True))
+
+
 def at_origin(cfg):
     """q = 0: the lone primary sits at the origin. Runs from before the solver
     mapped q = 0 to no companion track a massless companion in R_orb and
@@ -698,6 +727,221 @@ def pick(n, max_points, start=0):
         return np.arange(start, n)
     return np.unique(np.linspace(start, n - 1, max_points).round().astype(int))
 
+# ----------------------------------------------------------------------------
+# Self-gravity runs: the gravitational Auger test (Foster & Rodd, arXiv:2611.18833)
+# ----------------------------------------------------------------------------
+
+# Paper values: |I_G| with the hole's recoil (free-fall frame) and without; I_3 of 322 + 322 -> 211 + X(inf).
+AUGER_I_G = {True: 0.0914, False: 0.143}
+AUGER_I_3 = 0.02995
+
+
+def read_levels_index(run):
+    """(n, l, m, energy) of every column of levels.txt, from levels_index.txt (written at the start)."""
+    if run.levels_index is None:
+        path = os.path.join(run.folder, "levels_index.txt")
+        try:
+            rows = []
+            with open(path) as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) == 4 and not line.lstrip().startswith("#"):
+                        rows.append((int(parts[0]), int(parts[1]), int(parts[2]), float(parts[3])))
+            run.levels_index = rows or None
+        except OSError:
+            return None
+    return run.levels_index
+
+
+def _cumtrapz(y, t):
+    return np.concatenate(([0.0], np.cumsum(0.5 * (y[1:] + y[:-1]) * np.diff(t))))
+
+
+def _late_mean(y, t, t_min):
+    """Mean of y over [max(t/2, t_min), t] at every row: settles once the start-up transients
+    have left the window, and still follows a slow drift."""
+    y = np.asarray(y)
+    C = _cumtrapz(y, t)
+    lo = np.maximum(t / 2.0, t_min)
+    i0 = np.clip(np.searchsorted(t, lo), 0, len(t) - 1)
+    span = t - t[i0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = (C - C[i0]) / np.where(span > 0, span, np.nan)
+    return out
+
+
+def _rate(cumulative, t, window):
+    """d/dt of a cumulative series, averaged over `window` rows (causal boxcar)."""
+    c = np.concatenate(([0.0], cumulative))
+    tt = np.concatenate(([0.0], t))
+    k = np.arange(1, len(c))
+    j = np.maximum(k - window, 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return (c[k] - c[j]) / (tt[k] - tt[j])
+
+
+def _boxcar(y, window):
+    c = np.concatenate(([0.0], np.cumsum(np.nan_to_num(y))))
+    k = np.arange(1, len(c))
+    j = np.maximum(k - window, 0)
+    return (c[k] - c[j]) / (k - j)
+
+
+def auger_two_level(x1, x2, gH, gI, t_end, n_out=400):
+    """The paper's two-level model for fractions x = N / N0 (classical seed, N + 1 -> N):
+    x1' = -2 gH x1^2 x2 + gI x2^2 x1,  x2' = gH x1^2 x2 - 2 gI x2^2 x1  (g = Gamma_bar N0^2).
+    RK4 with steps limited by the fastest relative rate. Returns (t, x1, x2) on n_out points."""
+    def f(a, b):
+        return -2 * gH * a * a * b + gI * b * b * a, gH * a * a * b - 2 * gI * b * b * a
+    ts = np.linspace(0.0, t_end, n_out)
+    out1, out2 = [x1], [x2]
+    t = 0.0
+    for target in ts[1:]:
+        while t < target - 1e-12 * t_end:
+            r = max(abs(gH) * x1 * x1 + 2 * abs(gI) * x2 * x1, abs(gH) * x1 * x2 + abs(gI) * x2 * x2, 1e-300)
+            h = min(target - t, 0.05 / r)
+            k1 = f(x1, x2)
+            k2 = f(x1 + h / 2 * k1[0], x2 + h / 2 * k1[1])
+            k3 = f(x1 + h / 2 * k2[0], x2 + h / 2 * k2[1])
+            k4 = f(x1 + h * k3[0], x2 + h * k3[1])
+            x1 += h / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0])
+            x2 += h / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1])
+            t += h
+        out1.append(x1)
+        out2.append(x2)
+    return ts, np.array(out1), np.array(out2)
+
+
+def sg_payload(run, cfg, SG, t, current, norms_raw, energy_raw, modes, idx):
+    """Diagnostics of a self-gravity run, sampled at the rows idx. SG holds the raw tables
+    self_gravity, levels, auger_probe and absorbed_channels (any may be missing or one row short).
+    Particle numbers N are in the solver's normalisation, N0 = M_c / mu."""
+    mu = float(cfg["atom"]["mu"])
+    sgc = cfg.get("self_gravity") or {}
+    recoil = bool(sgc.get("recoil", True))
+    ramp = float(sgc.get("ramp_time", 0.0))
+    absorption = bool((cfg.get("simulation") or {}).get("absorption", False))
+    N0 = float(cfg["atom"].get("M_c", 0.0)) / mu
+    if not N0 > 0:
+        N0 = float(norms_raw[:, 0].sum())
+    rows = len(t)
+    nan = np.full(rows, np.nan)
+
+    def table(name, width):
+        a = SG.get(name)
+        if a is None or a.ndim != 2 or a.shape[0] == 0 or a.shape[1] < width:
+            return None
+        if a.shape[0] >= rows:
+            return a[:rows]
+        pad = np.full((rows - a.shape[0], a.shape[1]), np.nan)
+        return np.concatenate([a, pad])
+
+    E_tab, P_tab = table("self_gravity", 4), table("auger_probe", 8)
+    L_tab, A_tab = table("levels", 1), table("absorbed_channels", 3)
+    out = {"recoil": recoil, "absorption": absorption, "N0": N0, "ramp_time": ramp,
+           "I_G_paper": AUGER_I_G[recoil], "I_3_paper": AUGER_I_3}
+    c = lambda a, d=7: clean(np.asarray(a)[idx], d)
+
+    # Energies per particle: <H>/N is the chemical potential (the self-energy counts twice in it),
+    # E/N = (<H> - E_self)/N the conserved energy (inertial frame), E_self/N the self-energy.
+    N_raw = norms_raw.sum(axis=0)
+    if E_tab is not None:
+        E_self = E_tab[:, 0]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out["energy"] = {"lambda": c(energy_raw / N_raw, 9), "E": c((energy_raw - E_self) / N_raw, 9),
+                             "E_self": c(E_self / N_raw, 9), "E_self_raw": c(E_self, 9),
+                             "E_ref": -0.5 * mu ** 3 / float(cfg["atom"].get("n", 2)) ** 2}
+        ax, ay = E_tab[:, 1], E_tab[:, 2]
+        out["recoil_acc"] = {"ax": c(ax), "ay": c(ay), "a": c(np.hypot(ax, ay))}
+        out["iterations"] = c(E_tab[:, 3], 3)
+        it = E_tab[:, 3][np.isfinite(E_tab[:, 3])]
+        out["iterations_mean"] = float(it.mean()) if it.size else None
+
+    # Level occupations.
+    index = read_levels_index(run)
+    if L_tab is not None and index and len(index) == L_tab.shape[1]:
+        frac = L_tab / N0
+        out["levels"] = {"index": [list(x) for x in index], "frac": [c(frac[:, k]) for k in range(frac.shape[1])],
+                         "peak": [finite_or_none(float(np.nanmax(np.abs(frac[:, k])))) if np.isfinite(frac[:, k]).any() else None
+                                  for k in range(frac.shape[1])]}
+
+    if P_tab is None:
+        return out
+    c1, c2, c3 = (P_tab[:, 2 * k] + 1j * P_tab[:, 2 * k + 1] for k in range(3))
+    psi0 = P_tab[:, 6] + 1j * P_tab[:, 7]
+    N1, N2, N3 = np.abs(c1) ** 2, np.abs(c2) ** 2, np.abs(c3) ** 2
+    out["N"] = {"211": c(N1 / N0), "322": c(N2 / N0), "433": c(N3 / N0), "psi0": c(np.abs(psi0) ** 2 / N0)}
+
+    # K = psi_00(0) / (c211^2 c322*): |K|^2 = (alpha mu)^3 q^2 I_G^2 / pi with alpha = q = mu (M1 = 1).
+    with np.errstate(divide="ignore", invalid="ignore"):
+        K = psi0 / (c1 ** 2 * np.conj(c2))
+    K = np.where(np.isfinite(K) & (N2 > 0), K, np.nan)
+    scale = math.sqrt(math.pi) / mu ** 4
+    good = np.isfinite(K)
+    K_avg = np.full(rows, np.nan + 0j)
+    if good.sum() > 2:
+        Kf = np.where(good, K, 0.0)
+        t_min = max(2.0 * ramp, t[np.argmax(good)])
+        K_avg = _late_mean(Kf.real, t, t_min) + 1j * _late_mean(Kf.imag, t, t_min)
+    I_inst, I_avg = scale * np.abs(K), scale * np.abs(K_avg)
+    out["I_G"] = {"inst": c(I_inst, 5), "avg": c(I_avg, 6)}
+    last_ok = np.flatnonzero(np.isfinite(I_avg))
+    out["I_G_now"] = float(I_avg[last_ok[-1]]) if last_ok.size else None
+
+    # Channel rates in particles per M: X absorbed through the s-wave channel (Auger 211+211 -> 322+X),
+    # emitted in (3,3) + (5,3) through r_ex (322+322 -> 211+X), and the dipolar channels.
+    window = max(1, rows // 150)
+    rates = {}
+    if A_tab is not None:
+        rates["H"] = _rate(np.nan_to_num(A_tab[:, 0]) / mu, t, window)
+        rates["dip_m"] = _rate(np.nan_to_num(A_tab[:, 1]) / mu, t, window)
+        rates["dip_p"] = _rate(np.nan_to_num(A_tab[:, 2]) / mu, t, window)
+    emit = [modes.index(md) for md in ((3, 3), (5, 3)) if md in modes]
+    if emit:
+        rates["inf"] = _boxcar(current[emit].sum(axis=0) / mu, window)
+    Gamma_I_paper = 2 * math.pi * mu ** 5 * AUGER_I_3 ** 2
+    chi = float((cfg.get("binary") or {}).get("spin_1", 0.0))
+    A_H = 8 * math.pi * (1 + math.sqrt(max(0.0, 1 - chi * chi)))
+    Gamma_H_paper = A_H * mu ** 8 * AUGER_I_G[recoil] ** 2 / math.pi if absorption else 0.0
+    N1s, N2s = _boxcar(N1, window), _boxcar(N2, window)
+    pred = {"H": Gamma_H_paper * N1s ** 2 * N2s, "inf": Gamma_I_paper * N2s ** 2 * N1s}
+    out["rates"] = {k: c(v / N0) for k, v in rates.items()}
+    out["rates_paper"] = {k: c(v / N0) for k, v in pred.items()}
+    out["rate_window"] = float(t[min(window, rows - 1)] - t[0]) if rows > 1 else None
+
+    # Measured Gamma_bar from the rates, averaged over the late half; the paper's with A_H = 8 pi M r_+.
+    meas = {}
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if "H" in rates:
+            g = rates["H"] / (N1s ** 2 * N2s)
+            meas["H"] = _late_mean(np.where(np.isfinite(g), g, 0.0), t, 2.0 * ramp)
+        if "inf" in rates:
+            g = rates["inf"] / (N2s ** 2 * N1s)
+            meas["inf"] = _late_mean(np.where(np.isfinite(g), g, 0.0), t, 2.0 * ramp)
+    now = lambda a: finite_or_none(float(a[-1])) if a is not None and len(a) else None
+    G = {"H_paper": Gamma_H_paper, "inf_paper": Gamma_I_paper,
+         "H": now(meas.get("H")), "inf": now(meas.get("inf")), "A_H": A_H}
+    out["Gamma"] = G
+    out["Gamma_series"] = {k: c(v, 5) for k, v in meas.items()}
+
+    # Time scales now: 322 growth 1/(Gamma_H N1^2), saturation T_SG = 4 Gamma_inf / (3 Gamma_H^2 N1^2).
+    N1_now = float(N1s[-1]) if np.isfinite(N1s[-1]) else None
+    def scales(gH, gI):
+        if not (N1_now and gH and gH > 0):
+            return None, None
+        grow = 1.0 / (gH * N1_now ** 2)
+        tsg = 4 * gI / (3 * gH ** 2 * N1_now ** 2) if gI and gI > 0 else None
+        return grow, tsg
+    out["T"] = {"paper": scales(Gamma_H_paper, Gamma_I_paper),
+                "measured": scales(G["H"], G["inf"] if G["inf"] and G["inf"] > 0 else Gamma_I_paper),
+                "t_now": float(t[-1])}
+
+    # The paper's two-level evolution from the run's initial occupations.
+    if absorption and np.isfinite(N1[0]) and np.isfinite(N2[0]) and N2[0] > 0 and t[-1] > 0:
+        ts, x1, x2 = auger_two_level(N1[0] / N0, N2[0] / N0, Gamma_H_paper * N0 ** 2, Gamma_I_paper * N0 ** 2, float(t[-1]))
+        out["two_level"] = {"t": clean(ts, 9), "x1": clean(x1), "x2": clean(x2)}
+    return out
+
 
 def data_payload(run, window_orbits, max_points):
     with run.lock:
@@ -721,6 +965,7 @@ def data_payload(run, window_orbits, max_points):
             "initial_mode": list(initial),
             "evolving": evolving,
             "alone": alone,
+            "self_gravity": self_gravity_on(cfg) or os.path.exists(os.path.join(run.folder, "auger_probe.txt")),
             "mu": mu, "q0": q0, "n0": n0,
             "save_every": cfg["simulation"].get("save_every"),
             "dt": cfg["simulation"].get("dt", default_dt(cfg)),
@@ -754,6 +999,8 @@ def data_payload(run, window_orbits, max_points):
                  if Sp_all.ndim == 2 and Sp_all.shape[0] >= rows and Sp_all.shape[1] >= 4 else None)
         Lz_rate = run.Lz_abs.array()
         Lz_rate = Lz_rate[:rows, 0] if Lz_rate.ndim == 2 and Lz_rate.shape[0] >= rows else np.zeros(rows)
+        self_gravity = self_gravity_on(cfg) or run.sg_tables["auger_probe"].rows > 0
+        SG = {k: tb.array() for k, tb in run.sg_tables.items()} if self_gravity else None
 
     t = T["t"][:, 0]
     R_orb = T["R_orb"][:, 0]
@@ -886,6 +1133,7 @@ def data_payload(run, window_orbits, max_points):
         "fractions": [clean((norms[i] / Mc)[idx]) for i in range(len(modes))],
         "E_s": clean((energy / Mc)[idx]),
         "E_modes": [clean(e_per_mode[i][idx]) for i in range(len(modes))],
+        "sg": sg_payload(run, cfg, SG, t, current, norms_raw, T["energy"][:, 0], modes, idx) if SG is not None else None,
     }
 
     latest = {
@@ -913,7 +1161,9 @@ def scalar_payload(payload):
         return payload
     series = {k: v for k, v in payload["series"].items()
               if not (isinstance(v, list) and v and isinstance(v[0], list))}
-    info = {k: payload["info"].get(k) for k in ("folder", "name", "evolving", "alone", "mu", "q0", "n0", "rows", "snapshots", "snapshot_t")}
+    if series.get("sg"):
+        series["sg"] = {k: series["sg"].get(k) for k in ("N", "I_G")}
+    info = {k: payload["info"].get(k) for k in ("folder", "name", "evolving", "alone", "self_gravity", "mu", "q0", "n0", "rows", "snapshots", "snapshot_t")}
     pruning = payload.get("pruning")
     return {"ready": True, "info": info, "series": series, "latest": payload["latest"], "radiative": payload["radiative"],
             "pruning": None if pruning is None else {"count": pruning["count"]}}

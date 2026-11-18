@@ -12,6 +12,7 @@ Load a simulation run folder into one object, for notebooks and publication plot
     run.t, run.R_orb, run.M_1, run.norms[:, run.mode("1,1")]          # stored diagnostics
     run.cloud_mass, run.energy, run.mass_budget["absorbed_1"]         # derived, as on the dashboard
     run.Lz_budget["cloud"], run.Lz_budget["modes"][:, run.mode("2,2")]  # signed L_z, hbar per particle
+    run.auger["N211"], run.auger["I_G"], run.levels[:, k], run.levels_index[k]  # self-gravity runs
     run.snapshot.U(1, 1), run.snapshot.t                              # one snapshot
     x, y, rho = run.snapshot.slice("xy", r_plot=300, n=400)           # |psi|^2 in a plane
 
@@ -50,15 +51,21 @@ COLUMN_FILES = {
     "mass_budget": ["absorbed_1", "absorbed_2", "pruned"],
     "spins": ["chi_1", "chi_2", "J_absorbed_1", "J_absorbed_2"],
     "Lz_budget": ["Lz_ionized", "Lz_torque", "Lz_absorbed", "Lz_pruned", "Lz_damped"],
+    # Self-gravity runs ([self_gravity]).
+    "self_gravity": ["E_self", "a_x", "a_y", "sg_iterations"],
+    "absorbed_channels": ["absorbed_swave", "absorbed_dipole_m", "absorbed_dipole_p"],
+    "auger_probe": ["c211_re", "c211_im", "c322_re", "c322_im", "c433_re", "c433_im", "psi00_re", "psi00_im",
+                    "U33_ex_re", "U33_ex_im", "U53_ex_re", "U53_ex_im"],
 }
 # Not diagnostics: grid, modes and the evolved-mode log are read separately.
-SPECIAL_FILES = {"r", "modes", "active_modes"}
+SPECIAL_FILES = {"r", "modes", "active_modes", "levels_index"}
 # Derived quantities and the files each one needs.
 DERIVED = {
     "cloud_mass": ["norms"], "mass_modes": ["norms"], "energy_total": ["energy"],
     "energy_modes_total": ["energy_modes"], "M_2": ["q", "M_1"], "ionized_mass": ["flux", "norms"],
     "mass_budget": ["norms", "flux", "mass_budget"], "active_modes": [],
     "Lz_cloud": ["norms"], "Lz_modes": ["norms"],
+    "auger": ["auger_probe"], "I_G": ["auger_probe"], "levels": ["levels"],
     "Lz_budget": ["norms", "flux", "mass_budget", "Lz_budget", "spins", "Lz_absorbed_rate", "p_bin_inst",
                   "Omega_orb"],
 }
@@ -158,6 +165,8 @@ class RunData:
     active_modes: dict = None                         # pruned runs: steps, t, count, flags
     mass_budget: dict = None                          # derived budget (dashboard's panel)
     Lz_budget: dict = None                            # signed L_z budget (dashboard's panel)
+    levels_index: list = None                         # self-gravity: (n, l, m, energy) per column of levels.txt
+    auger: dict = None                                # self-gravity: N211, N322, N433, psi00, K, |I_G| (see below)
 
     def __getattr__(self, name):
         # run.t, run.norms, run.chi_1 ... read from `data`.
@@ -329,6 +338,31 @@ def load_run(folder, step=None, time=None, snapshot=True, quantities=None):
               "spin": None if spin is None else spin / N_ref,
               "orbital": None if spin is None else (absorbed - spin) / N_ref}
 
+    # Self-gravity runs: levels.txt columns from levels_index.txt, and the Auger amplitudes.
+    # N = |c|^2 in particles (N0 = M_c / mu); K = psi_00(0) / (c211^2 c322*), |I_G| = sqrt(pi) |K| / mu^4
+    # (Foster & Rodd: 0.0914 with recoil, 0.143 without), as on the dashboard's Self-gravity section.
+    levels_index = None
+    path = os.path.join(folder, "levels_index.txt")
+    if os.path.exists(path):
+        with open(path) as f:
+            levels_index = [(int(p[0]), int(p[1]), int(p[2]), float(p[3])) for p in
+                            (line.split() for line in f if line.strip() and not line.lstrip().startswith("#"))
+                            if len(p) == 4]
+    auger = None
+    if "c211_re" in data:
+        c1 = data["c211_re"] + 1j * data["c211_im"]
+        c2 = data["c322_re"] + 1j * data["c322_im"]
+        c3 = data["c433_re"] + 1j * data["c433_im"]
+        psi0 = data["psi00_re"] + 1j * data["psi00_im"]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            K = psi0 / (c1 ** 2 * np.conj(c2))
+        N0 = float(config.get("atom", {}).get("M_c", 0.0)) / mu
+        auger = {"N0": N0, "c211": c1, "c322": c2, "c433": c3, "psi00": psi0,
+                 "N211": np.abs(c1) ** 2, "N322": np.abs(c2) ** 2, "N433": np.abs(c3) ** 2,
+                 "K": K, "I_G": math.sqrt(math.pi) * np.abs(K) / mu ** 4}
+        data["I_G"] = auger["I_G"]
+        data["auger"] = np.column_stack([auger["N211"], auger["N322"], auger["N433"]])
+
     # Evolved-mode log of a pruned run: "step t count flag_0 ... flag_{n-1}".
     active = None
     path = os.path.join(folder, "active_modes.txt")
@@ -346,7 +380,8 @@ def load_run(folder, step=None, time=None, snapshot=True, quantities=None):
 
     run = RunData(folder=folder, name=os.path.basename(folder), config=config, config_text=config_text,
                   r=r, modes=modes, n_rows=n_rows, snapshot_steps=steps, snapshot_times=times,
-                  data=data, active_modes=active, mass_budget=budget, Lz_budget=Lz)
+                  data=data, active_modes=active, mass_budget=budget, Lz_budget=Lz,
+                  levels_index=levels_index, auger=auger)
     if snapshot and steps:
         run.snapshot = _load_snapshot(run, folder, steps, times, step, time)
     if wanted is not None:
@@ -356,7 +391,7 @@ def load_run(folder, step=None, time=None, snapshot=True, quantities=None):
             run.mass_budget = None
         if "Lz_budget" not in wanted:
             run.Lz_budget = None
-        missing = sorted(wanted - set(run.data) - {"mass_budget", "Lz_budget", "active_modes"})
+        missing = sorted(wanted - set(run.data) - {"mass_budget", "Lz_budget", "active_modes", "auger"})
         if missing:
             import warnings
             warnings.warn(f"{run.name}: not stored in this run: {', '.join(missing)}")

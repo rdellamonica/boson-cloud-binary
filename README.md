@@ -543,6 +543,17 @@ hole: the binary power, separation, `t/T` and `R` axes, the companion's centre
 and the `q⁻²` scaling of the ionization panels go away, the masses panel shows
 the change of the hole's mass `M_1 - M_1(0)`, and the tiles, slices and 3D view
 show one hole at rest.
+A run with a `[self_gravity]` table (or its `auger_probe.txt`) gets a *Self-gravity &
+Auger* section and its own tiles, built around the gravitational Auger test of
+Foster & Rodd (arXiv:2611.18833): the 211, 322 and 433 occupations with the paper's
+two-level model integrated from the initial occupations, the coefficient
+|I_G| = sqrt(pi) |K| / mu^4 from K = psi_00(0) / (c_211^2 c_322*) (averaged over the
+late half of the run, against 0.0914 with recoil or 0.143 without), the channel
+rates (X absorbed by the hole through the s-wave sink, 322 + 322 emission in
+(3,3) + (5,3) through `r_ex`, the dipolar channels) against Γ̄_H N₁²N₂ and
+Γ̄_∞ N₂²N₁, the measured Γ̄'s and T_SG next to the paper's, every tracked level
+occupation, the chemical potential, energy and self-energy per particle, and the
+hole's acceleration. The Compare tab can overlay N_211, N_322 and |I_G| across runs.
 The sidebar's *Run folder* panel shows how much disk the run takes (snapshots,
 diagnostics, checkpoint) and its *Free space…* button deletes `psi/` snapshots
 (and their `psi_dt/` copies): either thinning them to one in every k, or keeping a
@@ -555,7 +566,9 @@ licences.
 For notebooks and publication plots, `dashboard/run_loader.py` reads a run folder
 into one object, with no server: every diagnostic file, `config.toml`, the grid,
 the modes, the dashboard's derived quantities (cloud mass, ionized mass, mass
-budget, the signed L_z budget `Lz_budget` and the cloud's `Lz_modes`) and one snapshot (the last, or `step=` / `time=`), with `U(l, m)` and
+budget, the signed L_z budget `Lz_budget` and the cloud's `Lz_modes`; for self-gravity
+runs `levels` with `levels_index`, `E_self`, `absorbed_swave`, and `auger` with the
+complex amplitudes, occupations, K and `I_G`) and one snapshot (the last, or `step=` / `time=`), with `U(l, m)` and
 `slice(plane, r_plot, n)` for `|psi|^2` in a plane. `quantities=[...]` reads only
 the files those quantities need, and `snapshot=False` skips the snapshot:
 

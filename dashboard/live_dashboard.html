@@ -680,6 +680,7 @@ html { scroll-padding-top: 52px; }
 /* Compare: the flagged quantities of every open simulation. */
 .app.comparing main > :not(#compare) { display: none !important; }
 #compare[hidden] { display: none; }
+#selfgravity[hidden], #navSG[hidden] { display: none !important; }
 .cmp-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
 .cmp-pick .lab { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-right: 4px; }
 .cmp-pick .chip[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
@@ -885,6 +886,7 @@ html { scroll-padding-top: 52px; }
       <div class="label">Sections</div>
       <a href="#overview" class="active"><svg class="i"><use href="#i-grid"/></svg>Overview</a>
       <a href="#setup" class="sub"><svg class="i"><use href="#i-sliders"/></svg>Setup</a>
+      <a href="#selfgravity" id="navSG" hidden><svg class="i"><use href="#i-atom"/></svg>Self-gravity &amp; Auger</a>
       <a href="#ionization"><svg class="i"><use href="#i-zap"/></svg>Ionization</a>
       <a href="#orbit"><svg class="i"><use href="#i-orbit"/></svg>Orbit &amp; masses</a>
       <a href="#angular"><svg class="i"><use href="#i-spin"/></svg>Angular momentum</a>
@@ -974,6 +976,18 @@ html { scroll-padding-top: 52px; }
         <pre class="toml" id="toml" hidden></pre>
         <div class="setup" id="setupGrid"></div>
       </div>
+
+      <section id="selfgravity" hidden>
+        <div class="sechead"><div class="ic"><svg class="i"><use href="#i-atom"/></svg></div><h2>Self-gravity &amp; Auger</h2><span id="sgNote">211 + 211 → 322 + X into the hole, against Foster &amp; Rodd (arXiv:2611.18833)</span></div>
+        <div class="grid">
+          <div class="card reveal" style="--c: var(--s1); grid-column: 1 / -1"><div class="head"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><div><h3>Auger levels</h3><p class="sub" id="pAugerSub">N<sub>211</sub>, N<sub>322</sub>, N<sub>433</sub> / N<sub>0</sub>, dashed: the paper's two-level model from the initial occupations</p></div><div class="actions"><button class="chip on" data-log="pAuger" title="Log scale">log</button><button class="chip sq" data-expand="pAuger" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pAuger"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s2)"><div class="head"><div class="ic"><svg class="i"><use href="#i-target"/></svg></div><div><h3>Auger coefficient</h3><p class="sub" id="pIGSub">from K = ψ<sub>00</sub>(0) / (c<sub>211</sub>² c<sub>322</sub>*): instantaneous and averaged over the late half of the run; dashed: paper</p></div><div class="actions"><button class="chip" data-log="pIGInst" title="Show the instantaneous value too">instantaneous</button><button class="chip sq" data-expand="pIG" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pIG"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s4)"><div class="head"><div class="ic"><svg class="i"><use href="#i-zap"/></svg></div><div><h3>Channel rates</h3><p class="sub" id="pChannelsSub">particles per M / N<sub>0</sub>: X absorbed by the hole (s-wave), 322 + 322 emission through r<sub>ex</sub>, dipolar channels; dashed: Γ̄ N₁²N₂ and Γ̄<sub>∞</sub> N₂²N₁ of the paper</p></div><div class="actions"><button class="chip on" data-log="pChannels" title="Log scale of the absolute values">log</button><button class="chip sq" data-expand="pChannels" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pChannels"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s3)"><div class="head"><div class="ic"><svg class="i"><use href="#i-bars"/></svg></div><div><h3>Level occupations</h3><p class="sub" id="pLevelsSub">N<sub>nlm</sub> / N<sub>0</sub> of the hole's levels (H<sub>0</sub> + V<sub>BH</sub>, no self-gravity), from levels.txt</p></div><div class="actions"><button class="chip" data-log="pLevelsAll" title="Show every tracked level, also those that never exceed 1e-12">all</button><button class="chip on" data-log="pLevels" title="Log scale">log</button><button class="chip sq" data-expand="pLevels" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pLevels"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s8)"><div class="head"><div class="ic"><svg class="i"><use href="#i-steps"/></svg></div><div><h3>Energy per particle</h3><p class="sub" id="pSGEnergySub">chemical potential ⟨H⟩/N, conserved E/N = (⟨H⟩ − E<sub>self</sub>)/N and the self-energy E<sub>self</sub>/N</p></div><div class="actions"><button class="chip sq" data-expand="pSGEnergy" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pSGEnergy"></div><div class="skeleton"></div></div>
+          <div class="card reveal" style="--c: var(--s7); grid-column: 1 / -1"><div class="head"><div class="ic"><svg class="i"><use href="#i-target"/></svg></div><div><h3>Hole acceleration</h3><p class="sub" id="pRecoilSub">pull of the cloud's dipole on the hole (the recoil field the cloud feels in the free-fall frame)</p></div><div class="actions"><button class="chip sq" data-expand="pRecoil" title="Expand" aria-label="Expand"><svg class="i"><use href="#i-max"/></svg></button></div></div><div class="plot" id="pRecoil"></div><div class="skeleton"></div></div>
+        </div>
+      </section>
 
       <section id="ionization">
         <div class="sechead"><div class="ic"><svg class="i"><use href="#i-zap"/></svg></div><h2>Ionization</h2><span>per mode, normalized by q² and M_c</span></div>
@@ -1137,7 +1151,7 @@ const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
 const DASHES = ['solid', 'dot', 'dash', 'longdash', 'dashdot', 'longdashdot'];
-let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false, eModes: false, pBinGW: false, pBin: false, pBudget: true, pSpin: true, pLzDrift: false, pLzByM: false, pLzOrbit: false, pLzAbs: false, pSpinJ: false }, prevTiles: {}, cmap: 'ember', cmapRev: false };
+let state = { run: null, data: null, timer: null, paused: false, snapLoaded: null, snapBusy: false, logs: { pNorms: true, pFrac: false, pPower: false, eModes: false, pBinGW: false, pBin: false, pBudget: true, pSpin: true, pLzDrift: false, pLzByM: false, pLzOrbit: false, pLzAbs: false, pSpinJ: false, pAuger: true, pChannels: true, pLevels: true, pLevelsAll: false, pIGInst: false }, prevTiles: {}, cmap: 'ember', cmapRev: false };
 
 // Segmented controls keep their value in data-value, like a select.
 const val = (id) => { const el = $(id); return el.dataset.value !== undefined ? el.dataset.value : el.value; };
@@ -1512,6 +1526,138 @@ function render() {
     : 'E<sub>s</sub> / M<sub>c</sub>, dashed: hydrogenic levels n = 1…6';
 
   renderPruning(d, X, xaxis, line);
+  renderSelfGravity(d, xaxis, line, ink, muted);
+}
+
+// ---------- Self-gravity runs: the gravitational Auger test ----------
+// Shown only for runs with a [self_gravity] table (or its output files). Fractions are of
+// N0 = M_c / mu particles; rates in particles per M over N0.
+function renderSelfGravity(d, xaxis, line, ink, muted) {
+  const on = !!d.info.self_gravity, g = d.series.sg;
+  $('selfgravity').hidden = !on; $('navSG').hidden = !on;
+  if (!on || !g) return;
+  const ref = css('--ref');
+  const last = (y) => { if (!y) return null; for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const first = (y) => { if (!y) return null; for (let i = 0; i < y.length; i++) if (y[i] !== null) return y[i]; return null; };
+  const absv = (y) => (y ? y.map(v => (v === null ? null : Math.abs(v))) : y);
+  const pos = (y) => (y ? y.map(v => (v === null || v <= 0 ? null : v)) : y);
+  const e = (x, n = 3) => (x === null || x === undefined || !isFinite(x) ? '–' : x.toExponential(n - 1));
+  const f = (x, n = 4) => fmt(x, n);
+  const ext = (x, y, name, style) => ({ x, y, name, type: 'scatter', mode: 'lines', line: style, hovertemplate: '%{y:.4g}' });
+  const logY = (traces, decades) => {
+    let peak = 0; traces.forEach(t => (t.y || []).forEach(v => { if (v > peak) peak = v; }));
+    return peak > 0 ? { type: 'log', range: [Math.log10(peak) - decades, Math.log10(peak) + 0.3], rangeIsLog: true } : { type: 'log' };
+  };
+  const rec = g.recoil ? 'with recoil' : 'without recoil';
+  $('sgNote').innerHTML = `211 + 211 → 322 + X into the hole, against Foster &amp; Rodd (arXiv:2611.18833) · ${rec}`
+    + (g.absorption ? '' : ' · <b>no absorption</b>: X is not taken by the hole, only the amplitudes can be tested');
+
+  // Auger levels: N211, N322, N433 and the two-level model.
+  if (g.N) {
+    const lg = !!state.logs.pAuger;
+    const v = (y) => (lg ? pos(y) : y);
+    const tr = [line(v(g.N['211']), '211', { color: css('--s1'), width: 2.2 }),
+                line(v(g.N['322']), '322', { color: css('--s2'), width: 2 }),
+                line(v(g.N['433']), '433', { color: css('--s3'), width: 1.4 })];
+    if (g.two_level) {
+      tr.push(ext(g.two_level.t, v(g.two_level.x1), '211, two-level model', { color: css('--s1'), width: 1.2, dash: 'dash' }));
+      tr.push(ext(g.two_level.t, v(g.two_level.x2), '322, two-level model', { color: css('--s2'), width: 1.2, dash: 'dash' }));
+    }
+    draw('pAuger', tr, { xaxis, yaxis: Object.assign({ title: { text: 'N / N<sub>0</sub>' } }, lg ? logY(tr, 9) : {}),
+         uirevision: (state.run || '') + 'auger' + lg });
+    const T = g.T || {}, Tp = T.paper || [], Tm = T.measured || [];
+    $('pAugerSub').innerHTML = `N / N<sub>0</sub> (N<sub>0</sub> = M<sub>c</sub>/μ = ${f(g.N0)}). Now N<sub>211</sub> ${f(last(g.N['211']))}, `
+      + `N<sub>322</sub> ${e(last(g.N['322']))}, N<sub>433</sub> ${e(last(g.N['433']))}. `
+      + (g.two_level ? 'Dashed: the paper\'s two-level model from the initial occupations. ' : '')
+      + (Tp[1] ? `T<sub>SG</sub> = 4Γ̄<sub>∞</sub>/(3Γ̄²N₁²): paper ${e(Tp[1])} M, measured Γ̄ ${e(Tm[1])} M; ` : '')
+      + (Tp[0] ? `322 growth 1/(Γ̄N₁²): paper ${e(Tp[0])} M, measured ${e(Tm[0])} M (t = ${e(T.t_now)} M)` : '');
+  }
+
+  // |I_G| from K: late-half average and the paper's value.
+  if (g.I_G) {
+    const inst = !!state.logs.pIGInst;
+    const tr = [];
+    if (inst) tr.push(line(g.I_G.inst, 'instantaneous', { color: muted, width: 0.8 }));
+    tr.push(line(g.I_G.avg, 'late-half average', { color: css('--s2'), width: 2.2 }));
+    tr.push({ x: [null], y: [null], name: `paper ${g.I_G_paper}`, mode: 'lines', line: { color: ref, dash: 'dot' } });
+    let hi = 1.6 * Math.max(g.I_G_paper, 0.143);
+    draw('pIG', tr, { xaxis, yaxis: { title: { text: '|I<sub>G</sub>|' }, range: inst ? null : [0, hi] },
+         shapes: [hline(g.I_G_paper, ref, 'dot', 1.5, `paper, ${rec}`),
+                  Object.assign(hline(g.recoil ? 0.143 : 0.0914, css('--grid'), 'dash', 0.8, `paper, ${g.recoil ? 'without' : 'with'} recoil`), { inRange: false })],
+         uirevision: (state.run || '') + 'ig' + inst });
+    const now = g.I_G_now;
+    $('pIGSub').innerHTML = `|I<sub>G</sub>| = √π |K| / μ⁴ with K = ψ<sub>00</sub>(0) / (c<sub>211</sub>² c<sub>322</sub>*), the complex K averaged over the late half of the run`
+      + (g.ramp_time ? ` (from 2 × ramp = ${f(2 * g.ramp_time)} M)` : '')
+      + `. Now ${f(now)} vs paper ${g.I_G_paper} ${rec}` + (now ? ` (${now >= g.I_G_paper ? '+' : '−'}${f(Math.abs(100 * (now / g.I_G_paper - 1)), 3)}%)` : '');
+  }
+
+  // Channel rates and the paper's predictions with the measured occupations.
+  if (g.rates) {
+    const lg = !!state.logs.pChannels;
+    const v = (y) => (lg ? pos(absv(y)) : y);
+    const R = g.rates, P = g.rates_paper || {}, tr = [];
+    if (R.H) tr.push(line(v(R.H), 'X into the hole (s-wave)', { color: css('--s4'), width: 2 }));
+    if (P.H && g.absorption) tr.push(line(v(P.H), 'paper Γ̄ N₁²N₂', { color: css('--s4'), width: 1.2, dash: 'dash' }));
+    if (R.inf) tr.push(line(v(R.inf), '(3,3) + (5,3) through r_ex', { color: css('--s5'), width: 2 }));
+    if (P.inf) tr.push(line(v(P.inf), 'paper Γ̄∞ N₂²N₁', { color: css('--s5'), width: 1.2, dash: 'dash' }));
+    if (R.dip_m) tr.push(line(v(R.dip_m), 'dipolar m = −1', { color: css('--s6'), width: 1.2, dash: 'dot' }));
+    if (R.dip_p) tr.push(line(v(R.dip_p), 'dipolar m = +1', { color: css('--s7'), width: 1.2, dash: 'dot' }));
+    draw('pChannels', tr, { xaxis, yaxis: Object.assign({ title: { text: (lg ? '|Ṅ|' : 'Ṅ') + ' / N<sub>0</sub> (per M)' } }, lg ? logY(tr, 8) : {}),
+         shapes: lg ? [] : [hline(0, muted, 'dash', 0.8)], uirevision: (state.run || '') + 'ch' + lg });
+    const G = g.Gamma || {};
+    $('pChannelsSub').innerHTML = `Particles per M / N<sub>0</sub>, averaged over ${f(g.rate_window, 3)} M. `
+      + `Γ̄<sub>H</sub> measured ${e(G.H)} vs paper ${e(G.H_paper)} (A<sub>H</sub> = 8πMr<sub>+</sub> = ${f(G.A_H)}); `
+      + `Γ̄<sub>∞</sub> measured ${e(G.inf)} vs paper ${e(G.inf_paper)}, both averaged over the late half`;
+  }
+
+  // Level occupations: every tracked level that ever exceeds 1e-12 of N0 (or all).
+  if (g.levels) {
+    const all = !!state.logs.pLevelsAll, lg = !!state.logs.pLevels;
+    const L = g.levels, tr = [];
+    const key = new Set(['2 1 1', '3 2 2', '4 3 3']);
+    // Legend for 211, 322, 433 and the six largest others now; the rest are named on hover.
+    const nowv = L.index.map((x, k) => last(L.frac[k]) || 0);
+    const named = new Set(L.index.map((x, k) => k).filter(k => !key.has(L.index[k].join(' ')))
+      .sort((a, b) => nowv[b] - nowv[a]).slice(0, 6));
+    L.index.forEach(([n, l, m], k) => {
+      if (!all && !(L.peak[k] > 1e-12)) return;
+      const st = modeStyle([l, m]), name = `${n}${l}${m}`;
+      const strong = key.has(`${n} ${l} ${m}`);
+      tr.push(line(lg ? pos(L.frac[k]) : L.frac[k], name, { color: st.color, width: strong ? 2.2 : 1.1, dash: DASHES[(n - l - 1) % DASHES.length] },
+                   strong || named.has(k) ? {} : { showlegend: false }));
+    });
+    draw('pLevels', tr, { xaxis, yaxis: Object.assign({ title: { text: 'N<sub>nlm</sub> / N<sub>0</sub>' } }, lg ? logY(tr, 12) : {}),
+         hover: 'closest', uirevision: (state.run || '') + 'lv' + lg + all });
+    const ranked = L.index.map((x, k) => [x, last(L.frac[k])]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(1, 5);
+    $('pLevelsSub').innerHTML = `N<sub>nlm</sub> / N<sub>0</sub> of the hole's levels (H<sub>0</sub> + V<sub>BH</sub>, no self-gravity), ${tr.length} of ${L.index.length} shown (legend: 211, 322, 433 and the six largest others; hover names the rest); colour by l, dash by overtone. `
+      + 'Largest after the first: ' + (ranked.map(([[n, l, m], v]) => `${n}${l}${m} ${e(v, 2)}`).join(', ') || '–');
+  }
+
+  // Energies per particle.
+  if (g.energy) {
+    const E = g.energy;
+    draw('pSGEnergy', [
+      line(E.lambda, 'chemical potential ⟨H⟩/N', { color: css('--s8'), width: 2 }),
+      line(E.E, 'energy (⟨H⟩ − E_self)/N', { color: ink, width: 1.6 }),
+      line(E.E_self, 'self-energy E_self/N', { color: css('--s2'), width: 1.4, dash: 'dash' }),
+    ], { xaxis, yaxis: { title: { text: 'per particle (M⁻¹)' } }, shapes: [hline(E.E_ref, muted, 'dot', 1, 'hydrogenic level')] });
+    const e0 = first(E.E), e1 = last(E.E);
+    $('pSGEnergySub').innerHTML = `⟨H⟩/N is the chemical potential (E<sub>self</sub> counts twice in it), (⟨H⟩ − E<sub>self</sub>)/N the energy, conserved without recoil and sinks; inside r<sub>ex</sub>. `
+      + `Now E<sub>self</sub>/N = ${e(last(E.E_self))}, E/N changed by ${e(e1 !== null && e0 !== null ? e1 - e0 : null)}; dotted: −μ³/2n² = ${e(E.E_ref)}`
+      + (g.iterations_mean ? `. Solves per step: ${f(g.iterations_mean, 3)}` : '');
+  }
+
+  // Recoil: the hole's acceleration towards the cloud's dipole.
+  if (g.recoil_acc) {
+    const A = g.recoil_acc;
+    draw('pRecoil', [
+      line(A.a, '|a|', { color: css('--s7'), width: 2 }),
+      line(A.ax, 'a_x', { color: css('--s1'), width: 1, dash: 'dot' }),
+      line(A.ay, 'a_y', { color: css('--s2'), width: 1, dash: 'dot' }),
+    ], { xaxis, yaxis: { title: { text: 'a<sub>BH</sub> (M⁻¹)' } }, shapes: [hline(0, muted, 'dash', 0.8)] });
+    $('pRecoilSub').innerHTML = `Pull of the cloud's dipole on the hole, now |a| = ${e(last(A.a))}. `
+      + (g.recoil ? 'The cloud feels −a·x in the hole\'s free-fall frame (recoil on)' : 'Recoil off: the hole is held fixed and the cloud does not feel this field');
+  }
 }
 
 // Mass per mode and mode fractions, about the COM (every row) or about one
@@ -1616,7 +1762,20 @@ function renderTiles() {
   }
   const frac = total ? Math.min(1, info.rows / (total - 1)) : null;
   const sp = d.series.spins, chiNow = sp ? sp.chi_1.filter(v => v !== null).pop() : null;
-  const tiles = info.alone ? [
+  const g = d.series.sg, lastv = (y) => { if (!y) return null; for (let i = y.length - 1; i >= 0; i--) if (y[i] !== null) return y[i]; return null; };
+  const firstv = (y) => { if (!y) return null; for (let i = 0; i < y.length; i++) if (y[i] !== null) return y[i]; return null; };
+  const T = g && g.T ? g.T : {}, Gm = g && g.Gamma ? g.Gamma : {};
+  const tiles = info.self_gravity && g ? [
+    ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
+    ['t', 'Time t', fmt(L.t, 6), 'self-gravity, isolated hole', 'i-clock', '--s7'],
+    ['n211', 'N₂₁₁ / N₀', g.N ? fmt(lastv(g.N['211']), 6) : '–', g.N ? `from ${fmt(firstv(g.N['211']), 4)}` : 'no auger_probe.txt', 'i-cloud', '--s1'],
+    ['n322', 'N₃₂₂ / N₀', g.N ? fmt(lastv(g.N['322']), 4) : '–', g.N ? `from ${fmt(firstv(g.N['322']), 3)}` : '', 'i-layers', '--s2'],
+    ['ig', 'Auger |I_G|', fmt(g.I_G_now, 4), `paper ${g.I_G_paper} (${g.recoil ? 'recoil' : 'no recoil'})`, 'i-target', '--s2'],
+    ['gh', 'Γ̄_H measured', fmt(Gm.H, 3), g.absorption ? `paper ${fmt(Gm.H_paper, 3)}` : 'absorption off', 'i-zap', '--s4'],
+    ['tsg', 'T_SG', fmt(T.measured ? T.measured[1] : null, 3), `paper ${fmt(T.paper ? T.paper[1] : null, 3)} M`, 'i-timer', '--s8'],
+    ['Mc', 'Cloud mass M_c', fmt(L.M_c, 5), L.M_c0 ? `${fmt(100 * L.M_c / L.M_c0, 4)}% of initial` : '', 'i-cloud', '--s3'],
+    ['snap', 'Latest snapshot', snaps.length ? snaps[snaps.length - 1] : '–', `${snaps.length} saved`, 'i-camera', '--s5'],
+  ] : info.alone ? [
     ['step', 'Step', info.rows, stepSub, 'i-steps', '--s1', frac],
     ['t', 'Time t', fmt(L.t, 6), 'no companion, no orbit', 'i-clock', '--s7'],
     ['R', 'Black hole at x', fmt(L.R, 6), 'at rest', 'i-ruler', '--s1'],
@@ -2372,6 +2531,9 @@ const CMP_Q = [
   { k: 'M_1', t: 'Primary mass', y: 'M<sub>1</sub>', f: (s) => s.M_1 },
   { k: 'M_2', t: 'Companion mass', y: 'M<sub>2</sub>', f: (s) => s.M_2 },
   { k: 'q', t: 'Mass ratio', y: 'q', f: (s) => s.q },
+  { k: 'N211', t: '211 occupation', y: 'N<sub>211</sub> / N<sub>0</sub> (self-gravity)', f: (s) => s.sg && s.sg.N ? s.sg.N['211'] : null },
+  { k: 'N322', t: '322 occupation', y: 'N<sub>322</sub> / N<sub>0</sub> (self-gravity)', f: (s) => s.sg && s.sg.N ? s.sg.N['322'] : null },
+  { k: 'I_G', t: 'Auger |I_G|', y: '|I<sub>G</sub>|, late-half average (self-gravity)', f: (s) => s.sg && s.sg.I_G ? s.sg.I_G.avg : null },
   { k: 'active', t: 'Evolved modes', y: 'active modes (pruning)', f: (s, d) => d.pruning ? d.pruning.count : null },
   // Per mode (one panel per run): g(s, d) gives [mode index, y] pairs, plus the total where it means something.
   { k: 'norms', t: 'Mass per mode', y: 'M<sub>c</sub><sup>LM</sup>', modes: true, g: (s, d) => d.info.modes.map((m, i) => [i, s.norms[i]]) },
