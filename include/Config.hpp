@@ -40,6 +40,10 @@ struct Config
     int save_every;                     ///< Snapshot interval in steps (default 50).
     double ramp_periods;                ///< Startup ramp length in initial periods (default 0).
     bool ramp_secondary_potential = true; ///< Ramp the companion's potential with Omega.
+    /// With ramp_secondary_potential: weight the companion's potential by s^2, where
+    /// Omega = s Omega_0, so the primary stays in free fall during the ramp and the
+    /// cloud feels no uniform (dipole) field relative to it (default true; false = old s).
+    bool ramp_secondary_squared = true;
     /// false removes the companion: the primary stays at rest at its initial position and
     /// only its own potential and horizon act on the cloud (default true).
     bool secondary_potential = true;
@@ -163,6 +167,7 @@ inline Config load_config(const std::string &filename)
     c.r_ex = tbl["simulation"]["r_ex"].value_or(1000.0);
     c.ramp_periods = tbl["simulation"]["ramp_periods"].value_or(0.0);
     c.ramp_secondary_potential = tbl["simulation"]["ramp_secondary_potential"].value_or(true);
+    c.ramp_secondary_squared = tbl["simulation"]["ramp_secondary_squared"].value_or(true);
     c.secondary_potential = tbl["simulation"]["secondary_potential"].value_or(true);
     c.orbit_delay_periods = tbl["simulation"]["orbit_delay_periods"].value_or(0.0);
     if (!(c.orbit_delay_periods >= 0.0))

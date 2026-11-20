@@ -154,11 +154,12 @@ void test_orbit_ramp_length(double orbit_ramp_periods, double orbit_delay_period
                 "Fixture does not exercise a ramp longer than one period");
 }
 
-void test_frequency_only_ramp(bool ramp_potential)
+void test_frequency_only_ramp(bool ramp_potential, bool squared = true)
 {
     CrankNicolsonModes cn(32, 200.0, 200.0, 0.1, 2, 0.2, 0.0, 0.25,
                          0.0, 50.0, false, false, 100, 5.0, 15.0, "fixture.toml");
     cn.ramp_secondary_potential = ramp_potential;
+    cn.ramp_secondary_squared = squared;
     const double initial_period = cn.P;
     prepare(cn);
     // At t = 0 Omega is zero in both modes; only the companion weight differs.
@@ -170,7 +171,8 @@ void test_frequency_only_ramp(bool ramp_potential)
     cn.step(1);
     const double x = 0.4, s = 3*x*x - 2*x*x*x;
     check_close(cn.Omega, cn.Omega_0*s, "Orbital frequency did not follow the ramp");
-    const double weight = ramp_potential ? s : 1.0;
+    // Free fall: the companion weight is s^2 while Omega = s Omega_0 (old weight s).
+    const double weight = ramp_potential ? (squared ? s*s : s) : 1.0;
     require((cn.V() - (cn.V1() + weight*cn.V2())).norm() < 1e-13*std::max(1.0, cn.V().norm()),
             "Companion potential has the wrong weight during the ramp");
     check_close(cn.R, 50.0, "Orbit moved during the ramp");
@@ -208,6 +210,7 @@ int main()
         test_orbit_ramp_length(0.0, 2.0);
         test_frequency_only_ramp(true);
         test_frequency_only_ramp(false);
+        test_frequency_only_ramp(true, false);
         test_zero_ramp_fixed_orbit();
         std::cout << "Orbital ramp regression checks passed.\n";
         return 0;

@@ -58,7 +58,9 @@ Reference reference(const CrankNicolsonModes& cn, double time, double ramp_perio
     result.h0 = result.v1 = result.v2 = result.dvdt = result.absorption =
         Eigen::MatrixXcd::Zero(size, size);
     const double ramp_x = ramp_periods > 0 ? time / (ramp_periods * cn.P) : 0.0;
-    const double ramp = time < ramp_periods * cn.P ? 3*ramp_x*ramp_x - 2*ramp_x*ramp_x*ramp_x : 1.0;
+    // Companion weight s^2 (free-fall ramp, ramp_secondary_squared default) while Omega = s Omega_0.
+    const double ramp_s = time < ramp_periods * cn.P ? 3*ramp_x*ramp_x - 2*ramp_x*ramp_x*ramp_x : 1.0;
+    const double ramp = ramp_s * ramp_s;
     double abs_ramp = 1.0;
     if (time < ramp_periods*cn.P) abs_ramp = 0.0;
     else if (time < (ramp_periods+1)*cn.P) {
@@ -146,7 +148,8 @@ Eigen::VectorXcd test_evolution(int threads, int scenario, bool ilut)
     }
     const Reference next = reference(cn, dt, ramp_periods, absorb, smear);
     const double x = ramp_periods > 0 ? dt/(ramp_periods*initial_period) : 1.0;
-    const double companion_ramp = x < 1 ? 3*x*x-2*x*x*x : 1.0;
+    const double companion_s = x < 1 ? 3*x*x-2*x*x*x : 1.0;
+    const double companion_ramp = companion_s * companion_s;
     Eigen::MatrixXcd h = next.h0 + next.v1 + companion_ramp*next.v2;
     if (scenario == 2) h += Eigen::MatrixXcd(cn.CAP);
     // The sparse H stays conservative; the sinks enter only the full generator.

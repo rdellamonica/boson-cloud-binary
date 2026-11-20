@@ -317,6 +317,22 @@ def test_run_loader(dash, folder):
     assert np.array_equal(run.snapshot.U(*MODES[1]), psi[1]), "U(l, m)"
     assert loader.load_run(folder, step=10).snapshot.step == 10, "chosen step"
     assert loader.load_run(folder, time=run.t[9] + 0.1).snapshot.step == 10, "nearest time"
+    # Several snapshots: in the order asked for, by step, by time or all of them.
+    many = loader.load_run(folder, step=[20, 0, 10])
+    assert [snap.step for snap in many.snapshots] == [20, 0, 10] and many.snapshot is many.snapshots[0], "step list"
+    assert np.array_equal(many.snapshot_at(20).psi, psi) and many.snapshot_at(0).t == 0.0, "snapshot_at(step)"
+    assert many.snapshot_at(time=run.t[9] + 0.1).step == 10, "snapshot_at(time)"
+    assert [snap.step for snap in loader.load_run(folder, time=[0.0, run.t[9] + 0.1]).snapshots] == [0, 10], "times"
+    assert [snap.step for snap in loader.load_run(folder, step=np.array([0, 20])).snapshots] == [0, 20], "array"
+    assert [snap.step for snap in loader.load_run(folder, step="all").snapshots] == run.snapshot_steps, "all"
+    assert len(run.snapshots) == 1 and run.snapshots[0] is run.snapshot, "one snapshot by default"
+    for bad in ([10, 7], "last"):
+        try:
+            loader.load_run(folder, step=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"step={bad!r} should be rejected")
     assert loader.load_run(folder, snapshot=False).snapshot is None, "snapshot=False"
     # Files of different lengths: every quantity is cut to the rows they all have.
     with tempfile.TemporaryDirectory() as other:

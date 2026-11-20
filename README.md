@@ -194,7 +194,7 @@ is normalised to one; the solver rescales it to the cloud mass `M_c`.
 
 | Script | State |
 | --- | --- |
-| `get_initial_state_COM_fast.py` | One hydrogenic atom `(n, l, m)` on the primary (`--atom secondary` for the companion), with Gauss–Legendre quadrature. Recommended. |
+| `get_initial_state_COM_fast.py` | One hydrogenic atom `(n, l, m)` on the primary (`--atom secondary` for the companion), with Gauss–Legendre quadrature. Recommended. `--boost` gives the atom its hole's orbital velocity at t = 0 (Galilean phase `exp(i mu v.x)`, `v = Omega_0 z x x_a`, sign flipped for `counter`), so the cloud starts comoving; use it with `ramp_periods = 0`, where the hole is in free fall from the first step and no ramp field mixes 2p into 2s. It projects with a 2D quadrature (`--n-phi`, default `2 n_quad`) and reproduces the plain atom to 2e-7 when the velocity is zero. |
 | `get_initial_state_COM.py` | The same atom with adaptive quadrature; `--two-atoms` superposes atoms on both black holes (`[atom_secondary]` sets the second state and the relative `amplitude`). |
 | `get_initial_state_molecular.py` | A "molecular" eigenstate of the full binary Hamiltonian, obtained by adiabatic continuation from large separation. See the script's header for its options. |
 | `get_initial_state_gaussian.py` | A spherical Gaussian of width `--sigma` at the origin, for tests. |
@@ -222,6 +222,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | | `r_ex` | Extraction radius for the fluxes and for the inner-region integrals |
 | | `ramp_periods` | Startup ramp length, in initial orbital periods |
 | | `ramp_secondary_potential` | Ramp the companion's potential with the frequency (default `true`) |
+| | `ramp_secondary_squared` | With `ramp_secondary_potential`, weight the companion's potential by `s^2` while `Omega = s Omega_0`, so the primary stays in free fall and the cloud feels no uniform field relative to it during the ramp (default `true`; `false` gives the old weight `s`, which turns part of a 2p cloud into 2s about the primary before the sinks switch on) |
 | | `secondary_potential` | `false` removes the companion altogether, to follow the cloud of an isolated hole, for example the growth of a superradiant state with `dipole_absorption` and `spin_1` (default `true`). The primary then stays at rest where the initial state has it, at `x = q R / (1 + q)`, with no companion potential or sink, no orbital motion, no startup ramp and no back-reaction; `q` and `R` only set that position and the time unit of `num_periods`. With `evolve_orbit = true` the primary's mass and spin still follow the horizon fluxes. `q = 0` is run the same way, with the primary at the origin |
 | | `orbit_delay_periods` | With `evolve_orbit`, initial periods after the startup ramp during which the companion is fully on but the orbit and masses stay fixed (default 0) |
 | | `orbit_ramp_periods` | With `evolve_orbit`, initial periods over which the back-reaction on the separation is switched on once that hold ends (default 1; 0 switches it on at once) |
@@ -573,7 +574,7 @@ into one object, with no server: every diagnostic file, `config.toml`, the grid,
 the modes, the dashboard's derived quantities (cloud mass, ionized mass, mass
 budget, the signed L_z budget `Lz_budget` and the cloud's `Lz_modes`; for self-gravity
 runs `levels` with `levels_index`, `E_self`, `absorbed_swave`, and `auger` with the
-complex amplitudes, occupations, K and `I_G`) and one snapshot (the last, or `step=` / `time=`), with `U(l, m)` and
+complex amplitudes, occupations, K and `I_G`) and one snapshot (the last, or `step=` / `time=`) or several (`step=[0, 400, 800]`, `time=[...]` or `step="all"`: `run.snapshots` in that order, also found with `run.snapshot_at(step)` or `run.snapshot_at(time=...)`), each with `U(l, m)` and
 `slice(plane, r_plot, n)` for `|psi|^2` in a plane. `quantities=[...]` reads only
 the files those quantities need, and `snapshot=False` skips the snapshot:
 
@@ -583,4 +584,7 @@ from run_loader import load_run
 run = load_run("runs/Simulation_2026_11_10_10_18_06", step=400)
 run.t, run.cloud_mass, run.norms[:, run.mode("2,2")], run.chi_1
 x, y, rho = run.snapshot.slice("xy", r_plot=300, n=400)
+phases = load_run("runs/Simulation_2026_11_10_10_18_06", time=[0, 1e4, 3e4]).snapshots
+for snap in phases:
+    h, v, rho = snap.slice("xy", r_plot=300, n=400)   # one panel per phase, at snap.t
 ```

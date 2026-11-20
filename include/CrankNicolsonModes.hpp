@@ -142,6 +142,13 @@ public:
     /// present at full strength from @f$t = 0@f$.
     bool ramp_secondary_potential = true;
 
+    /// With @c ramp_secondary_potential, weight the companion's potential by
+    /// @f$s^2@f$ instead of @f$s@f$ (@f$\Omega = s\,\Omega_0@f$). The primary's
+    /// centripetal acceleration @f$s^2 qM/R^2@f$ then equals the companion's pull at
+    /// every instant, so the cloud feels no residual uniform field (which mixes 2p
+    /// into 2s about the primary during the ramp).
+    bool ramp_secondary_squared = true;
+
     /// Initial periods between the end of the startup ramp and the start of
     /// orbital evolution: the companion is fully on but R and the masses stay fixed.
     double orbit_delay_periods = 0.0;

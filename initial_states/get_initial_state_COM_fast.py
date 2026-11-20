@@ -9,8 +9,15 @@ matrices instead of adaptive quadrature, which is much faster on large grids.
 the secondary (x = -R2). The configuration keys are those of
 get_initial_state_COM.py.
 
+--boost multiplies the atom by the Galilean phase exp(i mu v.x) of its black
+hole's orbital velocity at t = 0, v = Omega_0 z x x_a with
+Omega_0 = sqrt((M1 + M2) / R^3) (opposite sign for [binary] counter = true), so
+the cloud starts comoving with its hole. Use it with ramp_periods = 0, where the
+hole moves at v from the first step. The boosted state is projected with a 2D
+(Gauss-Legendre x uniform phi) quadrature instead of the translation along z.
+
 Usage:
-    python get_initial_state_COM_fast.py --config config.toml --output initial_modes.bin [--atom secondary]
+    python get_initial_state_COM_fast.py --config config.toml --output initial_modes.bin [--atom secondary] [--boost]
 """
 
 import argparse
@@ -45,6 +52,11 @@ parser.add_argument("--atom", choices=["primary", "secondary"], default="primary
                     help="Which single atom to generate. Default: primary.")
 parser.add_argument("--n-quad", type=int, default=None,
                     help="Gauss-Legendre angular quadrature order. Default: config value or 64.")
+parser.add_argument("--boost", action="store_true",
+                    help="Give the atom its hole's orbital velocity at t = 0 (Galilean phase "
+                         "exp(i mu v.x)). Meant for ramp_periods = 0. Default: off.")
+parser.add_argument("--n-phi", type=int, default=None,
+                    help="Uniform phi nodes of the --boost quadrature. Default: 2 n_quad.")
 args = parser.parse_args()
 
 
@@ -521,6 +533,89 @@ def initialize_translated_atom_fast(modes, r_arr, L_max, bound_state, context,
 
 
 # ======================================================================
+# BOOSTED ATOM (GALILEAN PHASE)
+# ======================================================================
+
+def standard_ylm_theta(l, m, u):
+    """
+    theta part of the standard (Condon-Shortley) Y_lm, Y_lm = this * exp(i m phi),
+    the convention of the solver's modes and of the translated atom.
+    """
+    mabs = abs(int(m))
+    norm = np.sqrt((2*l+1)/(4*np.pi)*np.exp(gammaln(l-mabs+1) - gammaln(l+mabs+1)))
+    value = norm*lpmv(mabs, l, u)        # lpmv includes the Condon-Shortley phase
+    return value if m >= 0 else (-1)**mabs*value
+
+
+def project_boosted_atom(r_arr, L_max, bound_state, context, center_x, k_y,
+                         n_quad=64, n_phi=128, chunk=256, verbose=True):
+    """
+    Project psi(x) = R_nl(|x - c|) Y_lm(x - c) exp(i k_y y), c = (center_x, 0, 0),
+    onto the COM-centred modes U_LM(r) = r <Y_LM|psi>(r), L <= L_max.
+
+    The atom keeps its m about the global z axis, as in the translated atom.
+    The angular integral uses Gauss-Legendre nodes in u = cos(theta) and n_phi
+    uniform nodes in phi (an FFT gives every M at once), with the same Y_LM
+    convention as the translated atom (standard Condon-Shortley Y_LM). With
+    k_y = 0 it reproduces the translated atom to quadrature accuracy.
+    """
+    r_arr = np.asarray(r_arr, dtype=float)
+    Nr = len(r_arr)
+    if n_phi < 2*L_max + 2:
+        raise ValueError(f"--n-phi must be at least 2 l_max + 2 = {2*L_max + 2}.")
+    l_a, m_a = int(bound_state.l), int(bound_state.m)
+
+    u, w = leggauss(int(n_quad))
+    phi = 2*np.pi*np.arange(n_phi)/n_phi
+    sin_t = np.sqrt(1.0 - u**2)
+
+    radial_expr = bound_state.radial.subs(context.get_subs())
+    radial_func = sp.lambdify(bound_state.r, radial_expr, modules=["numpy"])
+
+    # Projection weights for each output M: w_u * conj(Y_LM theta part), L = |M|..L_max.
+    proj = {}
+    for M in range(-L_max, L_max + 1):
+        Lvals = np.arange(abs(M), L_max + 1)
+        Y = np.array([standard_ylm_theta(int(L), M, u) for L in Lvals])
+        proj[M] = (Lvals, Y*w[None, :])
+
+    U = {(L, M): np.zeros(Nr, dtype=np.complex128)
+         for L in range(L_max + 1) for M in range(-L, L + 1)}
+
+    t0 = time.perf_counter()
+    if verbose:
+        print("\nBoosted atom: 2D projection")
+        print(f"  centre x = {center_x:g}, k_y = mu v_y = {k_y:.6e}")
+        print(f"  quadrature: {n_quad} (u) x {n_phi} (phi)")
+
+    for start in range(0, Nr, chunk):
+        rr = r_arr[start:start + chunk][:, None, None]
+        x = rr*sin_t[None, :, None]*np.cos(phi)[None, None, :]
+        y = rr*sin_t[None, :, None]*np.sin(phi)[None, None, :]
+        z = rr*u[None, :, None]*np.ones_like(phi)[None, None, :]
+        dx = x - center_x
+        rp = np.sqrt(dx*dx + y*y + z*z)
+        safe = np.where(rp > 1e-14, rp, 1.0)
+        cos_tp = np.clip(z/safe, -1.0, 1.0)
+        phi_p = np.arctan2(y, dx)
+        radial = np.asarray(radial_func(rp), dtype=np.complex128)
+        radial = np.broadcast_to(radial, rp.shape)
+        psi = (radial*standard_ylm_theta(l_a, m_a, cos_tp)*np.exp(1j*m_a*phi_p)
+               * np.exp(1j*k_y*y))
+        # phi integral for every M: (2 pi / n_phi) sum_phi psi e^{-i M phi}
+        F = np.fft.fft(psi, axis=2)*(2*np.pi/n_phi)
+        for M in range(-L_max, L_max + 1):
+            Lvals, Yw = proj[M]
+            prof = rr[:, 0, 0][:, None]*(F[:, :, M % n_phi] @ Yw.T)
+            for j, L in enumerate(Lvals):
+                U[(int(L), M)][start:start + chunk] = prof[:, j]
+
+    if verbose:
+        print(f"  projection completed in {time.perf_counter()-t0:.2f} s")
+    return U
+
+
+# ======================================================================
 # MODESBIN OUTPUT
 # ======================================================================
 
@@ -584,23 +679,52 @@ else:
 
 print(f"\nGenerating {args.atom} atom")
 
+counter = bool(config["binary"].get("counter", False))
+Omega_0 = np.sqrt(Mtot/R**3)
+# Orbital velocity of the hole at x = displacement on the x axis at t = 0:
+# v = Omega z x x, i.e. v_y = Omega x (theta decreases for a counter-rotating orbit).
+v_y = (-1.0 if counter else 1.0)*Omega_0*displacement
+if args.boost:
+    print(f"  Galilean boost: Omega_0 = {Omega_0:.6e}, v_y = {v_y:.6e}, "
+          f"k_y = mu v_y = {mu*v_y:.6e} ({'counter' if counter else 'co'}-rotating)")
+    ramp = float(config["simulation"].get("ramp_periods", 0.0))
+    if ramp > 0:
+        print(f"  WARNING: ramp_periods = {ramp} > 0, so Omega starts at 0 and the hole is at "
+              f"rest at t = 0; the boost is meant for ramp_periods = 0.")
+    if not bool(config["simulation"].get("secondary_potential", True)) or q == 0:
+        print("  WARNING: the companion is off or q = 0, so the hole does not move; "
+              "the boost is not what the solver evolves.")
+
 
 # ======================================================================
 # GENERATE TRANSLATED STATE
 # ======================================================================
 
-U_final = initialize_translated_atom_fast(
-    modes=modes,
-    r_arr=r_arr,
-    L_max=L_max,
-    bound_state=bound_state,
-    context=context,
-    displacement=displacement,
-    theta=theta,
-    phi=phi,
-    n_quad=n_quad,
-    verbose=True
-)
+if args.boost:
+    U_final = project_boosted_atom(
+        r_arr=r_arr,
+        L_max=L_max,
+        bound_state=bound_state,
+        context=context,
+        center_x=displacement,
+        k_y=mu*v_y,
+        n_quad=n_quad,
+        n_phi=args.n_phi if args.n_phi is not None else 2*n_quad,
+        verbose=True
+    )
+else:
+    U_final = initialize_translated_atom_fast(
+        modes=modes,
+        r_arr=r_arr,
+        L_max=L_max,
+        bound_state=bound_state,
+        context=context,
+        displacement=displacement,
+        theta=theta,
+        phi=phi,
+        n_quad=n_quad,
+        verbose=True
+    )
 
 # Apply configured amplitude.
 if amplitude != 1.0:

@@ -7,6 +7,9 @@ Load a simulation run folder into one object, for notebooks and publication plot
     run = load_run("runs/Simulation_2026_11_10_10_18_06")            # last snapshot
     run = load_run(folder, step=400)                                  # snapshot of step 400
     run = load_run(folder, time=1.5e4)                                # snapshot nearest t = 1.5e4 M
+    run = load_run(folder, step=[0, 400, 800])                        # several: run.snapshots[0..2]
+    run = load_run(folder, time=[0, 1e4, 2e4])                        # several, nearest these times
+    run = load_run(folder, step="all")                                # every saved snapshot
     run = load_run(folder, quantities=["R_orb", "chi_1", "cloud_mass"])  # only these (and t)
 
     run.t, run.R_orb, run.M_1, run.norms[:, run.mode("1,1")]          # stored diagnostics
@@ -14,12 +17,14 @@ Load a simulation run folder into one object, for notebooks and publication plot
     run.Lz_budget["cloud"], run.Lz_budget["modes"][:, run.mode("2,2")]  # signed L_z, hbar per particle
     run.auger["N211"], run.auger["I_G"], run.levels[:, k], run.levels_index[k]  # self-gravity runs
     run.snapshot.U(1, 1), run.snapshot.t                              # one snapshot
+    for snap in run.snapshots: snap.t, snap.density()                 # each loaded snapshot, in order
+    run.snapshot_at(400), run.snapshot_at(time=1e4)                   # one of them by step or time
     x, y, rho = run.snapshot.slice("xy", r_plot=300, n=400)           # |psi|^2 in a plane
 
 Everything the solver writes is read: every column file at the top of the run
 folder (t.txt, norms.txt, spins.txt, ...), config.toml, the radial grid, the
-mode list, the evolved-mode log of pruned runs and one snapshot of psi (and of
-psi_dt when it was saved for that step). Files are trimmed to the rows they all
+mode list, the evolved-mode log of pruned runs and one or more snapshots of psi
+(and of psi_dt when it was saved for that step). Files are trimmed to the rows they all
 have, so a run still being written loads consistently. Only NumPy is needed
 (and tomllib, Python 3.11+); the slice reuses the dashboard's reconstruction.
 
@@ -160,7 +165,8 @@ class RunData:
     n_rows: int
     snapshot_steps: list
     snapshot_times: np.ndarray
-    snapshot: Snapshot = None
+    snapshot: Snapshot = None                         # the loaded snapshot (the first, when several)
+    snapshots: list = field(default_factory=list)     # every loaded snapshot, in the order asked for
     data: dict = field(default_factory=dict)          # every column file, as stored
     active_modes: dict = None                         # pruned runs: steps, t, count, flags
     mass_budget: dict = None                          # derived budget (dashboard's panel)
@@ -194,12 +200,26 @@ class RunData:
     def keys(self):
         return sorted(self.data)
 
+    def snapshot_at(self, step=None, time=None):
+        """The loaded snapshot of this step, or the loaded one nearest `time`."""
+        if not self.snapshots:
+            raise ValueError("no snapshot loaded (snapshot=False, or the run has none)")
+        if time is not None:
+            return min(self.snapshots, key=lambda snap: abs(snap.t - time))
+        for snap in self.snapshots:
+            if snap.step == step:
+                return snap
+        raise ValueError(f"step {step} is not loaded; loaded steps: {[snap.step for snap in self.snapshots]}")
+
 
 def load_run(folder, step=None, time=None, snapshot=True, quantities=None):
     """Load the run in `folder`.
 
-    step: snapshot step to load (default: the last complete one); time: load the
-    snapshot nearest this time instead; snapshot=False skips psi altogether.
+    step: snapshot step to load (default: the last complete one), a list of steps,
+    or "all" for every saved snapshot; time: load the snapshot nearest this time
+    instead, or one per time in a list. With several, run.snapshots holds them in
+    the order asked for and run.snapshot is the first. snapshot=False skips psi
+    altogether.
     quantities: only these, e.g. ["R_orb", "chi_1", "cloud_mass"]; default all.
     Names are files ("norms", "spins"), columns of a file ("chi_1", "absorbed_2")
     or derived quantities ("cloud_mass", "ionized_mass", "mass_budget", ...);
@@ -383,7 +403,8 @@ def load_run(folder, step=None, time=None, snapshot=True, quantities=None):
                   data=data, active_modes=active, mass_budget=budget, Lz_budget=Lz,
                   levels_index=levels_index, auger=auger)
     if snapshot and steps:
-        run.snapshot = _load_snapshot(run, folder, steps, times, step, time)
+        run.snapshots = _load_snapshots(run, folder, steps, times, step, time)
+        run.snapshot = run.snapshots[0]
     if wanted is not None:
         # Only what was asked for (and t); missing ones (spins of a run without them) are left out.
         run.data = {k: v for k, v in data.items() if k in wanted}
@@ -405,37 +426,61 @@ def _read_psi(path, n_modes, Nr):
     return (dat[:, 0] + 1j * dat[:, 1]).reshape(n_modes, Nr)
 
 
-def _load_snapshot(run, folder, steps, times, step, time):
-    n_modes, Nr = len(run.modes), len(run.r)
+def _is_many(value):
+    return isinstance(value, (list, tuple, range, np.ndarray))
+
+
+def _load_snapshots(run, folder, steps, times, step, time):
+    """Snapshots for `step` / `time` (one value, a list, or step="all"), in the order asked for."""
     if time is not None:
         ok = np.isfinite(times)
         if not ok.any():
             raise ValueError("no snapshot has a time yet")
-        step = steps[int(np.argmin(np.where(ok, np.abs(times - time), np.inf)))]
+        nearest = lambda value: steps[int(np.argmin(np.where(ok, np.abs(times - value), np.inf)))]
+        if _is_many(time):
+            return [_load_snapshot(run, folder, steps, times, nearest(float(v))) for v in time]
+        step = nearest(float(time))
+    if isinstance(step, str):
+        if step != "all":
+            raise ValueError(f'step must be a number, a list of numbers or "all", not {step!r}')
+        # Every complete snapshot; the last may still be being written.
+        loaded = [_load_snapshot(run, folder, steps, times, s, required=(s != steps[-1])) for s in steps]
+        return [snap for snap in loaded if snap is not None]
+    if _is_many(step):
+        if len(step) == 0:
+            raise ValueError("step is an empty list")
+        return [_load_snapshot(run, folder, steps, times, int(s)) for s in step]
     if step is not None:
-        if step not in steps:
-            near = min(steps, key=lambda s: abs(s - step))
-            raise ValueError(f"no snapshot at step {step}; the nearest is {near} (available: "
-                             f"{steps[0]} … {steps[-1]}, {len(steps)} snapshots in run.snapshot_steps)")
-        candidates = [step]
-    else:
-        candidates = steps[::-1][:2]   # the last one may still be being written
-    for s in candidates:
-        psi = _read_psi(os.path.join(folder, "psi", f"snapshot_{s:06d}.txt"), n_modes, Nr)
-        if psi is None:
-            continue
-        dt_path = os.path.join(folder, "psi_dt", f"snapshot_{s:06d}.txt")
-        psi_dt = _read_psi(dt_path, n_modes, Nr) if os.path.exists(dt_path) else None
-        row = s - 1
-        pick = lambda name, default: (float(run.data[name][row]) if name in run.data and 0 <= row < run.n_rows
-                                      else default)
-        cfg = run.config.get("binary", {})
-        q0, R0 = float(cfg.get("q", 0.001)), float(cfg.get("R", 50.0))
-        R, theta, q, M1 = pick("R_orb", R0), pick("theta_orb", 0.0), pick("q", q0), pick("M_1", 1.0)
-        if run.alone and row < 0:
-            R, q = q0 / (1 + q0) * R0, 0.0   # the lone hole sits where the binary's primary would
-        if run.alone and q0 == 0.0:
-            R, theta = 0.0, 0.0
-        return Snapshot(step=s, t=float(times[steps.index(s)]), psi=psi, r=run.r, modes=run.modes, psi_dt=psi_dt,
-                        R_orb=R, theta_orb=theta, q=q, M_1=M1)
-    raise ValueError(f"snapshot {candidates[0]} is incomplete (still being written?)")
+        return [_load_snapshot(run, folder, steps, times, int(step))]
+    for s in steps[::-1][:2]:   # the last one may still be being written
+        snap = _load_snapshot(run, folder, steps, times, s, required=False)
+        if snap is not None:
+            return [snap]
+    raise ValueError(f"snapshot {steps[-1]} is incomplete (still being written?)")
+
+
+def _load_snapshot(run, folder, steps, times, s, required=True):
+    n_modes, Nr = len(run.modes), len(run.r)
+    if s not in steps:
+        near = min(steps, key=lambda v: abs(v - s))
+        raise ValueError(f"no snapshot at step {s}; the nearest is {near} (available: "
+                         f"{steps[0]} … {steps[-1]}, {len(steps)} snapshots in run.snapshot_steps)")
+    psi = _read_psi(os.path.join(folder, "psi", f"snapshot_{s:06d}.txt"), n_modes, Nr)
+    if psi is None:
+        if required:
+            raise ValueError(f"snapshot {s} is incomplete (still being written?)")
+        return None
+    dt_path = os.path.join(folder, "psi_dt", f"snapshot_{s:06d}.txt")
+    psi_dt = _read_psi(dt_path, n_modes, Nr) if os.path.exists(dt_path) else None
+    row = s - 1
+    pick = lambda name, default: (float(run.data[name][row]) if name in run.data and 0 <= row < run.n_rows
+                                  else default)
+    cfg = run.config.get("binary", {})
+    q0, R0 = float(cfg.get("q", 0.001)), float(cfg.get("R", 50.0))
+    R, theta, q, M1 = pick("R_orb", R0), pick("theta_orb", 0.0), pick("q", q0), pick("M_1", 1.0)
+    if run.alone and row < 0:
+        R, q = q0 / (1 + q0) * R0, 0.0   # the lone hole sits where the binary's primary would
+    if run.alone and q0 == 0.0:
+        R, theta = 0.0, 0.0
+    return Snapshot(step=s, t=float(times[steps.index(s)]), psi=psi, r=run.r, modes=run.modes, psi_dt=psi_dt,
+                    R_orb=R, theta_orb=theta, q=q, M_1=M1)

@@ -106,6 +106,7 @@ int main(int argc, char **argv)
     if (cfg.dipole_absorption)
         std::cout << "Dipolar horizon absorption: on (initial spins " << cfg.spin_1 << ", " << cfg.spin_2 << ")\n";
     solver.ramp_secondary_potential = cfg.ramp_secondary_potential;
+    solver.ramp_secondary_squared = cfg.ramp_secondary_squared;
     solver.orbit_delay_periods = cfg.orbit_delay_periods;
     solver.orbit_ramp_periods = cfg.orbit_ramp_periods;
     solver.steps_per_period = cfg.steps_per_period;
@@ -114,7 +115,9 @@ int main(int argc, char **argv)
                                                                        : RollingPhaseAverage::Window::Boxcar);
     if (cfg.secondary_potential)
         std::cout << "Startup ramp over " << cfg.ramp_periods << " initial periods: "
-              << (cfg.ramp_secondary_potential ? "frequency and companion potential"
+              << (cfg.ramp_secondary_potential
+                      ? (cfg.ramp_secondary_squared ? "frequency (s) and companion potential (s^2, free fall)"
+                                                    : "frequency and companion potential (both s)")
                                                : "frequency only (companion potential at full strength)")
               << "\n";
     if (cfg.evolve_orbit && !cfg.secondary_potential)

@@ -335,7 +335,11 @@ void CrankNicolsonModes::build_time_dependent_perturbation(double time)
     {
         Omega = std::sqrt((M1 + M2) / std::pow(R, 3));
     }
-    potential_ramp_factor = ramp_secondary_potential ? ramp_factor : 1.0;
+    // s^2 keeps the primary in free fall: its centripetal acceleration Omega^2 b
+    // = s^2 q M / R^2 matches the companion's pull, so no uniform field acts on the cloud.
+    potential_ramp_factor = ramp_secondary_potential
+                                ? (ramp_secondary_squared ? ramp_factor * ramp_factor : ramp_factor)
+                                : 1.0;
     build_static_perturbation();
     if (absorption)
         build_spherical_absorption();

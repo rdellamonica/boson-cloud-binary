@@ -47,7 +47,7 @@ void config_defaults()
     require(c.dt_from_period, "Default dt not flagged as derived from the period");
     require(c.num_steps == 0 && c.num_periods == 0 && c.save_every == 50, "Run-length defaults");
     require(c.l_max == 5 && c.r_ex == 1000.0 && c.epsilon == 0.001 && c.epsilon_smear == 2.0, "Simulation defaults");
-    require(c.ramp_periods == 0.0 && c.ramp_secondary_potential && c.orbit_delay_periods == 0.0 && c.orbit_ramp_periods == 1.0 &&
+    require(c.ramp_periods == 0.0 && c.ramp_secondary_potential && c.ramp_secondary_squared && c.orbit_delay_periods == 0.0 && c.orbit_ramp_periods == 1.0 &&
             c.steps_per_period == 50.0 && c.power_average_orbits == 2.0 && c.power_average_window == "boxcar", "Ramp and averaging defaults");
     require(!c.evolve_orbit && !c.absorption, "Physics switches default to off");
     require(c.q == 0.001 && c.R == 50.0 && !c.counter, "Binary defaults");
@@ -84,6 +84,7 @@ l_max = 6
 r_ex = 250.0
 ramp_periods = 3.5
 ramp_secondary_potential = false
+ramp_secondary_squared = false
 orbit_delay_periods = 4.0
 orbit_ramp_periods = 2.5
 steps_per_period = 64.0
@@ -115,7 +116,7 @@ flux_tolerance = 1e-4
     require(c.q == 0.25 && c.R == 40.0 && c.counter, "Binary values");
     require(c.mu == 0.3 && c.M_c == 0.05 && c.a == 0.7 && c.n == 3 && c.l == 2 && c.m == 2, "Atom values");
     require(c.dt == 1.5 && c.num_steps == 77 && c.num_periods == 4 && c.save_every == 7 && c.l_max == 6 &&
-            c.r_ex == 250.0 && c.ramp_periods == 3.5 && !c.ramp_secondary_potential &&
+            c.r_ex == 250.0 && c.ramp_periods == 3.5 && !c.ramp_secondary_potential && !c.ramp_secondary_squared &&
             c.orbit_delay_periods == 4.0 && c.orbit_ramp_periods == 2.5 && c.steps_per_period == 64.0 && c.power_average_orbits == 1.5 && c.power_average_window == "hann" && c.epsilon == 0.0 &&
             c.epsilon_smear == 5.0 && c.evolve_orbit && c.absorption, "Simulation values");
     require(c.threads == 3 && c.preconditioner == "ilut", "Parallel and solver values");
