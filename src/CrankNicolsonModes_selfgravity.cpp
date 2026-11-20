@@ -495,6 +495,55 @@ void CrankNicolsonModes::open_self_gravity_files(std::ios::openmode mode)
     auger_probe_file.open(output_folder + "/auger_probe.txt", mode);
     if (absorption)
         absorbed_channels_file.open(output_folder + "/absorbed_channels.txt", mode);
+    if (sg.recoil)
+        momentum_file.open(output_folder + "/momentum.txt", mode);
+}
+
+std::pair<double, double> CrankNicolsonModes::self_gravity_cloud_momentum(const Eigen::VectorXcd &state) const
+{
+    // <psi|d_+-|psi> from d_+- [f Y_lm] (f = U / r) into Y_l+1,m+-1 with (U' - (l+1) U / r) / r and
+    // Y_l-1,m+-1 with (U' + l U / r) / r; the coefficients were checked on a 3D grid.
+    if (state.size() != static_cast<Eigen::Index>(Nr) * n_modes)
+        return {0.0, 0.0};
+    const auto find = [&](int l, int m) {
+        for (int k = 0; k < n_modes; ++k)
+            if (modes[k].l == l && modes[k].m == m)
+                return k;
+        return -1;
+    };
+    dcomplex s_plus = 0.0, s_minus = 0.0;
+    std::vector<dcomplex> up(Nr, 0.0), down(Nr, 0.0);
+    for (int j = 0; j < n_modes; ++j)
+    {
+        const int l = modes[j].l, m = modes[j].m;
+        const dcomplex *u = state.data() + static_cast<std::size_t>(j) * Nr;
+        for (int i = 1; i < Nr - 1; ++i)
+        {
+            const dcomplex du = (u[i + 1] - u[i - 1]) / (r[i + 1] - r[i - 1]);
+            const dcomplex v = r[i] > 0.0 ? u[i] / r[i] : dcomplex(0.0);
+            up[i] = du - static_cast<double>(l + 1) * v;
+            down[i] = du + static_cast<double>(l) * v;
+        }
+        const auto overlap = [&](int k, const std::vector<dcomplex> &g) {
+            dcomplex sum = 0.0;
+            const dcomplex *b = state.data() + static_cast<std::size_t>(k) * Nr;
+            for (int i = 1; i < Nr - 1; ++i)
+                sum += node_weight[i] * std::conj(b[i]) * g[i];
+            return sum;
+        };
+        const double L2 = 2.0 * l + 1.0;
+        int k;
+        if ((k = find(l + 1, m + 1)) >= 0)
+            s_plus += -std::sqrt((l + m + 1.0) * (l + m + 2.0) / (L2 * (2.0 * l + 3.0))) * overlap(k, up);
+        if (l > 0 && (k = find(l - 1, m + 1)) >= 0)
+            s_plus += std::sqrt((l - m) * (l - m - 1.0) / ((2.0 * l - 1.0) * L2)) * overlap(k, down);
+        if ((k = find(l + 1, m - 1)) >= 0)
+            s_minus += std::sqrt((l - m + 1.0) * (l - m + 2.0) / (L2 * (2.0 * l + 3.0))) * overlap(k, up);
+        if (l > 0 && (k = find(l - 1, m - 1)) >= 0)
+            s_minus += -std::sqrt((l + m) * (l + m - 1.0) / ((2.0 * l - 1.0) * L2)) * overlap(k, down);
+    }
+    // p_x = -i (d_+ + d_-) / 2, p_y = -(d_+ - d_-) / 2.
+    return {(-I * 0.5 * (s_plus + s_minus)).real(), (-0.5 * (s_plus - s_minus)).real()};
 }
 
 void CrankNicolsonModes::write_levels_index() const
@@ -515,6 +564,39 @@ void CrankNicolsonModes::write_self_gravity_rows(const Eigen::VectorXcd &midpoin
     (void)midpoint;
     const auto [ax, ay] = self_gravity_hole_acceleration();
     write_quantity_line_modes({sg_energy, ax, ay, static_cast<double>(sg_last_iterations)}, self_gravity_file);
+
+    if (momentum_file.is_open())
+    {
+        // Diagnostic: with M V the hole's momentum (V from integrating a, trapezoid rule) and the cloud's
+        // inertial momentum P_frame + M_c V, the total P_frame + (M_c + M1) V is conserved when the frame
+        // follows the hole consistently. Columns: P_frame (x, y), V (x, y), P_total (x, y), the accretion
+        // share of M1 V (x, y).
+        const double c = 4.0 * M_PI * mu / 3.0 * 2.0 * std::sqrt(3.0 / (8.0 * M_PI));
+        const double acc_x = -c * sg_accretion.real(), acc_y = c * sg_accretion.imag();
+        if (sg_have_last_acc && t_i > sg_last_acc_time)
+        {
+            const double h = 0.5 * (t_i - sg_last_acc_time);
+            sg_hole_velocity[0] += h * (ax + sg_last_acc[0]);
+            sg_hole_velocity[1] += h * (ay + sg_last_acc[1]);
+            sg_accretion_impulse[0] += h * (acc_x + sg_last_acc_accretion[0]);
+            sg_accretion_impulse[1] += h * (acc_y + sg_last_acc_accretion[1]);
+        }
+        sg_last_acc[0] = ax;
+        sg_last_acc[1] = ay;
+        sg_last_acc_accretion[0] = acc_x;
+        sg_last_acc_accretion[1] = acc_y;
+        sg_last_acc_time = t_i;
+        sg_have_last_acc = true;
+        const auto [px, py] = self_gravity_cloud_momentum(psi);
+        double particles = 0.0;
+        for (Eigen::Index k = 0; k < psi.size(); ++k)
+            particles += node_weight[k % Nr] * std::norm(psi[k]);
+        const double mass = mu * particles + M1;
+        write_quantity_line_modes({px, py, sg_hole_velocity[0], sg_hole_velocity[1], px + mass * sg_hole_velocity[0],
+                                   py + mass * sg_hole_velocity[1], M1 * sg_accretion_impulse[0],
+                                   M1 * sg_accretion_impulse[1]},
+                                  momentum_file);
+    }
 
     const auto project = [&](const Eigen::VectorXd &f, int j) {
         dcomplex c = 0.0;

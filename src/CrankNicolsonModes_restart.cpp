@@ -848,7 +848,7 @@ void CrankNicolsonModes::resume(const std::string &folder, int n_steps, double r
 void CrankNicolsonModes::resume_self_gravity_files(int start)
 {
     namespace fs = std::filesystem;
-    for (const char *name : {"self_gravity.txt", "levels.txt", "auger_probe.txt", "absorbed_channels.txt"})
+    for (const char *name : {"self_gravity.txt", "levels.txt", "auger_probe.txt", "absorbed_channels.txt", "momentum.txt"})
     {
         const std::string path = output_folder + "/" + name;
         if (!fs::exists(path))
@@ -858,6 +858,36 @@ void CrankNicolsonModes::resume_self_gravity_files(int start)
             fs::resize_file(path, 0);
         else if (static_cast<std::size_t>(start) <= ends.size())
             fs::resize_file(path, ends[static_cast<std::size_t>(start - 1)]);
+    }
+    // momentum.txt: continue the hole's velocity and accretion impulse from the last kept row.
+    sg_have_last_acc = false;
+    {
+        std::ifstream in(output_folder + "/momentum.txt");
+        std::string line, last;
+        while (std::getline(in, line))
+            if (!line.empty())
+                last = line;
+        std::istringstream row(last);
+        double v[8];
+        int count = 0;
+        while (count < 8 && row >> v[count])
+            ++count;
+        if (count == 8)
+        {
+            sg_hole_velocity[0] = v[2];
+            sg_hole_velocity[1] = v[3];
+            const double mass = M1 > 0.0 ? M1 : 1.0;
+            sg_accretion_impulse[0] = v[6] / mass;
+            sg_accretion_impulse[1] = v[7] / mass;
+            const auto [ax, ay] = self_gravity_hole_acceleration();
+            sg_last_acc[0] = ax;
+            sg_last_acc[1] = ay;
+            const double c = 4.0 * M_PI * mu / 3.0 * 2.0 * std::sqrt(3.0 / (8.0 * M_PI));
+            sg_last_acc_accretion[0] = -c * sg_accretion.real();
+            sg_last_acc_accretion[1] = c * sg_accretion.imag();
+            sg_last_acc_time = t_i;
+            sg_have_last_acc = true;
+        }
     }
     open_self_gravity_files(std::ios::out | std::ios::app);
     write_levels_index();

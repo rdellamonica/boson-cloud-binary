@@ -317,6 +317,8 @@ public:
     double self_gravity_energy() const { return sg_energy; }
     /// Acceleration of the hole, @f$-\nabla\Phi(0)@f$, (x, y) components, of the last computed density.
     std::pair<double, double> self_gravity_hole_acceleration() const;
+    /// Momentum @f$\langle\psi|\mathbf{p}|\psi\rangle@f$ (x, y) of @p state in the hole's frame, p = -i grad.
+    std::pair<double, double> self_gravity_cloud_momentum(const Eigen::VectorXcd &state) const;
     /// Bound level (n, l) of the hole's monopole H0 - mu M/r on the grid: U-space vector with
     /// sum_i w_i f_i^2 = 1, positive near the origin. Available after initialize() with self-gravity.
     const Eigen::VectorXd &level_function(int n, int l) const;
@@ -904,7 +906,12 @@ private:
     dcomplex sg_accretion_dipole(const Eigen::VectorXcd &state) const;
     int sg_last_iterations = 0;
     bool checkpoint_has_self_gravity = false;
-    std::ofstream self_gravity_file, levels_file, auger_probe_file, absorbed_channels_file;
+    std::ofstream self_gravity_file, levels_file, auger_probe_file, absorbed_channels_file, momentum_file;
+    /// momentum.txt (diagnostic only): the hole's velocity from integrating its acceleration, the
+    /// accretion part of that impulse, and the last acceleration and time, for the trapezoid rule.
+    double sg_hole_velocity[2] = {0.0, 0.0}, sg_accretion_impulse[2] = {0.0, 0.0};
+    double sg_last_acc[2] = {0.0, 0.0}, sg_last_acc_accretion[2] = {0.0, 0.0}, sg_last_acc_time = 0.0;
+    bool sg_have_last_acc = false;
     double absorbed_swave_1 = 0.0, absorbed_dipole_1[2] = {0.0, 0.0};
     struct Level { int n, l; double energy; Eigen::VectorXd f; };
     std::vector<Level> sg_levels;
