@@ -144,6 +144,7 @@ int main(int argc, char **argv)
         options.l_max = cfg.sg_l_max;
         options.recoil = cfg.sg_recoil;
         options.recoil_taper = cfg.sg_recoil_taper;
+        options.accretion_recoil = cfg.sg_accretion_recoil;
         options.ramp_time = cfg.sg_ramp_time;
         options.iterated = cfg.sg_scheme == "iterated";
         options.tolerance = cfg.sg_tolerance;

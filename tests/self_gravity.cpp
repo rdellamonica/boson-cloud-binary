@@ -20,7 +20,7 @@ namespace {
 
 std::unique_ptr<CrankNicolsonModes> make_solver(int Nr, double L, int l_max, double mu, double M_c, double dt,
                                                 bool recoil, bool iterated = false, bool absorption = false,
-                                                double epsilon = 0.001)
+                                                double epsilon = 0.001, bool accretion_recoil = true)
 {
     std::ofstream("config.toml") << "# self-gravity fixture\n";
     auto cn = std::make_unique<CrankNicolsonModes>(Nr, L, dt, epsilon, l_max, mu, M_c, 0.0, 0.0, 0.0, false,
@@ -29,6 +29,7 @@ std::unique_ptr<CrankNicolsonModes> make_solver(int Nr, double L, int l_max, dou
     CrankNicolsonModes::SelfGravityOptions options;
     options.enabled = true;
     options.recoil = recoil;
+    options.accretion_recoil = accretion_recoil;
     options.iterated = iterated;
     options.tolerance = 1e-12;
     options.levels_n_max = 4;
@@ -232,6 +233,45 @@ void check_origin_node()
     std::cout << "origin node: ok" << std::endl;
 }
 
+void check_accretion_recoil()
+{
+    // With recoil and absorption the hole also takes up the momentum F = Re <p psi|Gamma psi> that the
+    // s-wave sink absorbs. Its acceleration with the accretion push minus without must be F / M1, with F
+    // evaluated here with the derivative on the l = 1 modes (the solver differentiates the kernel).
+    test::ScratchDir dir("sg_accretion");
+    const double mu = 0.4, M_c = 0.2;
+    const auto accel = [&](bool on, double &fx, double &fy) {
+        auto cn = make_solver(1601, 80.0, 2, mu, M_c, 1.0, true, false, true, 0.001, on);
+        cn->reference_energy = -0.5 * mu * mu * mu / 4.0;
+        const Eigen::VectorXcd psi = mixed_state(*cn, 21);
+        cn->set_initial_state_full(psi);
+        cn->initialize();
+        cn->self_gravity_apply(cn->psi, cn->psi); // leaves the potential of psi in place
+        const Eigen::VectorXcd G = cn->apply_sink(cn->psi); // Gamma psi, in the (0, 0) mode
+        const int j0 = mode_index(*cn, 0, 0), jp = mode_index(*cn, 1, 1), jm = mode_index(*cn, 1, -1);
+        dcomplex d_plus = 0.0, d_minus = 0.0;                // <Gamma psi|d_+- psi>
+        const double s = std::sqrt(2.0 / 3.0);
+        for (int i = 1; i < cn->Nr - 1; ++i)
+        {
+            const double h = cn->r[i + 1] - cn->r[i - 1];
+            const auto ru = [&](int j, int k) { return cn->r[k] * cn->psi[j * cn->Nr + k]; };
+            const dcomplex f = std::conj(G[j0 * cn->Nr + i]) / cn->r[i];
+            d_plus += cn->node_weight[i] * s * f * (ru(jm, i + 1) - ru(jm, i - 1)) / h;
+            d_minus -= cn->node_weight[i] * s * f * (ru(jp, i + 1) - ru(jp, i - 1)) / h;
+        }
+        fx = (-I * 0.5 * (d_plus + d_minus)).real() / cn->M1;
+        fy = (-0.5 * (d_plus - d_minus)).real() / cn->M1;
+        return cn->self_gravity_hole_acceleration();
+    };
+    double fx, fy;
+    const auto on = accel(true, fx, fy), off = accel(false, fx, fy);
+    const double dx = on.first - off.first, dy = on.second - off.second, f = std::hypot(fx, fy);
+    require(f > 1e-3 * std::hypot(off.first, off.second), "the fixture's absorbed momentum is not negligible");
+    require(std::hypot(dx - fx, dy - fy) < 2e-2 * f, "accretion push on the hole = absorbed momentum / M1");
+    std::cout << "accretion recoil: ok (push " << dx << ", " << dy << " vs F/M " << fx << ", " << fy
+              << ", gravity " << off.first << ", " << off.second << ")" << std::endl;
+}
+
 void check_resume()
 {
     const double mu = 0.4, M_c = 0.2;
@@ -279,6 +319,7 @@ int main()
         check_evolution(false);
         check_evolution(true);
         check_origin_node();
+        check_accretion_recoil();
         check_resume();
     }
     catch (const std::exception &error)

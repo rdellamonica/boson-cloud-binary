@@ -239,7 +239,7 @@ Every key is optional; the defaults are in [`include/Config.hpp`](include/Config
 | `[cap]` | `L_factor`, `W`, `n` | Complex absorbing potential beyond `L_factor * L` |
 | | `per_mode`, `reflection`, `tune_steps`, `k_min` | Tune the CAP strength of each mode to that mode's frequency instead of using `W`, for no measurable reflection (defaults `false`, `1e-10`, `20` steps, `0` = 1 / layer width; with `per_mode` the default `n` is 6). See *Outer boundary* below |
 | `[pruning]` | `enabled`, `tolerance`, `flux_tolerance`, `check_every` | Evolve only the modes that matter (defaults `true`, `1e-8`, `1e-3` and `10` steps); `enabled = false` evolves every mode but keeps the settings. See *Mode pruning* below |
-| `[self_gravity]` | `enabled`, `l_max`, `recoil`, `recoil_taper`, `ramp_time` | Newtonian self-gravity of the cloud, for an isolated hole at the origin only (`binary.q = 0` or `secondary_potential = false` with the hole at x = 0) and without pruning. Defaults `true` when the table is present, `l_max = 2 l_max` of the modes, `recoil = true` (hole free-fall frame, needed for the Auger rate), `recoil_taper = 0` (none; otherwise the recoil field falls off from this radius to twice it), `ramp_time = 0`. See *Self-gravity* below |
+| `[self_gravity]` | `enabled`, `l_max`, `recoil`, `recoil_taper`, `accretion_recoil`, `ramp_time` | Newtonian self-gravity of the cloud, for an isolated hole at the origin only (`binary.q = 0` or `secondary_potential = false` with the hole at x = 0) and without pruning. Defaults `true` when the table is present, `l_max = 2 l_max` of the modes, `recoil = true` (hole free-fall frame, needed for the Auger rate), `recoil_taper = 0` (none; otherwise the recoil field falls off from this radius to twice it), `accretion_recoil = true` (with absorption, the hole also takes up the momentum the s-wave sink absorbs), `ramp_time = 0`. See *Self-gravity* below |
 | | `scheme`, `tolerance`, `max_iterations` | `"extrapolated"` (default: potential (3 W^n - W^(n-1)) / 2, one solve per step) or `"iterated"` (midpoint potential iterated to `tolerance`, default `1e-10`, at most `max_iterations` = 20 solves) |
 | | `measured_reference`, `levels_n_max` | With `energy_reference`, use the initial state's measured chemical potential as E_ref (default `true`); highest n of the levels projected in `levels.txt` (default 5) |
 
@@ -433,7 +433,11 @@ through the same Gaunt coefficients as the binary potential. With `recoil = true
 the solver works in the hole's free-fall frame: the hole is pinned at the origin
 and the cloud feels the uniform field that accelerates the hole, which removes
 the hole's own dipole response (needed for the gravitational Auger rate, about
-35% lower than without it). The potential is time-centred, extrapolated or
+35% lower than without it). With absorption the hole is also pushed by the
+momentum the s-wave sink takes from the cloud (`accretion_recoil = true`), so the
+frame conserves the total momentum; without that push the frame force does work
+through the sink and feeds a spurious 211 -> 322 transfer several times the Auger
+rate. The potential is time-centred, extrapolated or
 iterated; the iterated scheme conserves E = <H0 + V> + E_self to the solve
 tolerance with `recoil = false` (the free-fall frame is not inertial). The test
 `self_gravity` checks the monopole, the 211 self-energy, Hermiticity, the Auger

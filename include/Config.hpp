@@ -113,6 +113,7 @@ struct Config
     int sg_l_max = -1;                  ///< Highest multipole of Phi (default 2 l_max).
     bool sg_recoil = true;              ///< Free-fall frame of the hole (default true).
     double sg_recoil_taper = 0.0;       ///< Taper the recoil field beyond this radius (default 0 = none).
+    bool sg_accretion_recoil = true;    ///< The hole takes up the momentum the s-wave sink absorbs (default true).
     double sg_ramp_time = 0.0;          ///< Smooth switch-on time (default 0).
     std::string sg_scheme = "extrapolated"; ///< "extrapolated" (one solve per step) or "iterated".
     double sg_tolerance = 1e-10;        ///< Iterated scheme: relative change that stops the iteration.
@@ -267,6 +268,7 @@ inline Config load_config(const std::string &filename)
         c.sg_l_max = sgt["l_max"].value_or(-1);
         c.sg_recoil = sgt["recoil"].value_or(true);
         c.sg_recoil_taper = sgt["recoil_taper"].value_or(0.0);
+        c.sg_accretion_recoil = sgt["accretion_recoil"].value_or(true);
         c.sg_ramp_time = sgt["ramp_time"].value_or(0.0);
         c.sg_scheme = sgt["scheme"].value_or(std::string("extrapolated"));
         c.sg_tolerance = sgt["tolerance"].value_or(1e-10);

@@ -143,6 +143,7 @@ void CrankNicolsonModes::sg_compute_potential(const Eigen::VectorXcd &state)
 {
     const double *w = node_weight.data();
     double energy = 0.0;
+    const dcomplex accretion = sg_accretion_dipole(state);
 #pragma omp parallel for schedule(dynamic) reduction(+ : energy) if (sg_multipoles.size() >= 4)
     for (std::size_t a = 0; a < sg_multipoles.size(); ++a)
     {
@@ -175,6 +176,8 @@ void CrankNicolsonModes::sg_compute_potential(const Eigen::VectorXcd &state)
             for (int i = 0; i < Nr; ++i)
                 if (r[i] > 0.0)
                     D += w[i] * n[i] / (r[i] * r[i]);
+            // The frame follows the hole, which the absorbed momentum pushes as well as the cloud's pull.
+            D += accretion;
 #pragma omp critical(sg_dipole_update)
             sg_dipole = D;
             if (sg.recoil)
@@ -197,7 +200,54 @@ void CrankNicolsonModes::sg_compute_potential(const Eigen::VectorXcd &state)
     }
     if (sg_L < 1)
         sg_dipole = 0.0;
+    sg_accretion = sg_L >= 1 ? accretion : dcomplex(0.0);
     sg_energy = energy;
+}
+
+dcomplex CrankNicolsonModes::sg_accretion_dipole(const Eigen::VectorXcd &state) const
+{
+    // The s-wave sink, dpsi/dt = -Gamma psi / 2 with Gamma psi = g <v|psi> v in the (0, 0) mode, takes
+    // momentum <p>_abs = Re <p psi|Gamma psi> from the cloud (p = -i grad); the hole gains it. Only the
+    // l = 1 modes give <v|p|psi> != 0. With f = v / r and d_+- = d_x +- i d_y, integration by parts gives
+    //   <v|d_+|psi> = -sqrt(2/3) int r U_1,-1 f' dr,  <v|d_-|psi> = sqrt(2/3) int r U_11 f' dr.
+    // (The dipolar sinks' share, l = 1 kernels against l = 0 and 2 modes, is left out.)
+    if (!sg.recoil || !sg.accretion_recoil || !sink_active || mode00 < 0 || sink1.strength == 0.0 ||
+        sink1.count <= 0 || sink1.v.size() != state.size() || state.size() != static_cast<Eigen::Index>(Nr) * n_modes)
+        return 0.0;
+    int j_plus = -1, j_minus = -1;
+    for (int k = 0; k < n_modes; ++k)
+    {
+        if (modes[k].l == 1 && modes[k].m == 1)
+            j_plus = k;
+        if (modes[k].l == 1 && modes[k].m == -1)
+            j_minus = k;
+    }
+    if (j_plus < 0 && j_minus < 0)
+        return 0.0;
+    const dcomplex coefficient = sink1.strength * sink_dot(sink1, state); // Gamma psi = coefficient v
+    const dcomplex *v = sink1.v.data() + static_cast<std::size_t>(mode00) * Nr;
+    const auto f = [&](int i) { return r[i] > 0.0 ? v[i] / r[i] : dcomplex(0.0); };
+    const int lo = std::max(1, sink1.first - 1), hi = std::min(Nr - 2, sink1.first + sink1.count);
+    dcomplex up = 0.0, down = 0.0; // int r U f' dr for U_1,-1 and U_11
+    for (int i = lo; i <= hi; ++i)
+    {
+        const dcomplex fp = (f(i + 1) - f(i - 1)) / (r[i + 1] - r[i - 1]);
+        const double weight = node_weight[i] * r[i];
+        if (j_minus >= 0)
+            up += weight * std::conj(fp) * state[static_cast<Eigen::Index>(j_minus) * Nr + i];
+        if (j_plus >= 0)
+            down += weight * std::conj(fp) * state[static_cast<Eigen::Index>(j_plus) * Nr + i];
+    }
+    const double s = std::sqrt(2.0 / 3.0);
+    const dcomplex d_plus = -s * up, d_minus = s * down;
+    const dcomplex px = -I * 0.5 * (d_plus + d_minus); // <v|p_x|psi>
+    const dcomplex py = -0.5 * (d_plus - d_minus);     // <v|p_y|psi>
+    const double fx = (coefficient * std::conj(px)).real();
+    const double fy = (coefficient * std::conj(py)).real();
+    const double mass = M1 > 0.0 ? M1 : 1.0;
+    // self_gravity_hole_acceleration(): a = c (-Re D, Im D).
+    const double c = 4.0 * M_PI * mu / 3.0 * 2.0 * std::sqrt(3.0 / (8.0 * M_PI));
+    return dcomplex(-fx / (mass * c), fy / (mass * c));
 }
 
 void CrankNicolsonModes::sg_fill_profile(double scale, std::vector<dcomplex> &out) const

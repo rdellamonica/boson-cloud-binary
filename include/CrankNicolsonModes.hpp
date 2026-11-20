@@ -294,6 +294,9 @@ public:
         int l_max = -1;              ///< Highest multipole L of Phi; < 0 gives 2 l_max of the modes.
         bool recoil = true;          ///< Free-fall frame of the hole (the uniform part of the cloud's field removed).
         double recoil_taper = 0.0;   ///< > 0: the recoil field falls smoothly to 0 between this radius and twice it.
+        /// With recoil and absorption: the hole also takes up the momentum of what the s-wave sink
+        /// absorbs, so the free-fall frame conserves the total momentum of hole and cloud.
+        bool accretion_recoil = true;
         double ramp_time = 0.0;      ///< Smoothstep switch-on time of the self-potential (0: on at once).
         bool iterated = false;       ///< false: extrapolated potential (3W^n - W^n-1)/2; true: (W^n + W^n+1)/2 iterated.
         double tolerance = 1e-10;    ///< Iterated scheme: stop when |psi^(k+1) - psi^(k)| / |psi| is below this.
@@ -894,7 +897,11 @@ private:
     double sg_t_prev = 0.0;
     bool sg_have_prev = false;
     double sg_energy = 0.0;
-    dcomplex sg_dipole = 0.0;                         ///< D_1 = sum_i w_i n_11 / r_i^2.
+    dcomplex sg_dipole = 0.0;                         ///< D_1 = sum_i w_i n_11 / r_i^2 (accretion part included).
+    dcomplex sg_accretion = 0.0;                      ///< Accretion push on the hole, as the same D_1 equivalent.
+    /// The hole's acceleration from the momentum the s-wave sink absorbs from @p state, written as the
+    /// D_1 that gives it through self_gravity_hole_acceleration(); 0 without recoil or absorption.
+    dcomplex sg_accretion_dipole(const Eigen::VectorXcd &state) const;
     int sg_last_iterations = 0;
     bool checkpoint_has_self_gravity = false;
     std::ofstream self_gravity_file, levels_file, auger_probe_file, absorbed_channels_file;
